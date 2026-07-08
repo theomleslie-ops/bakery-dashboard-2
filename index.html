@@ -562,7 +562,8 @@
 
       const fetchData = async () => {
         try {
-          const response = await fetch('http://localhost:3001/api/dashboard');
+          const baseUrl = window.location.origin;
+          const response = await fetch(`${baseUrl}/api/dashboard`);
           const result = await response.json();
           setData(result.monthlyData || []);
         } catch (err) {
