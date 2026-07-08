@@ -122,6 +122,283 @@ app.get('/api/square/payroll', async (req, res) => {
   }
 });
 
+// ============= SQUARE OVERTIME REPORT =============
+// Pulls closed timecards from Square Labor across all locations and computes
+// California overtime (daily 8/12hr thresholds, weekly 40hr threshold, and the
+// 7th-consecutive-workday rule), grouped by week and by job/function.
+
+const SQUARE_API_BASE = 'https://connect.squareup.com/v2';
+const SQUARE_API_VERSION = '2025-01-23';
+const DOW_INDEX = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
+
+const squareHeaders = () => ({
+  Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+  'Square-Version': SQUARE_API_VERSION,
+  'Content-Type': 'application/json',
+});
+
+const addDays = (dateStr, n) => {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+const getWeekStart = (dateStr, startDow) => {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  const diff = (d.getUTCDay() - startDow + 7) % 7;
+  d.setUTCDate(d.getUTCDate() - diff);
+  return d.toISOString().slice(0, 10);
+};
+
+const round2 = (n) => Math.round(n * 100) / 100;
+
+const OVERTIME_SNAPSHOT_FILE = path.join(DATA_DIR, 'overtime-snapshot.json');
+const loadOvertimeSnapshot = () => loadData(OVERTIME_SNAPSHOT_FILE);
+
+const fetchWorkweekStartDow = async () => {
+  const response = await axios.get(`${SQUARE_API_BASE}/labor/workweek-configs`, { headers: squareHeaders() });
+  const config = response.data.workweek_configs?.[0];
+  return DOW_INDEX[config?.start_of_week] ?? 1; // default Monday
+};
+
+// Fetch every CLOSED timecard whose shift starts within [startDate, endDateExclusive), all locations
+const fetchAllTimecards = async (startDate, endDateExclusive) => {
+  const timecards = [];
+  let cursor;
+  let page = 0;
+  do {
+    const response = await axios.post(
+      `${SQUARE_API_BASE}/labor/timecards/search`,
+      {
+        query: {
+          filter: {
+            start: { start_at: `${startDate}T00:00:00Z`, end_at: `${endDateExclusive}T00:00:00Z` },
+            status: 'CLOSED',
+          },
+        },
+        limit: 200,
+        cursor,
+      },
+      { headers: squareHeaders() }
+    );
+    timecards.push(...(response.data.timecards || []));
+    cursor = response.data.cursor;
+    page += 1;
+  } while (cursor && page < 50);
+  return timecards;
+};
+
+// Fetch team member id -> display name map
+const fetchTeamMemberNames = async () => {
+  const names = {};
+  let cursor;
+  let page = 0;
+  do {
+    const response = await axios.post(
+      `${SQUARE_API_BASE}/team-members/search`,
+      { limit: 200, cursor },
+      { headers: squareHeaders() }
+    );
+    (response.data.team_members || []).forEach((tm) => {
+      names[tm.id] = [tm.given_name, tm.family_name].filter(Boolean).join(' ') || tm.id;
+    });
+    cursor = response.data.cursor;
+    page += 1;
+  } while (cursor && page < 50);
+  return names;
+};
+
+// Normalize a raw Square timecard into an hours entry, net of unpaid breaks
+const parseTimecardEntry = (tc) => {
+  const startMs = new Date(tc.start_at).getTime();
+  const endMs = new Date(tc.end_at).getTime();
+  const unpaidBreakMs = (tc.breaks || [])
+    .filter((b) => !b.is_paid && b.start_at && b.end_at)
+    .reduce((sum, b) => sum + (new Date(b.end_at).getTime() - new Date(b.start_at).getTime()), 0);
+  return {
+    teamMemberId: tc.team_member_id,
+    date: tc.start_at.slice(0, 10), // start_at carries the location-local offset already
+    function: tc.wage?.title || 'Unknown',
+    rate: (tc.wage?.hourly_rate?.amount || 0) / 100,
+    hours: Math.max(0, (endMs - startMs - unpaidBreakMs) / 3600000),
+  };
+};
+
+// Split one employee-day's total hours into CA regular/1.5x/2x hours.
+// `isSeventhDay` overrides the daily 8/12hr split per the 7th-consecutive-day rule.
+const splitDailyHours = (totalHours, isSeventhDay) => {
+  if (isSeventhDay) {
+    return { regular: 0, ot15: Math.min(totalHours, 8), ot2: Math.max(totalHours - 8, 0) };
+  }
+  return {
+    regular: Math.min(totalHours, 8),
+    ot15: Math.min(Math.max(totalHours - 8, 0), 4),
+    ot2: Math.max(totalHours - 12, 0),
+  };
+};
+
+// Build the weekly, by-function overtime report from raw timecards.
+const buildOvertimeReport = (timecards, teamNames, startDow) => {
+  const entries = timecards.filter((tc) => tc.start_at && tc.end_at).map(parseTimecardEntry);
+
+  // Group into per-employee-per-day buckets (a Square Timecard already represents one workday)
+  const dayBuckets = new Map();
+  entries.forEach((e) => {
+    const key = `${e.teamMemberId}__${e.date}`;
+    if (!dayBuckets.has(key)) {
+      dayBuckets.set(key, { teamMemberId: e.teamMemberId, date: e.date, totalHours: 0, byFunction: new Map() });
+    }
+    const bucket = dayBuckets.get(key);
+    bucket.totalHours += e.hours;
+    const fn = bucket.byFunction.get(e.function) || { hours: 0, rateHoursSum: 0 };
+    fn.hours += e.hours;
+    fn.rateHoursSum += e.hours * e.rate;
+    bucket.byFunction.set(e.function, fn);
+  });
+
+  // Group day buckets into per-employee-per-week buckets
+  const weekBuckets = new Map();
+  dayBuckets.forEach((bucket) => {
+    const weekStart = getWeekStart(bucket.date, startDow);
+    const key = `${bucket.teamMemberId}__${weekStart}`;
+    if (!weekBuckets.has(key)) weekBuckets.set(key, { teamMemberId: bucket.teamMemberId, weekStart, days: [] });
+    weekBuckets.get(key).days.push(bucket);
+  });
+
+  // Compute CA OT per employee-week, then allocate to functions by each function's share of hours worked
+  const weekFunctionTotals = new Map();
+  weekBuckets.forEach((week) => {
+    const daysWorked = new Set(week.days.map((d) => d.date));
+    const allSevenWorked = [...Array(7)].every((_, i) => daysWorked.has(addDays(week.weekStart, i)));
+
+    let weekRegular = 0, weekOt15 = 0, weekOt2 = 0;
+    const weekFunctionHours = new Map();
+
+    week.days.forEach((day) => {
+      const isSeventhDay = allSevenWorked && day.date === addDays(week.weekStart, 6);
+      const split = splitDailyHours(day.totalHours, isSeventhDay);
+      weekRegular += split.regular;
+      weekOt15 += split.ot15;
+      weekOt2 += split.ot2;
+
+      day.byFunction.forEach((fn, fnName) => {
+        const acc = weekFunctionHours.get(fnName) || { hours: 0, rateHoursSum: 0 };
+        acc.hours += fn.hours;
+        acc.rateHoursSum += fn.rateHoursSum;
+        weekFunctionHours.set(fnName, acc);
+      });
+    });
+
+    // Weekly 40-hour threshold: excess regular hours become 1.5x weekly overtime
+    if (weekRegular > 40) {
+      weekOt15 += weekRegular - 40;
+      weekRegular = 40;
+    }
+
+    const rawTotalHours = [...weekFunctionHours.values()].reduce((s, v) => s + v.hours, 0) || 1;
+
+    weekFunctionHours.forEach((fnAgg, fnName) => {
+      const share = fnAgg.hours / rawTotalHours;
+      const avgRate = fnAgg.hours > 0 ? fnAgg.rateHoursSum / fnAgg.hours : 0;
+      const allocOt15 = weekOt15 * share;
+      const allocOt2 = weekOt2 * share;
+      const otWage = allocOt15 * avgRate * 1.5 + allocOt2 * avgRate * 2;
+      const regularWage = weekRegular * share * avgRate;
+
+      const key = `${week.weekStart}__${fnName}`;
+      const agg = weekFunctionTotals.get(key) || {
+        weekStart: week.weekStart,
+        function: fnName,
+        regularHours: 0, ot15Hours: 0, ot2Hours: 0,
+        regularWage: 0, otWage: 0,
+        employees: new Map(),
+      };
+      agg.regularHours += weekRegular * share;
+      agg.ot15Hours += allocOt15;
+      agg.ot2Hours += allocOt2;
+      agg.regularWage += regularWage;
+      agg.otWage += otWage;
+
+      if (allocOt15 + allocOt2 > 0.01) {
+        const empName = teamNames[week.teamMemberId] || week.teamMemberId;
+        const prev = agg.employees.get(empName) || { name: empName, ot15Hours: 0, ot2Hours: 0, otWage: 0 };
+        prev.ot15Hours += allocOt15;
+        prev.ot2Hours += allocOt2;
+        prev.otWage += otWage;
+        agg.employees.set(empName, prev);
+      }
+
+      weekFunctionTotals.set(key, agg);
+    });
+  });
+
+  const weekStarts = [...new Set([...weekFunctionTotals.values()].map((a) => a.weekStart))].sort();
+  return weekStarts.map((weekStart) => {
+    const functions = [...weekFunctionTotals.values()]
+      .filter((a) => a.weekStart === weekStart)
+      .sort((a, b) => a.function.localeCompare(b.function))
+      .map((a) => ({
+        function: a.function,
+        regularHours: round2(a.regularHours),
+        otHours: round2(a.ot15Hours + a.ot2Hours),
+        ot15Hours: round2(a.ot15Hours),
+        ot2Hours: round2(a.ot2Hours),
+        regularWage: round2(a.regularWage),
+        otWage: round2(a.otWage),
+        employees: [...a.employees.values()]
+          .sort((x, y) => y.otWage - x.otWage)
+          .map((e) => ({ name: e.name, otHours: round2(e.ot15Hours + e.ot2Hours), otWage: round2(e.otWage) })),
+      }));
+    return {
+      weekStart,
+      weekEnd: addDays(weekStart, 6),
+      totalOtHours: round2(functions.reduce((s, f) => s + f.otHours, 0)),
+      totalOtWage: round2(functions.reduce((s, f) => s + f.otWage, 0)),
+      functions,
+    };
+  });
+};
+
+// GET /api/overtime?weeks=8&end=YYYY-MM-DD
+// `end` is the Monday (workweek start) of the most recent week to include; defaults to
+// the most recently completed workweek. `weeks` is how many workweeks back to include.
+app.get('/api/overtime', async (req, res) => {
+  const token = process.env.SQUARE_ACCESS_TOKEN;
+  if (!token || token === 'your_square_token_here') {
+    const snapshot = loadOvertimeSnapshot();
+    if (snapshot && snapshot.weeks) return res.json({ ...snapshot, success: true, source: snapshot.source || 'snapshot' });
+    return res.json({ error: 'Square API credentials not configured', weeks: [] });
+  }
+
+  try {
+    const startDow = await fetchWorkweekStartDow();
+
+    const requestedWeeks = parseInt(req.query.weeks, 10);
+    const weekCount = Number.isFinite(requestedWeeks) && requestedWeeks > 0 ? Math.min(requestedWeeks, 26) : 8;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentWeekStart = getWeekStart(todayStr, startDow);
+    const defaultLastCompletedWeekStart = addDays(currentWeekStart, -7);
+    const lastWeekStart = req.query.end || defaultLastCompletedWeekStart;
+
+    const rangeStart = addDays(lastWeekStart, -7 * (weekCount - 1));
+    const rangeEndExclusive = addDays(lastWeekStart, 7);
+
+    const [timecards, teamNames] = await Promise.all([
+      fetchAllTimecards(rangeStart, rangeEndExclusive),
+      fetchTeamMemberNames(),
+    ]);
+
+    const weeks = buildOvertimeReport(timecards, teamNames, startDow);
+    res.json({ success: true, weeks, rangeStart, rangeEnd: addDays(rangeEndExclusive, -1), employeeDetail: true });
+  } catch (err) {
+    res.status(500).json({
+      error: 'Square API error',
+      message: err.response?.data?.errors?.[0]?.detail || err.message,
+    });
+  }
+});
+
 // ============= QUICKBOOKS OAUTH 2.0 =============
 
 const QB_TOKENS_FILE = path.join(DATA_DIR, 'quickbooks-tokens.json');
@@ -397,6 +674,11 @@ app.get('/api/health', (req, res) => {
 // Serve dashboard
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Serve overtime report
+app.get('/overtime', (req, res) => {
+  res.sendFile(path.join(__dirname, 'overtime.html'));
 });
 
 // ============= LEGAL PAGES (required by Intuit's app settings) =============

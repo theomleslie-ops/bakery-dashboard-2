@@ -1,0 +1,1424 @@
+{
+  "success": true,
+  "weeks": [
+    {
+      "weekStart": "2026-05-11",
+      "weekEnd": "2026-05-17",
+      "totalOtHours": 257.63,
+      "totalOtWage": 8375.44,
+      "functions": [
+        {
+          "function": "506 Santa Cruz Seller",
+          "regularHours": 64.92,
+          "otHours": 4.67,
+          "ot15Hours": 4.67,
+          "ot2Hours": 0,
+          "regularWage": 1230.93,
+          "otWage": 136.4,
+          "employees": []
+        },
+        {
+          "function": "Arc Institute Seller",
+          "regularHours": 43.32,
+          "otHours": 0.71,
+          "ot15Hours": 0.71,
+          "ot2Hours": 0,
+          "regularWage": 763.16,
+          "otWage": 0,
+          "employees": []
+        },
+        {
+          "function": "Baker AM",
+          "regularHours": 164.65,
+          "otHours": 30.6,
+          "ot15Hours": 30.6,
+          "ot2Hours": 0,
+          "regularWage": 3643.78,
+          "otWage": 1017.05,
+          "employees": []
+        },
+        {
+          "function": "Baker Night",
+          "regularHours": 97.3,
+          "otHours": 46.24,
+          "ot15Hours": 42.3,
+          "ot2Hours": 3.94,
+          "regularWage": 1974.51,
+          "otWage": 1447.72,
+          "employees": []
+        },
+        {
+          "function": "Baker PM",
+          "regularHours": 120,
+          "otHours": 47.58,
+          "ot15Hours": 47.58,
+          "ot2Hours": 0,
+          "regularWage": 2800,
+          "otWage": 1656.3,
+          "employees": []
+        },
+        {
+          "function": "Cafe Manager",
+          "regularHours": 2.65,
+          "otHours": 0.35,
+          "ot15Hours": 0.35,
+          "ot2Hours": 0,
+          "regularWage": 63.65,
+          "otWage": 12.53,
+          "employees": []
+        },
+        {
+          "function": "Dishwasher/ Porter",
+          "regularHours": 138.05,
+          "otHours": 27.98,
+          "ot15Hours": 27.24,
+          "ot2Hours": 0.75,
+          "regularWage": 2610.3,
+          "otWage": 815.63,
+          "employees": []
+        },
+        {
+          "function": "Driver",
+          "regularHours": 147.01,
+          "otHours": 47.77,
+          "ot15Hours": 39.72,
+          "ot2Hours": 8.05,
+          "regularWage": 3238.99,
+          "otWage": 1733.56,
+          "employees": []
+        },
+        {
+          "function": "Driver - Seller",
+          "regularHours": 57.24,
+          "otHours": 16.34,
+          "ot15Hours": 15.19,
+          "ot2Hours": 1.15,
+          "regularWage": 1374.62,
+          "otWage": 576.84,
+          "employees": []
+        },
+        {
+          "function": "Farmers' Market Seller",
+          "regularHours": 275.34,
+          "otHours": 1.76,
+          "ot15Hours": 1.76,
+          "ot2Hours": 0,
+          "regularWage": 4695.61,
+          "otWage": 47.41,
+          "employees": []
+        },
+        {
+          "function": "LSK Cold Line",
+          "regularHours": 53.02,
+          "otHours": 13.68,
+          "ot15Hours": 13.68,
+          "ot2Hours": 0,
+          "regularWage": 1225.85,
+          "otWage": 462.23,
+          "employees": []
+        },
+        {
+          "function": "LSK Hot Line",
+          "regularHours": 23.67,
+          "otHours": 5.79,
+          "ot15Hours": 5.79,
+          "ot2Hours": 0,
+          "regularWage": 539.98,
+          "otWage": 184.54,
+          "employees": []
+        },
+        {
+          "function": "LSK Prep Only",
+          "regularHours": 7.31,
+          "otHours": 2.49,
+          "ot15Hours": 2.49,
+          "ot2Hours": 0,
+          "regularWage": 146.18,
+          "otWage": 74.73,
+          "employees": []
+        },
+        {
+          "function": "LSK Seller",
+          "regularHours": 66.61,
+          "otHours": 4.09,
+          "ot15Hours": 4.09,
+          "ot2Hours": 0,
+          "regularWage": 836.81,
+          "otWage": 24.14,
+          "employees": []
+        },
+        {
+          "function": "LSK-Arc BOH",
+          "regularHours": 9.4,
+          "otHours": 0,
+          "ot15Hours": 0,
+          "ot2Hours": 0,
+          "regularWage": 263.2,
+          "otWage": 0,
+          "employees": []
+        },
+        {
+          "function": "State Street Seller",
+          "regularHours": 53.47,
+          "otHours": 6.44,
+          "ot15Hours": 6.44,
+          "ot2Hours": 0,
+          "regularWage": 915.26,
+          "otWage": 154.51,
+          "employees": []
+        },
+        {
+          "function": "Training Seller",
+          "regularHours": 20.23,
+          "otHours": 1.14,
+          "ot15Hours": 1.14,
+          "ot2Hours": 0,
+          "regularWage": 383.23,
+          "otWage": 31.85,
+          "employees": []
+        }
+      ]
+    },
+    {
+      "weekStart": "2026-05-18",
+      "weekEnd": "2026-05-24",
+      "totalOtHours": 258.7,
+      "totalOtWage": 8835,
+      "functions": [
+        {
+          "function": "506 Santa Cruz Seller",
+          "regularHours": 68.83,
+          "otHours": 1.54,
+          "ot15Hours": 1.54,
+          "ot2Hours": 0,
+          "regularWage": 1320.35,
+          "otWage": 50.98,
+          "employees": []
+        },
+        {
+          "function": "Arc Institute Seller",
+          "regularHours": 42.78,
+          "otHours": 0,
+          "ot15Hours": 0,
+          "ot2Hours": 0,
+          "regularWage": 721.56,
+          "otWage": 0,
+          "employees": []
+        },
+        {
+          "function": "Baker AM",
+          "regularHours": 159.84,
+          "otHours": 29,
+          "ot15Hours": 29,
+          "ot2Hours": 0,
+          "regularWage": 3527.94,
+          "otWage": 954.67,
+          "employees": []
+        },
+        {
+          "function": "Baker Night",
+          "regularHours": 110.22,
+          "otHours": 46.43,
+          "ot15Hours": 41.91,
+          "ot2Hours": 4.52,
+          "regularWage": 2244.5,
+          "otWage": 1460.88,
+          "employees": []
+        },
+        {
+          "function": "Baker PM",
+          "regularHours": 120,
+          "otHours": 55.05,
+          "ot15Hours": 55.05,
+          "ot2Hours": 0,
+          "regularWage": 2800,
+          "otWage": 1927.3,
+          "employees": []
+        },
+        {
+          "function": "Dishwasher/ Porter",
+          "regularHours": 117.27,
+          "otHours": 18.66,
+          "ot15Hours": 18.1,
+          "ot2Hours": 0.57,
+          "regularWage": 2210.44,
+          "otWage": 537.96,
+          "employees": []
+        },
+        {
+          "function": "Driver",
+          "regularHours": 135.33,
+          "otHours": 57.27,
+          "ot15Hours": 39.41,
+          "ot2Hours": 17.86,
+          "regularWage": 2984.25,
+          "otWage": 2152.97,
+          "employees": []
+        },
+        {
+          "function": "Driver - Seller",
+          "regularHours": 51.7,
+          "otHours": 17.02,
+          "ot15Hours": 15.98,
+          "ot2Hours": 1.04,
+          "regularWage": 1236.52,
+          "otWage": 599.97,
+          "employees": []
+        },
+        {
+          "function": "Farmers' Market Seller",
+          "regularHours": 282.5,
+          "otHours": 1.72,
+          "ot15Hours": 1.72,
+          "ot2Hours": 0,
+          "regularWage": 4912.95,
+          "otWage": 55.65,
+          "employees": []
+        },
+        {
+          "function": "LSK Cold Line",
+          "regularHours": 45.81,
+          "otHours": 11.72,
+          "ot15Hours": 11.72,
+          "ot2Hours": 0,
+          "regularWage": 1045.62,
+          "otWage": 394.83,
+          "employees": []
+        },
+        {
+          "function": "LSK Hot Line",
+          "regularHours": 57.37,
+          "otHours": 7.84,
+          "ot15Hours": 7.84,
+          "ot2Hours": 0,
+          "regularWage": 1397.96,
+          "otWage": 264.16,
+          "employees": []
+        },
+        {
+          "function": "LSK Prep Only",
+          "regularHours": 6.62,
+          "otHours": 1.98,
+          "ot15Hours": 1.98,
+          "ot2Hours": 0,
+          "regularWage": 132.39,
+          "otWage": 59.41,
+          "employees": []
+        },
+        {
+          "function": "LSK Seller",
+          "regularHours": 68.49,
+          "otHours": 2.31,
+          "ot15Hours": 2.31,
+          "ot2Hours": 0,
+          "regularWage": 941.3,
+          "otWage": 83.25,
+          "employees": []
+        },
+        {
+          "function": "LSK-Arc BOH",
+          "regularHours": 14.43,
+          "otHours": 0.19,
+          "ot15Hours": 0.19,
+          "ot2Hours": 0,
+          "regularWage": 404.03,
+          "otWage": 7.85,
+          "employees": []
+        },
+        {
+          "function": "State Street Seller",
+          "regularHours": 48.15,
+          "otHours": 7.97,
+          "ot15Hours": 7.97,
+          "ot2Hours": 0,
+          "regularWage": 1048.25,
+          "otWage": 285.12,
+          "employees": []
+        },
+        {
+          "function": "Training Seller",
+          "regularHours": 6.5,
+          "otHours": 0,
+          "ot15Hours": 0,
+          "ot2Hours": 0,
+          "regularWage": 113.75,
+          "otWage": 0,
+          "employees": []
+        }
+      ]
+    },
+    {
+      "weekStart": "2026-05-25",
+      "weekEnd": "2026-05-31",
+      "totalOtHours": 254.37,
+      "totalOtWage": 8830.45,
+      "functions": [
+        {
+          "function": "506 Santa Cruz Seller",
+          "regularHours": 71.28,
+          "otHours": 0.56,
+          "ot15Hours": 0.56,
+          "ot2Hours": 0,
+          "regularWage": 1349.84,
+          "otWage": 14.99,
+          "employees": []
+        },
+        {
+          "function": "Arc Institute Seller",
+          "regularHours": 29.94,
+          "otHours": 0.26,
+          "ot15Hours": 0.26,
+          "ot2Hours": 0,
+          "regularWage": 484,
+          "otWage": 0,
+          "employees": []
+        },
+        {
+          "function": "Baker AM",
+          "regularHours": 157.21,
+          "otHours": 28.31,
+          "ot15Hours": 28.31,
+          "ot2Hours": 0,
+          "regularWage": 3501.63,
+          "otWage": 935.5,
+          "employees": []
+        },
+        {
+          "function": "Baker Night",
+          "regularHours": 140.87,
+          "otHours": 52.1,
+          "ot15Hours": 50.25,
+          "ot2Hours": 1.85,
+          "regularWage": 2919.93,
+          "otWage": 1633.03,
+          "employees": []
+        },
+        {
+          "function": "Baker PM",
+          "regularHours": 120,
+          "otHours": 57.27,
+          "ot15Hours": 45.78,
+          "ot2Hours": 11.48,
+          "regularWage": 2800,
+          "otWage": 2096.67,
+          "employees": []
+        },
+        {
+          "function": "Cafe Manager",
+          "regularHours": 12.45,
+          "otHours": 1.35,
+          "ot15Hours": 1.35,
+          "ot2Hours": 0,
+          "regularWage": 298.83,
+          "otWage": 48.56,
+          "employees": []
+        },
+        {
+          "function": "Dishwasher/ Porter",
+          "regularHours": 108.16,
+          "otHours": 16.11,
+          "ot15Hours": 16.11,
+          "ot2Hours": 0,
+          "regularWage": 2026.9,
+          "otWage": 455.1,
+          "employees": []
+        },
+        {
+          "function": "Driver",
+          "regularHours": 130.72,
+          "otHours": 45.66,
+          "ot15Hours": 39.73,
+          "ot2Hours": 5.93,
+          "regularWage": 2877.59,
+          "otWage": 1639.78,
+          "employees": []
+        },
+        {
+          "function": "Driver - Seller",
+          "regularHours": 50.37,
+          "otHours": 16.96,
+          "ot15Hours": 15.81,
+          "ot2Hours": 1.15,
+          "regularWage": 1204.53,
+          "otWage": 597.5,
+          "employees": []
+        },
+        {
+          "function": "Farmers' Market Seller",
+          "regularHours": 317.28,
+          "otHours": 2.21,
+          "ot15Hours": 2.21,
+          "ot2Hours": 0,
+          "regularWage": 5555.67,
+          "otWage": 70.31,
+          "employees": []
+        },
+        {
+          "function": "LSK Cold Line",
+          "regularHours": 58.15,
+          "otHours": 15.02,
+          "ot15Hours": 5.27,
+          "ot2Hours": 9.75,
+          "regularWage": 1333.97,
+          "otWage": 676.59,
+          "employees": []
+        },
+        {
+          "function": "LSK Hot Line",
+          "regularHours": 52.08,
+          "otHours": 9.15,
+          "ot15Hours": 7.52,
+          "ot2Hours": 1.63,
+          "regularWage": 1281.18,
+          "otWage": 359.84,
+          "employees": []
+        },
+        {
+          "function": "LSK Prep Only",
+          "regularHours": 16.04,
+          "otHours": 0.76,
+          "ot15Hours": 0.76,
+          "ot2Hours": 0,
+          "regularWage": 320.76,
+          "otWage": 22.86,
+          "employees": []
+        },
+        {
+          "function": "LSK Seller",
+          "regularHours": 65.11,
+          "otHours": 2.07,
+          "ot15Hours": 2.07,
+          "ot2Hours": 0,
+          "regularWage": 669.71,
+          "otWage": 22.34,
+          "employees": []
+        },
+        {
+          "function": "LSK-Arc BOH",
+          "regularHours": 20.41,
+          "otHours": 3.52,
+          "ot15Hours": 3.52,
+          "ot2Hours": 0,
+          "regularWage": 571.61,
+          "otWage": 147.79,
+          "employees": []
+        },
+        {
+          "function": "State Street Seller",
+          "regularHours": 35.61,
+          "otHours": 3.01,
+          "ot15Hours": 3.01,
+          "ot2Hours": 0,
+          "regularWage": 811.83,
+          "otWage": 108.2,
+          "employees": []
+        },
+        {
+          "function": "Training Seller",
+          "regularHours": 40.42,
+          "otHours": 0.05,
+          "ot15Hours": 0.05,
+          "ot2Hours": 0,
+          "regularWage": 748.33,
+          "otWage": 1.39,
+          "employees": []
+        }
+      ]
+    },
+    {
+      "weekStart": "2026-06-01",
+      "weekEnd": "2026-06-07",
+      "totalOtHours": 262.65,
+      "totalOtWage": 8894.81,
+      "functions": [
+        {
+          "function": "506 Santa Cruz Seller",
+          "regularHours": 64.23,
+          "otHours": 0.62,
+          "ot15Hours": 0.62,
+          "ot2Hours": 0,
+          "regularWage": 1162.86,
+          "otWage": 16.68,
+          "employees": []
+        },
+        {
+          "function": "Arc Institute Seller",
+          "regularHours": 39.88,
+          "otHours": 0,
+          "ot15Hours": 0,
+          "ot2Hours": 0,
+          "regularWage": 647.67,
+          "otWage": 0,
+          "employees": []
+        },
+        {
+          "function": "Baker AM",
+          "regularHours": 165.27,
+          "otHours": 31.09,
+          "ot15Hours": 31.09,
+          "ot2Hours": 0,
+          "regularWage": 3654.64,
+          "otWage": 1023.84,
+          "employees": []
+        },
+        {
+          "function": "Baker Night",
+          "regularHours": 151.4,
+          "otHours": 50.98,
+          "ot15Hours": 50.92,
+          "ot2Hours": 0.07,
+          "regularWage": 3162.2,
+          "otWage": 1569.54,
+          "employees": []
+        },
+        {
+          "function": "Baker PM",
+          "regularHours": 149,
+          "otHours": 43.47,
+          "ot15Hours": 43.47,
+          "ot2Hours": 0,
+          "regularWage": 3380,
+          "otWage": 1493.35,
+          "employees": []
+        },
+        {
+          "function": "Cafe Manager",
+          "regularHours": 9.66,
+          "otHours": 1.97,
+          "ot15Hours": 1.97,
+          "ot2Hours": 0,
+          "regularWage": 241.52,
+          "otWage": 73.97,
+          "employees": []
+        },
+        {
+          "function": "Dishwasher/ Porter",
+          "regularHours": 138.64,
+          "otHours": 18.02,
+          "ot15Hours": 18.02,
+          "ot2Hours": 0,
+          "regularWage": 2575.59,
+          "otWage": 507.41,
+          "employees": []
+        },
+        {
+          "function": "Driver",
+          "regularHours": 127.69,
+          "otHours": 55.46,
+          "ot15Hours": 44.63,
+          "ot2Hours": 10.82,
+          "regularWage": 2813.67,
+          "otWage": 2025.95,
+          "employees": []
+        },
+        {
+          "function": "Driver - Seller",
+          "regularHours": 66.82,
+          "otHours": 16.63,
+          "ot15Hours": 14.79,
+          "ot2Hours": 1.84,
+          "regularWage": 1539.98,
+          "otWage": 578.69,
+          "employees": []
+        },
+        {
+          "function": "Farmers' Market Seller",
+          "regularHours": 294.83,
+          "otHours": 9.25,
+          "ot15Hours": 9.25,
+          "ot2Hours": 0,
+          "regularWage": 5811.44,
+          "otWage": 316.31,
+          "employees": []
+        },
+        {
+          "function": "LSK Cold Line",
+          "regularHours": 49.7,
+          "otHours": 9.6,
+          "ot15Hours": 9.6,
+          "ot2Hours": 0,
+          "regularWage": 1075.13,
+          "otWage": 291.43,
+          "employees": []
+        },
+        {
+          "function": "LSK Hot Line",
+          "regularHours": 47.34,
+          "otHours": 6.36,
+          "ot15Hours": 6.36,
+          "ot2Hours": 0,
+          "regularWage": 1143.43,
+          "otWage": 229.38,
+          "employees": []
+        },
+        {
+          "function": "LSK Prep Only",
+          "regularHours": 6.51,
+          "otHours": 1.77,
+          "ot15Hours": 1.77,
+          "ot2Hours": 0,
+          "regularWage": 130.19,
+          "otWage": 53.22,
+          "employees": []
+        },
+        {
+          "function": "LSK Seller",
+          "regularHours": 71.17,
+          "otHours": 0.78,
+          "ot15Hours": 0.78,
+          "ot2Hours": 0,
+          "regularWage": 1141.49,
+          "otWage": 21.17,
+          "employees": []
+        },
+        {
+          "function": "LSK-Arc BOH",
+          "regularHours": 25.22,
+          "otHours": 13.58,
+          "ot15Hours": 10.97,
+          "ot2Hours": 2.62,
+          "regularWage": 706.07,
+          "otWage": 607.13,
+          "employees": []
+        },
+        {
+          "function": "State Street Seller",
+          "regularHours": 59.7,
+          "otHours": 2.69,
+          "ot15Hours": 2.69,
+          "ot2Hours": 0,
+          "regularWage": 1009.76,
+          "otWage": 75.99,
+          "employees": []
+        },
+        {
+          "function": "Training Seller",
+          "regularHours": 25.07,
+          "otHours": 0.38,
+          "ot15Hours": 0.38,
+          "ot2Hours": 0,
+          "regularWage": 467.87,
+          "otWage": 10.75,
+          "employees": []
+        }
+      ]
+    },
+    {
+      "weekStart": "2026-06-08",
+      "weekEnd": "2026-06-14",
+      "totalOtHours": 257.93,
+      "totalOtWage": 8730.39,
+      "functions": [
+        {
+          "function": "506 Santa Cruz Seller",
+          "regularHours": 72.57,
+          "otHours": 0.56,
+          "ot15Hours": 0.56,
+          "ot2Hours": 0,
+          "regularWage": 1380.49,
+          "otWage": 15.24,
+          "employees": []
+        },
+        {
+          "function": "Arc Institute Seller",
+          "regularHours": 32.61,
+          "otHours": 0.18,
+          "ot15Hours": 0.18,
+          "ot2Hours": 0,
+          "regularWage": 523.06,
+          "otWage": 4.81,
+          "employees": []
+        },
+        {
+          "function": "Baker AM",
+          "regularHours": 181.46,
+          "otHours": 30.99,
+          "ot15Hours": 30.99,
+          "ot2Hours": 0,
+          "regularWage": 3946.31,
+          "otWage": 1003.71,
+          "employees": []
+        },
+        {
+          "function": "Baker Night",
+          "regularHours": 152,
+          "otHours": 45.08,
+          "ot15Hours": 44.6,
+          "ot2Hours": 0.48,
+          "regularWage": 3176,
+          "otWage": 1395.05,
+          "employees": []
+        },
+        {
+          "function": "Baker PM",
+          "regularHours": 156.77,
+          "otHours": 51.73,
+          "ot15Hours": 40.47,
+          "ot2Hours": 11.27,
+          "regularWage": 3535.33,
+          "otWage": 1818.97,
+          "employees": []
+        },
+        {
+          "function": "Cafe Manager",
+          "regularHours": 6.21,
+          "otHours": 1.24,
+          "ot15Hours": 1.24,
+          "ot2Hours": 0,
+          "regularWage": 155.25,
+          "otWage": 46.5,
+          "employees": []
+        },
+        {
+          "function": "Dishwasher/ Porter",
+          "regularHours": 187.25,
+          "otHours": 23.23,
+          "ot15Hours": 23.23,
+          "ot2Hours": 0,
+          "regularWage": 3530.55,
+          "otWage": 665.12,
+          "employees": []
+        },
+        {
+          "function": "Driver",
+          "regularHours": 133.4,
+          "otHours": 52.63,
+          "ot15Hours": 42.68,
+          "ot2Hours": 9.95,
+          "regularWage": 2948.52,
+          "otWage": 1929.05,
+          "employees": []
+        },
+        {
+          "function": "Driver - Seller",
+          "regularHours": 49.16,
+          "otHours": 13.66,
+          "ot15Hours": 13.21,
+          "ot2Hours": 0.44,
+          "regularWage": 1155.49,
+          "otWage": 472.62,
+          "employees": []
+        },
+        {
+          "function": "Farmers' Market Seller",
+          "regularHours": 285.3,
+          "otHours": 8.1,
+          "ot15Hours": 8.09,
+          "ot2Hours": 0,
+          "regularWage": 5646.57,
+          "otWage": 280.31,
+          "employees": []
+        },
+        {
+          "function": "LSK Cold Line",
+          "regularHours": 61.06,
+          "otHours": 12,
+          "ot15Hours": 10.57,
+          "ot2Hours": 1.43,
+          "regularWage": 1361.23,
+          "otWage": 413.84,
+          "employees": []
+        },
+        {
+          "function": "LSK Hot Line",
+          "regularHours": 52,
+          "otHours": 8.01,
+          "ot15Hours": 7.4,
+          "ot2Hours": 0.62,
+          "regularWage": 1260.11,
+          "otWage": 299.21,
+          "employees": []
+        },
+        {
+          "function": "LSK Prep Only",
+          "regularHours": 6.93,
+          "otHours": 1.52,
+          "ot15Hours": 1.52,
+          "ot2Hours": 0,
+          "regularWage": 138.67,
+          "otWage": 45.5,
+          "employees": []
+        },
+        {
+          "function": "LSK Seller",
+          "regularHours": 68.97,
+          "otHours": 0.63,
+          "ot15Hours": 0.63,
+          "ot2Hours": 0,
+          "regularWage": 1034.48,
+          "otWage": 16.98,
+          "employees": []
+        },
+        {
+          "function": "LSK-Arc BOH",
+          "regularHours": 27.9,
+          "otHours": 6.33,
+          "ot15Hours": 6.33,
+          "ot2Hours": 0,
+          "regularWage": 781.2,
+          "otWage": 266,
+          "employees": []
+        },
+        {
+          "function": "State Street Seller",
+          "regularHours": 65.88,
+          "otHours": 2.04,
+          "ot15Hours": 2.04,
+          "ot2Hours": 0,
+          "regularWage": 1185.64,
+          "otWage": 57.48,
+          "employees": []
+        },
+        {
+          "function": "Training Seller",
+          "regularHours": 28.43,
+          "otHours": 0,
+          "ot15Hours": 0,
+          "ot2Hours": 0,
+          "regularWage": 538.68,
+          "otWage": 0,
+          "employees": []
+        }
+      ]
+    },
+    {
+      "weekStart": "2026-06-15",
+      "weekEnd": "2026-06-21",
+      "totalOtHours": 268.7,
+      "totalOtWage": 8955.56,
+      "functions": [
+        {
+          "function": "506 Santa Cruz Seller",
+          "regularHours": 72.07,
+          "otHours": 0.83,
+          "ot15Hours": 0.83,
+          "ot2Hours": 0,
+          "regularWage": 1334.15,
+          "otWage": 21.48,
+          "employees": []
+        },
+        {
+          "function": "Arc Institute Seller",
+          "regularHours": 38.88,
+          "otHours": 0.09,
+          "ot15Hours": 0.09,
+          "ot2Hours": 0,
+          "regularWage": 646.03,
+          "otWage": 0,
+          "employees": []
+        },
+        {
+          "function": "Baker AM",
+          "regularHours": 173.84,
+          "otHours": 40.31,
+          "ot15Hours": 40.31,
+          "ot2Hours": 0,
+          "regularWage": 3745.12,
+          "otWage": 1294.97,
+          "employees": []
+        },
+        {
+          "function": "Baker Night",
+          "regularHours": 134.7,
+          "otHours": 55.38,
+          "ot15Hours": 51.18,
+          "ot2Hours": 4.2,
+          "regularWage": 2830.01,
+          "otWage": 1760.62,
+          "employees": []
+        },
+        {
+          "function": "Baker PM",
+          "regularHours": 136,
+          "otHours": 46.28,
+          "ot15Hours": 34.28,
+          "ot2Hours": 12,
+          "regularWage": 3088,
+          "otWage": 1647.2,
+          "employees": []
+        },
+        {
+          "function": "Cafe Manager",
+          "regularHours": 12.6,
+          "otHours": 1.44,
+          "ot15Hours": 1.44,
+          "ot2Hours": 0,
+          "regularWage": 314.91,
+          "otWage": 53.88,
+          "employees": []
+        },
+        {
+          "function": "Dishwasher/ Porter",
+          "regularHours": 202.19,
+          "otHours": 32.96,
+          "ot15Hours": 31.19,
+          "ot2Hours": 1.77,
+          "regularWage": 3834.07,
+          "otWage": 974.15,
+          "employees": []
+        },
+        {
+          "function": "Driver",
+          "regularHours": 139.55,
+          "otHours": 45.58,
+          "ot15Hours": 37.54,
+          "ot2Hours": 8.05,
+          "regularWage": 3017.17,
+          "otWage": 1649.68,
+          "employees": []
+        },
+        {
+          "function": "Driver - Seller",
+          "regularHours": 76.61,
+          "otHours": 18.31,
+          "ot15Hours": 16.34,
+          "ot2Hours": 1.97,
+          "regularWage": 1780.33,
+          "otWage": 640.93,
+          "employees": []
+        },
+        {
+          "function": "Farmers' Market Seller",
+          "regularHours": 294.9,
+          "otHours": 5.35,
+          "ot15Hours": 5.35,
+          "ot2Hours": 0,
+          "regularWage": 5853.3,
+          "otWage": 190.61,
+          "employees": []
+        },
+        {
+          "function": "LSK Cold Line",
+          "regularHours": 73.29,
+          "otHours": 9.19,
+          "ot15Hours": 9.19,
+          "ot2Hours": 0,
+          "regularWage": 1665.7,
+          "otWage": 281.82,
+          "employees": []
+        },
+        {
+          "function": "LSK Hot Line",
+          "regularHours": 38.47,
+          "otHours": 0.4,
+          "ot15Hours": 0.4,
+          "ot2Hours": 0,
+          "regularWage": 923.2,
+          "otWage": 14.4,
+          "employees": []
+        },
+        {
+          "function": "LSK Prep Only",
+          "regularHours": 6.67,
+          "otHours": 1.68,
+          "ot15Hours": 1.68,
+          "ot2Hours": 0,
+          "regularWage": 133.47,
+          "otWage": 50.3,
+          "employees": []
+        },
+        {
+          "function": "LSK Seller",
+          "regularHours": 70.18,
+          "otHours": 0.82,
+          "ot15Hours": 0.82,
+          "ot2Hours": 0,
+          "regularWage": 1125.76,
+          "otWage": 19.11,
+          "employees": []
+        },
+        {
+          "function": "LSK-Arc BOH",
+          "regularHours": 31.5,
+          "otHours": 5.82,
+          "ot15Hours": 5.82,
+          "ot2Hours": 0,
+          "regularWage": 882,
+          "otWage": 244.3,
+          "employees": []
+        },
+        {
+          "function": "State Street Seller",
+          "regularHours": 62.04,
+          "otHours": 4.26,
+          "ot15Hours": 4.26,
+          "ot2Hours": 0,
+          "regularWage": 846.45,
+          "otWage": 112.11,
+          "employees": []
+        },
+        {
+          "function": "Training Seller",
+          "regularHours": 29.73,
+          "otHours": 0,
+          "ot15Hours": 0,
+          "ot2Hours": 0,
+          "regularWage": 567.09,
+          "otWage": 0,
+          "employees": []
+        }
+      ]
+    },
+    {
+      "weekStart": "2026-06-22",
+      "weekEnd": "2026-06-28",
+      "totalOtHours": 268.64,
+      "totalOtWage": 9068.13,
+      "functions": [
+        {
+          "function": "506 Santa Cruz Seller",
+          "regularHours": 77.36,
+          "otHours": 0.32,
+          "ot15Hours": 0.32,
+          "ot2Hours": 0,
+          "regularWage": 1183.41,
+          "otWage": 4.98,
+          "employees": []
+        },
+        {
+          "function": "Arc Institute Seller",
+          "regularHours": 43.16,
+          "otHours": 0.05,
+          "ot15Hours": 0.05,
+          "ot2Hours": 0,
+          "regularWage": 731.74,
+          "otWage": 0,
+          "employees": []
+        },
+        {
+          "function": "Baker AM",
+          "regularHours": 172.53,
+          "otHours": 31.42,
+          "ot15Hours": 31.42,
+          "ot2Hours": 0,
+          "regularWage": 3721.06,
+          "otWage": 1031.72,
+          "employees": []
+        },
+        {
+          "function": "Baker Night",
+          "regularHours": 139.76,
+          "otHours": 41.79,
+          "ot15Hours": 41.79,
+          "ot2Hours": 0,
+          "regularWage": 2931.19,
+          "otWage": 1292.54,
+          "employees": []
+        },
+        {
+          "function": "Baker PM",
+          "regularHours": 158.13,
+          "otHours": 44.2,
+          "ot15Hours": 44.2,
+          "ot2Hours": 0,
+          "regularWage": 3562.67,
+          "otWage": 1491.05,
+          "employees": []
+        },
+        {
+          "function": "Cafe Manager",
+          "regularHours": 7.21,
+          "otHours": 0.46,
+          "ot15Hours": 0.46,
+          "ot2Hours": 0,
+          "regularWage": 180.25,
+          "otWage": 17.13,
+          "employees": []
+        },
+        {
+          "function": "Dishwasher/ Porter",
+          "regularHours": 196.56,
+          "otHours": 33.69,
+          "ot15Hours": 31.69,
+          "ot2Hours": 2,
+          "regularWage": 3722.61,
+          "otWage": 1000.69,
+          "employees": []
+        },
+        {
+          "function": "Driver",
+          "regularHours": 137.15,
+          "otHours": 44.81,
+          "ot15Hours": 37.36,
+          "ot2Hours": 7.46,
+          "regularWage": 2976.74,
+          "otWage": 1628.84,
+          "employees": []
+        },
+        {
+          "function": "Driver - Seller",
+          "regularHours": 67.91,
+          "otHours": 20.82,
+          "ot15Hours": 18.46,
+          "ot2Hours": 2.36,
+          "regularWage": 1584.86,
+          "otWage": 743.58,
+          "employees": []
+        },
+        {
+          "function": "Farmers' Market Seller",
+          "regularHours": 301.63,
+          "otHours": 10.19,
+          "ot15Hours": 7.12,
+          "ot2Hours": 3.07,
+          "regularWage": 5963.49,
+          "otWage": 354.72,
+          "employees": []
+        },
+        {
+          "function": "LSK Cold Line",
+          "regularHours": 63.24,
+          "otHours": 10.61,
+          "ot15Hours": 10.61,
+          "ot2Hours": 0,
+          "regularWage": 1413.56,
+          "otWage": 337.28,
+          "employees": []
+        },
+        {
+          "function": "LSK Hot Line",
+          "regularHours": 38.28,
+          "otHours": 1.19,
+          "ot15Hours": 1.19,
+          "ot2Hours": 0,
+          "regularWage": 926.61,
+          "otWage": 43.69,
+          "employees": []
+        },
+        {
+          "function": "LSK Prep Only",
+          "regularHours": 6.51,
+          "otHours": 1.57,
+          "ot15Hours": 1.57,
+          "ot2Hours": 0,
+          "regularWage": 130.25,
+          "otWage": 47.13,
+          "employees": []
+        },
+        {
+          "function": "LSK Seller",
+          "regularHours": 65.27,
+          "otHours": 0.32,
+          "ot15Hours": 0.32,
+          "ot2Hours": 0,
+          "regularWage": 1107.92,
+          "otWage": 7.62,
+          "employees": []
+        },
+        {
+          "function": "LSK-Arc BOH",
+          "regularHours": 26.47,
+          "otHours": 12.5,
+          "ot15Hours": 10.8,
+          "ot2Hours": 1.7,
+          "regularWage": 741.07,
+          "otWage": 548.8,
+          "employees": []
+        },
+        {
+          "function": "State Street Seller",
+          "regularHours": 69.17,
+          "otHours": 14.7,
+          "ot15Hours": 6.28,
+          "ot2Hours": 8.41,
+          "regularWage": 1273.93,
+          "otWage": 518.36,
+          "employees": []
+        },
+        {
+          "function": "Training Seller",
+          "regularHours": 34.1,
+          "otHours": 0,
+          "ot15Hours": 0,
+          "ot2Hours": 0,
+          "regularWage": 660.46,
+          "otWage": 0,
+          "employees": []
+        }
+      ]
+    },
+    {
+      "weekStart": "2026-06-29",
+      "weekEnd": "2026-07-05",
+      "totalOtHours": 220.17,
+      "totalOtWage": 7491.05,
+      "functions": [
+        {
+          "function": "506 Santa Cruz Seller",
+          "regularHours": 73.27,
+          "otHours": 0.65,
+          "ot15Hours": 0.65,
+          "ot2Hours": 0,
+          "regularWage": 1403.46,
+          "otWage": 17.51,
+          "employees": []
+        },
+        {
+          "function": "Arc Institute Seller",
+          "regularHours": 32.42,
+          "otHours": 1.05,
+          "ot15Hours": 1.05,
+          "ot2Hours": 0,
+          "regularWage": 459.33,
+          "otWage": 0,
+          "employees": []
+        },
+        {
+          "function": "Baker AM",
+          "regularHours": 179.43,
+          "otHours": 44.01,
+          "ot15Hours": 32.51,
+          "ot2Hours": 11.5,
+          "regularWage": 3908.49,
+          "otWage": 1682.67,
+          "employees": []
+        },
+        {
+          "function": "Baker Night",
+          "regularHours": 126.29,
+          "otHours": 27.15,
+          "ot15Hours": 27.15,
+          "ot2Hours": 0,
+          "regularWage": 2660.75,
+          "otWage": 845.92,
+          "employees": []
+        },
+        {
+          "function": "Baker PM",
+          "regularHours": 126.27,
+          "otHours": 37.35,
+          "ot15Hours": 29.17,
+          "ot2Hours": 8.18,
+          "regularWage": 2861.33,
+          "otWage": 1303.13,
+          "employees": []
+        },
+        {
+          "function": "Cafe Manager",
+          "regularHours": 4.18,
+          "otHours": 0.09,
+          "ot15Hours": 0.09,
+          "ot2Hours": 0,
+          "regularWage": 104.5,
+          "otWage": 3.24,
+          "employees": []
+        },
+        {
+          "function": "Dishwasher/ Porter",
+          "regularHours": 208.04,
+          "otHours": 30.56,
+          "ot15Hours": 29.11,
+          "ot2Hours": 1.45,
+          "regularWage": 3952.59,
+          "otWage": 901.91,
+          "employees": []
+        },
+        {
+          "function": "Driver",
+          "regularHours": 114.03,
+          "otHours": 41.52,
+          "ot15Hours": 34.32,
+          "ot2Hours": 7.2,
+          "regularWage": 2471.53,
+          "otWage": 1472.86,
+          "employees": []
+        },
+        {
+          "function": "Driver - Seller",
+          "regularHours": 54.24,
+          "otHours": 10.34,
+          "ot15Hours": 9.6,
+          "ot2Hours": 0.74,
+          "regularWage": 1286.19,
+          "otWage": 377.03,
+          "employees": []
+        },
+        {
+          "function": "Farmers' Market Seller",
+          "regularHours": 258.58,
+          "otHours": 1.37,
+          "ot15Hours": 1.37,
+          "ot2Hours": 0,
+          "regularWage": 5114.16,
+          "otWage": 43.32,
+          "employees": []
+        },
+        {
+          "function": "LSK Cold Line",
+          "regularHours": 72.92,
+          "otHours": 7.67,
+          "ot15Hours": 7.67,
+          "ot2Hours": 0,
+          "regularWage": 1656.6,
+          "otWage": 230.59,
+          "employees": []
+        },
+        {
+          "function": "LSK Hot Line",
+          "regularHours": 40,
+          "otHours": 7.1,
+          "ot15Hours": 7.1,
+          "ot2Hours": 0,
+          "regularWage": 960,
+          "otWage": 255.6,
+          "employees": []
+        },
+        {
+          "function": "LSK Prep Only",
+          "regularHours": 6.73,
+          "otHours": 1.53,
+          "ot15Hours": 1.53,
+          "ot2Hours": 0,
+          "regularWage": 134.65,
+          "otWage": 46.03,
+          "employees": []
+        },
+        {
+          "function": "LSK Seller",
+          "regularHours": 72.05,
+          "otHours": 0.4,
+          "ot15Hours": 0.4,
+          "ot2Hours": 0,
+          "regularWage": 1232.1,
+          "otWage": 0,
+          "employees": []
+        },
+        {
+          "function": "LSK-Arc BOH",
+          "regularHours": 27.4,
+          "otHours": 5.07,
+          "ot15Hours": 5.07,
+          "ot2Hours": 0,
+          "regularWage": 767.2,
+          "otWage": 212.8,
+          "employees": []
+        },
+        {
+          "function": "State Street Seller",
+          "regularHours": 61.69,
+          "otHours": 4.31,
+          "ot15Hours": 4.31,
+          "ot2Hours": 0,
+          "regularWage": 1030.87,
+          "otWage": 98.44,
+          "employees": []
+        },
+        {
+          "function": "Training Seller",
+          "regularHours": 5.62,
+          "otHours": 0,
+          "ot15Hours": 0,
+          "ot2Hours": 0,
+          "regularWage": 105.31,
+          "otWage": 0,
+          "employees": []
+        }
+      ]
+    }
+  ],
+  "rangeStart": "2026-05-11",
+  "rangeEnd": "2026-07-05",
+  "generatedAt": "2026-07-08T23:29:10.385Z",
+  "source": "square-snapshot",
+  "employeeDetail": false
+}
