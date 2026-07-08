@@ -41,6 +41,14 @@ curl http://localhost:3001/api/ingredients
 curl http://localhost:3001/api/dashboard
 ```
 
+**Get weekly overtime report by function (from Square Labor):**
+```bash
+curl http://localhost:3001/api/overtime?weeks=8
+```
+Password-protected page at `/overtime`. Computes California overtime (1.5x over 8hrs/day or 40hrs/week,
+2x over 12hrs/day, 7th-consecutive-workday rule) per employee, allocated across job/function by hours
+worked. Uses `SQUARE_ACCESS_TOKEN` if configured; otherwise falls back to `data/overtime-snapshot.json`.
+
 ## CSV File Formats
 
 ### recipes.csv
