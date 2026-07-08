@@ -1,0 +1,26 @@
+{
+  "name": "bakery-dashboard",
+  "version": "1.0.0",
+  "description": "P/L dashboard for bakery integrating Square, QuickBooks, and manual data",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@composio/core": "^0.13.1",
+    "axios": "^1.18.1",
+    "cors": "^2.8.6",
+    "csv-parser": "^3.2.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "multer": "^2.2.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "recharts": "^3.9.2"
+  }
+}

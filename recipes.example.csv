@@ -1,0 +1,9 @@
+Recipe Name,Ingredients,Cost,Yield,Category
+Sourdough Bread,Flour;Salt;Water;Starter,15.50,8,Bread
+Baguette,Flour;Water;Salt;Yeast,12.00,6,Bread
+Whole Wheat Loaf,Whole Wheat Flour;Water;Salt;Yeast,14.25,5,Bread
+Chocolate Croissants,Butter;Flour;Chocolate;Yeast,8.25,12,Pastries
+Almond Croissants,Butter;Flour;Almonds;Yeast,9.50,10,Pastries
+Raspberry Danish,Flour;Butter;Raspberries;Sugar,7.75,15,Pastries
+Blueberry Muffins,Flour;Eggs;Blueberries;Sugar;Butter,6.50,24,Muffins
+Chocolate Chip Cookies,Flour;Butter;Chocolate;Sugar;Eggs,5.00,36,Cookies
