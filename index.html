@@ -210,6 +210,85 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
+    const DASHBOARD_PASSWORD = 'bakery123';
+
+    function LoginScreen({ onLogin }) {
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (password === DASHBOARD_PASSWORD) {
+          localStorage.setItem('bakery_auth', 'true');
+          onLogin();
+        } else {
+          setError('Incorrect password');
+          setPassword('');
+        }
+      };
+
+      return (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          background: '#f5f1ed'
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '40px',
+            borderRadius: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            width: '100%',
+            maxWidth: '320px'
+          }}>
+            <h1 style={{ textAlign: 'center', color: '#6b4423', marginBottom: '30px', fontSize: '24px' }}>
+              🍞 Bakery Dashboard
+            </h1>
+            <form onSubmit={handleSubmit}>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #d4b5a0',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  marginBottom: '12px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              {error && <div style={{ color: '#c33', fontSize: '12px', marginBottom: '12px' }}>{error}</div>}
+              <button
+                type="submit"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: '#6b4423',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Login
+              </button>
+            </form>
+            <p style={{ textAlign: 'center', color: '#8b6c57', fontSize: '12px', marginTop: '20px' }}>
+              Default password: bakery123
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     // Chart components
     const LineChart = ({ data, lines }) => {
       const [hoveredMonth, setHoveredMonth] = React.useState(null);
@@ -464,7 +543,7 @@
       );
     };
 
-    function BakeryDashboard() {
+    function DashboardContent() {
       const [data, setData] = useState([]);
       const [selectedMonth, setSelectedMonth] = useState(0);
       const [selectedMetric, setSelectedMetric] = useState(null);
@@ -569,6 +648,22 @@
           </div>
         </div>
       );
+    }
+
+    function BakeryDashboard() {
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+      useEffect(() => {
+        if (localStorage.getItem('bakery_auth') === 'true') {
+          setIsAuthenticated(true);
+        }
+      }, []);
+
+      if (!isAuthenticated) {
+        return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
+      }
+
+      return <DashboardContent />;
     }
 
     ReactDOM.createRoot(document.getElementById('root')).render(<BakeryDashboard />);
