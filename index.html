@@ -219,7 +219,6 @@
       const handleSubmit = (e) => {
         e.preventDefault();
         if (password === DASHBOARD_PASSWORD) {
-          localStorage.setItem('bakery_auth', 'true');
           onLogin();
         } else {
           setError('Incorrect password');
@@ -650,12 +649,6 @@
 
     function BakeryDashboard() {
       const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-      useEffect(() => {
-        if (localStorage.getItem('bakery_auth') === 'true') {
-          setIsAuthenticated(true);
-        }
-      }, []);
 
       if (!isAuthenticated) {
         return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
