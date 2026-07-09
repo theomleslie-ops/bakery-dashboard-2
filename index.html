@@ -9,307 +9,150 @@
   <script src="https://unpkg.com/recharts@2.10.0/dist/Recharts.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
-      --series-cogs: #2a78d6;
-      --series-opex: #1baf7a;
-      --series-pl-good: #0ca30c;
-      --series-pl-bad: #d03b3b;
-      --chart-surface: #ffffff;
-      --chart-ink: #0b0b0b;
-      --chart-ink-secondary: #52514e;
-      --chart-muted: #898781;
-      --chart-grid: #e1e0d9;
-      --chart-axis: #c3c2b7;
+      --series-cogs: #2a78d6; --series-opex: #1baf7a; --series-pl-good: #0ca30c; --series-pl-bad: #d03b3b;
+      --chart-surface: #ffffff; --chart-ink: #0b0b0b; --chart-ink-secondary: #52514e; --chart-muted: #898781;
+      --chart-grid: #e1e0d9; --chart-axis: #c3c2b7;
     }
-
     @media (prefers-color-scheme: dark) {
       :root {
-        --series-cogs: #3987e5;
-        --series-opex: #199e70;
-        --series-pl-good: #0ca30c;
-        --series-pl-bad: #d03b3b;
-        --chart-surface: #2c2416;
-        --chart-ink: #ffffff;
-        --chart-ink-secondary: #c3c2b7;
-        --chart-muted: #898781;
-        --chart-grid: #3a3228;
-        --chart-axis: #5a3a1e;
+        --series-cogs: #3987e5; --series-opex: #199e70; --series-pl-good: #0ca30c; --series-pl-bad: #d03b3b;
+        --chart-surface: #2c2416; --chart-ink: #ffffff; --chart-ink-secondary: #c3c2b7; --chart-muted: #898781;
+        --chart-grid: #3a3228; --chart-axis: #5a3a1e;
       }
     }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: #f5f1ed;
-      color: #2c2416;
-    }
-
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 40px 20px;
-    }
-
-    header {
-      margin-bottom: 40px;
-    }
-
-    h1 {
-      font-size: 32px;
-      color: #6b4423;
-      margin-bottom: 10px;
-    }
-
-    .subtitle {
-      color: #8b6c57;
-      font-size: 14px;
-    }
-
-    .controls {
-      display: flex;
-      gap: 20px;
-      margin: 30px 0;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .view-toggle {
-      display: flex;
-      gap: 8px;
-    }
-
-    button {
-      padding: 10px 16px;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-      background: white;
-      color: #6b4423;
-      border: 1px solid #d4b5a0;
-    }
-
-    button:hover {
-      background: #e8ddd5;
-      border-color: #6b4423;
-    }
-
-    button.active {
-      background: #6b4423;
-      color: white;
-      border-color: #6b4423;
-    }
-
-    .file-upload {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-
-    input[type="file"] {
-      padding: 8px;
-      border: 1px solid #d4b5a0;
-      border-radius: 6px;
-      background: white;
-    }
-
-    .upload-btn {
-      padding: 10px 20px;
-      background: #6b4423;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: 500;
-    }
-
-    .upload-btn:hover {
-      background: #5a3a1e;
-    }
-
-    .chart-container {
-      background: white;
-      padding: 24px;
-      border-radius: 8px;
-      margin: 30px 0;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    }
-
-    .chart-title {
-      font-size: 16px;
-      font-weight: 600;
-      color: #6b4423;
-      margin-bottom: 20px;
-    }
-
-    .chart-legend {
-      display: flex;
-      gap: 20px;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
-
-    .chart-legend-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      color: var(--chart-ink-secondary);
-    }
-
-    .chart-legend-swatch {
-      width: 12px;
-      height: 12px;
-      border-radius: 2px;
-      flex-shrink: 0;
-    }
-
-    .error {
-      background: #fee;
-      color: #c33;
-      padding: 16px;
-      border-radius: 6px;
-      margin: 20px 0;
-    }
-
-    .success {
-      background: #efe;
-      color: #3c3;
-      padding: 16px;
-      border-radius: 6px;
-      margin: 20px 0;
-    }
-
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f1ed; color: #2c2416; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 40px 20px; }
+    header { margin-bottom: 40px; } h1 { font-size: 32px; color: #6b4423; margin-bottom: 10px; }
+    .subtitle { color: #8b6c57; font-size: 14px; }
+    .controls { display: flex; gap: 20px; margin: 30px 0; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+    .view-toggle { display: flex; gap: 8px; }
+    button { padding: 10px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; background: white; color: #6b4423; border: 1px solid #d4b5a0; }
+    button:hover { background: #e8ddd5; border-color: #6b4423; }
+    button.active { background: #6b4423; color: white; border-color: #6b4423; }
+    input[type="file"] { padding: 8px; border: 1px solid #d4b5a0; border-radius: 6px; background: white; }
+    .upload-btn { padding: 10px 20px; background: #6b4423; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+    .upload-btn:hover { background: #5a3a1e; }
+    .chart-container { background: white; padding: 24px; border-radius: 8px; margin: 30px 0; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+    .chart-title { font-size: 16px; font-weight: 600; color: #6b4423; margin-bottom: 20px; }
+    .chart-legend { display: flex; gap: 20px; margin-bottom: 16px; flex-wrap: wrap; }
+    .chart-legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--chart-ink-secondary); }
+    .chart-legend-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+    .error { background: #fee; color: #c33; padding: 16px; border-radius: 6px; margin: 20px 0; }
+    .loading { background: white; color: #8b6c57; padding: 24px; border-radius: 8px; margin: 20px 0; }
+    .tabs { display: flex; gap: 12px; margin-bottom: 30px; border-bottom: 2px solid #d4b5a0; }
+    .tab-button { padding: 12px 20px; background: transparent; border: none; border-bottom: 3px solid transparent; color: #6b4423; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; margin-bottom: -2px; }
+    .tab-button:hover { background: transparent; border-bottom-color: #d4b5a0; color: #6b4423; }
+    .tab-button.active { border-bottom-color: #6b4423; color: #6b4423; }
+    .tab-content { display: none; } .tab-content.active { display: block; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin: 30px 0; }
+    .metric-card { background: white; padding: 24px; border-radius: 8px; border-left: 4px solid #6b4423; }
+    .metric-label { font-size: 12px; color: #8b6c57; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .metric-value { font-size: 28px; font-weight: 600; color: #6b4423; }
+    .metric-sub { font-size: 12px; color: #8b6c57; margin-top: 4px; }
+    .panel { background: white; padding: 24px; border-radius: 8px; margin: 30px 0; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+    .panel-title { font-size: 16px; font-weight: 600; color: #6b4423; margin-bottom: 6px; }
+    .panel-hint { font-size: 12px; color: #8b6c57; margin-bottom: 20px; }
+    .legend { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #5a4a3a; }
+    .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+    .swatch-base { background: #3f8361; } .swatch-bakery { background: #2b6cb0; } .swatch-nonbakery { background: #c05621; }
+    .stacked-chart { display: flex; gap: 12px; }
+    .chart-y-axis { position: relative; width: 56px; flex-shrink: 0; }
+    .y-tick { position: absolute; right: 8px; transform: translateY(50%); font-size: 11px; color: #8b6c57; white-space: nowrap; }
+    .chart-plot { position: relative; flex: 1; border-left: 1px solid #d4b5a0; border-bottom: 1px solid #d4b5a0; overflow-x: auto; overflow-y: visible; }
+    .gridline { position: absolute; left: 0; right: 0; border-top: 1px dashed #ece2d8; }
+    .chart-bars { position: relative; display: flex; align-items: flex-end; gap: 28px; height: 100%; padding: 0 20px; min-width: max-content; }
+    .bar-col-wrap { display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; }
+    .bar-col { width: 56px; display: flex; flex-direction: column; border-radius: 4px 4px 0 0; overflow: hidden; cursor: pointer; position: relative; }
+    .bar-col.selected { outline: 2px solid #6b4423; outline-offset: 2px; }
+    .seg { width: 100%; transition: filter 0.15s; }
+    .bar-col:hover .seg { filter: brightness(1.1); }
+    .seg-nonbakery { background: #c05621; } .seg-bakery { background: #2b6cb0; } .seg-base { background: #3f8361; }
+    .bar-x-label { margin-top: 8px; font-size: 12px; color: #6b4423; font-weight: 500; text-align: center; }
+    .stack-tooltip { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); background: #2c2416; color: white; font-size: 12px; line-height: 1.6; padding: 10px 12px; border-radius: 6px; white-space: nowrap; pointer-events: none; z-index: 10; }
+    .bar-row { display: grid; grid-template-columns: 180px 1fr 130px; align-items: center; gap: 12px; padding: 6px 0; }
+    .bar-row-label { font-size: 13px; color: #2c2416; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-track { background: #f0e8e0; border-radius: 4px; height: 22px; position: relative; }
+    .bar-fill { background: #6b4423; height: 100%; border-radius: 4px; min-width: 4px; transition: filter 0.15s; cursor: pointer; }
+    .bar-fill:hover { filter: brightness(1.15); }
+    .bar-row-value { font-size: 13px; font-weight: 600; color: #6b4423; }
+    .bar-tooltip { position: absolute; background: #2c2416; color: white; font-size: 12px; padding: 8px 10px; border-radius: 6px; white-space: nowrap; pointer-events: none; transform: translateY(-115%); z-index: 10; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 10px 12px; color: #8b6c57; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; border-bottom: 2px solid #e8ddd5; }
+    th.num, td.num { text-align: right; }
+    td { padding: 12px; border-bottom: 1px solid #f0e8e0; }
+    tr.fn-row { cursor: pointer; }
+    tr.fn-row:hover { background: #faf6f2; }
+    .category-tag { display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
+    .category-tag.bakery { background: #e3edf7; color: #2b6cb0; }
+    .category-tag.non-bakery { background: #fbe8d9; color: #c05621; }
+    .expand-icon { display: inline-block; width: 14px; color: #8b6c57; }
+    .employee-detail { background: #faf6f2; }
+    .employee-detail td { padding: 8px 12px 8px 40px; font-size: 12px; color: #5a4a3a; border-bottom: 1px solid #f0e8e0; }
+    .empty { background: white; color: #8b6c57; padding: 24px; border-radius: 8px; margin: 20px 0; font-size: 14px; }
     @media (prefers-color-scheme: dark) {
-      body {
-        background: #1a1614;
-        color: #e8ddd5;
-      }
-      button {
-        background: #2c2416;
-        color: #e8b9a0;
-        border-color: #5a3a1e;
-      }
-      button:hover {
-        background: #3a3228;
-      }
-      .chart-container {
-        background: #2c2416;
-      }
-      h1 {
-        color: #e8b9a0;
-      }
+      body { background: #1a1614; color: #e8ddd5; }
+      button { background: #2c2416; color: #e8b9a0; border-color: #5a3a1e; }
+      button:hover { background: #3a3228; }
+      .tab-button { color: #e8b9a0; }
+      .tab-button:hover { border-bottom-color: #5a3a1e; }
+      .tab-button.active { border-bottom-color: #e8b9a0; color: #e8b9a0; }
+      .chart-container, .metric-card, .panel, .empty, .loading { background: #2c2416; color: #e8ddd5; }
+      h1, .metric-value, .panel-title, .bar-row-value { color: #e8b9a0; }
+      .metric-sub, .panel-hint, .legend-item, .y-tick { color: #b09a86; }
+      .chart-plot { border-color: #5a3a1e; }
+      .gridline { border-top-color: #3a3228; }
+      .bar-x-label, .bar-col.selected { color: #e8b9a0; }
+      .bar-track { background: #3a3228; }
+      .bar-fill { background: #e8b9a0; }
+      th, td { border-bottom-color: #3a3228; color: #e8ddd5; }
+      tr.fn-row:hover { background: #3a3228; }
+      .employee-detail { background: #241d17; color: #cbb9a8; border-bottom-color: #3a3228; }
+      .category-tag.bakery { background: #1e3a54; color: #8fc0ec; }
+      .category-tag.non-bakery { background: #4a2c14; color: #f0b083; }
     }
   </style>
 </head>
 <body>
   <div id="root"></div>
-
   <script type="text/babel">
     const { useState, useEffect } = React;
-
     const DASHBOARD_PASSWORD = 'bakery123';
-
     function LoginScreen({ onLogin }) {
       const [password, setPassword] = useState('');
       const [error, setError] = useState('');
-
       const handleSubmit = (e) => {
         e.preventDefault();
-        if (password === DASHBOARD_PASSWORD) {
-          onLogin();
-        } else {
-          setError('Incorrect password');
-          setPassword('');
-        }
+        if (password === DASHBOARD_PASSWORD) { onLogin(); }
+        else { setError('Incorrect password'); setPassword(''); }
       };
-
       return (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '100vh',
-          background: '#f5f1ed'
-        }}>
-          <div style={{
-            background: 'white',
-            padding: '40px',
-            borderRadius: '12px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-            width: '100%',
-            maxWidth: '320px'
-          }}>
-            <h1 style={{ textAlign: 'center', color: '#6b4423', marginBottom: '30px', fontSize: '24px' }}>
-              🍞 Bakery Dashboard
-            </h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f5f1ed' }}>
+          <div style={{ background: 'white', padding: '40px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', width: '100%', maxWidth: '320px' }}>
+            <h1 style={{ textAlign: 'center', color: '#6b4423', marginBottom: '30px', fontSize: '24px' }}>🍞 Bakery Dashboard</h1>
             <form onSubmit={handleSubmit}>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-                autoFocus
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '1px solid #d4b5a0',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  marginBottom: '12px',
-                  boxSizing: 'border-box'
-                }}
-              />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password" autoFocus style={{ width: '100%', padding: '12px', border: '1px solid #d4b5a0', borderRadius: '6px', fontSize: '14px', marginBottom: '12px', boxSizing: 'border-box' }} />
               {error && <div style={{ color: '#c33', fontSize: '12px', marginBottom: '12px' }}>{error}</div>}
-              <button
-                type="submit"
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  background: '#6b4423',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer'
-                }}
-              >
-                Login
-              </button>
+              <button type="submit" style={{ width: '100%', padding: '12px', background: '#6b4423', color: 'white', border: 'none', borderRadius: '6px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Login</button>
             </form>
           </div>
         </div>
       );
     }
 
-    // Fixed cost/profit breakdown: COGS + Operating Expenses + Profit/Loss sum to
-    // (approximately) Revenue, so those three are what gets stacked — stacking
-    // Revenue in as a fourth segment would double-count it.
     const COST_SERIES = [
       { key: 'cogs', label: 'COGS', color: 'var(--series-cogs)' },
       { key: 'opex', label: 'Operating Expenses', color: 'var(--series-opex)' },
     ];
-
     const formatDollars = (val) => `$${(val / 1000).toFixed(0)}k`;
     const formatDollarsPrecise = (val) => `$${Math.round(val).toLocaleString()}`;
     const formatPercent = (val) => `${val.toFixed(0)}%`;
     const formatPercentPrecise = (val) => `${val.toFixed(1)}%`;
 
-    // Stacked bar chart: COGS and Operating Expenses stack up from zero, and
-    // Profit/Loss either continues the stack upward (a profit) or forms its own
-    // bar below zero (a loss) — colored green/red so a loss month is unmistakable.
     const StackedBarChart = ({ data, viewMode }) => {
       const [hoveredIdx, setHoveredIdx] = React.useState(null);
-
       const rawValue = (d, key) => parseFloat(d[key]) || 0;
       const scaled = (d, key) => {
         const raw = rawValue(d, key);
@@ -319,7 +162,6 @@
         }
         return raw;
       };
-
       const stacks = data.map(d => {
         let posCum = 0;
         const segments = COST_SERIES.map(s => {
@@ -337,41 +179,32 @@
         }
         return { month: d.month, revenue: rawValue(d, 'revenue'), segments, posTotal: posCum, negTotal: Math.min(pl, 0) };
       });
-
       const maxVal = Math.max(...stacks.map(s => s.posTotal), 0);
       const minVal = Math.min(...stacks.map(s => s.negTotal), 0);
       const range = maxVal - minVal || 1;
       const positiveRange = maxVal || 1;
       const negativeRange = -minVal || 1;
-
-      const chartHeight = 450; // y=50 to y=500
+      const chartHeight = 450;
       const posPixels = (positiveRange / range) * chartHeight;
       const negPixels = (negativeRange / range) * chartHeight;
       const zeroY = 50 + posPixels;
-
       const getY = (val) => {
-        if (val >= 0) {
-          return zeroY - (val / positiveRange) * posPixels;
-        }
+        if (val >= 0) return zeroY - (val / positiveRange) * posPixels;
         return zeroY + (Math.abs(val) / negativeRange) * negPixels;
       };
-
       const n = data.length || 1;
       const slotWidth = 700 / n;
       const barWidth = Math.max(6, Math.min(24, slotWidth - 12));
       const xCenter = (i) => 50 + slotWidth * i + slotWidth / 2;
       const gap = 2;
-
       const formatAxis = viewMode === 'percent' ? formatPercent : formatDollars;
       const formatTooltip = viewMode === 'percent' ? formatPercentPrecise : formatDollarsPrecise;
-
       const legendItems = [
         { label: 'COGS', color: 'var(--series-cogs)' },
         { label: 'Operating Expenses', color: 'var(--series-opex)' },
         { label: 'Profit', color: 'var(--series-pl-good)' },
         { label: 'Loss', color: 'var(--series-pl-bad)' },
       ];
-
       return (
         <div style={{ width: '100%' }}>
           <div className="chart-legend">
@@ -385,33 +218,26 @@
           <svg width="100%" height="500" viewBox="0 0 800 500">
             <line x1="50" y1={zeroY} x2="750" y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
             <line x1="50" y1="20" x2="50" y2="480" stroke="var(--chart-axis)" strokeWidth="2" />
-
             {[1, 2, 3, 4, 5].map(i => {
               const posVal = (i * positiveRange / 5);
               const posY = zeroY - (i * posPixels / 5);
               return posY > 50 ? (
                 <g key={`pos-grid${i}`}>
                   <line x1="50" y1={posY} x2="750" y2={posY} stroke="var(--chart-grid)" strokeWidth="1" />
-                  <text x="40" y={posY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">
-                    {formatAxis(posVal)}
-                  </text>
+                  <text x="40" y={posY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{formatAxis(posVal)}</text>
                 </g>
               ) : null;
             })}
-
             {[1, 2, 3].map(i => {
               const negVal = -(i * negativeRange / 3);
               const negY = zeroY + (i * negPixels / 3);
               return negY < 500 && negativeRange > 0 ? (
                 <g key={`neg-grid${i}`}>
                   <line x1="50" y1={negY} x2="750" y2={negY} stroke="var(--chart-grid)" strokeWidth="1" />
-                  <text x="40" y={negY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">
-                    {formatAxis(negVal)}
-                  </text>
+                  <text x="40" y={negY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{formatAxis(negVal)}</text>
                 </g>
               ) : null;
             })}
-
             {stacks.map((stack, i) => {
               const cx = xCenter(i);
               const left = cx - barWidth / 2;
@@ -425,42 +251,14 @@
                     const rawHeight = Math.abs(yStart - yEnd);
                     const height = Math.max(0, rawHeight - gap);
                     const y = top + gap / 2;
-                    const isOuterEnd =
-                      (seg.val > 0 && seg.end === stack.posTotal && stack.posTotal > 0) ||
-                      (seg.val < 0 && seg.end === stack.negTotal && stack.negTotal < 0);
-                    return (
-                      <rect
-                        key={`seg${sidx}`}
-                        x={left}
-                        y={y}
-                        width={barWidth}
-                        height={height}
-                        fill={seg.color}
-                        rx={isOuterEnd ? 4 : 0}
-                      />
-                    );
+                    const isOuterEnd = (seg.val > 0 && seg.end === stack.posTotal && stack.posTotal > 0) || (seg.val < 0 && seg.end === stack.negTotal && stack.negTotal < 0);
+                    return <rect key={`seg${sidx}`} x={left} y={y} width={barWidth} height={height} fill={seg.color} rx={isOuterEnd ? 4 : 0} />;
                   })}
-                  <rect
-                    x={50 + i * slotWidth}
-                    y="20"
-                    width={slotWidth}
-                    height="460"
-                    fill="transparent"
-                    style={{ cursor: 'pointer' }}
-                    onMouseEnter={() => setHoveredIdx(i)}
-                    onMouseLeave={() => setHoveredIdx(null)}
-                  />
+                  <rect x={50 + i * slotWidth} y="20" width={slotWidth} height="460" fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)} />
                 </g>
               );
             })}
-
-            {stacks.map((stack, i) => (
-              <text key={`label${i}`} x={xCenter(i)} y={zeroY + 20} textAnchor="middle"
-                    fontSize="12" fill="var(--chart-ink)" fontWeight="600">
-                {stack.month}
-              </text>
-            ))}
-
+            {stacks.map((stack, i) => (<text key={`label${i}`} x={xCenter(i)} y={zeroY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{stack.month}</text>))}
             {stacks.map((stack, i) => {
               if (hoveredIdx !== i) return null;
               const cx = xCenter(i);
@@ -471,21 +269,13 @@
               return (
                 <g key={`tooltip${i}`}>
                   <line x1={cx} y1="20" x2={cx} y2="480" stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
-                  <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}
-                        fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
-                  <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">
-                    {stack.month} · Revenue {formatDollarsPrecise(stack.revenue)}
-                  </text>
+                  <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
+                  <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{stack.month} · Revenue {formatDollarsPrecise(stack.revenue)}</text>
                   {stack.segments.map((seg, sidx) => (
                     <g key={`ttrow${sidx}`}>
                       <rect x={tooltipX + 10} y={tooltipY + 28 + sidx * 20} width="8" height="8" fill={seg.color} />
-                      <text x={tooltipX + 24} y={tooltipY + 36 + sidx * 20} fontSize="11" fill="var(--chart-ink-secondary)">
-                        {seg.label}
-                      </text>
-                      <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 36 + sidx * 20} fontSize="11"
-                            fontWeight="700" textAnchor="end" fill="var(--chart-ink)">
-                        {formatTooltip(seg.val)}
-                      </text>
+                      <text x={tooltipX + 24} y={tooltipY + 36 + sidx * 20} fontSize="11" fill="var(--chart-ink-secondary)">{seg.label}</text>
+                      <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 36 + sidx * 20} fontSize="11" fontWeight="700" textAnchor="end" fill="var(--chart-ink)">{formatTooltip(seg.val)}</text>
                     </g>
                   ))}
                 </g>
@@ -502,16 +292,9 @@
       const [dateRangeStart, setDateRangeStart] = useState(0);
       const [dateRangeEnd, setDateRangeEnd] = useState(11);
       const [viewMode, setViewMode] = useState('dollars');
-
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-      // Filter data based on selected date range
       const filteredData = data.slice(dateRangeStart, dateRangeEnd + 1);
-
-      useEffect(() => {
-        fetchData();
-      }, []);
-
+      useEffect(() => { fetchData(); }, []);
       const fetchData = async () => {
         try {
           const baseUrl = window.location.origin;
@@ -522,69 +305,226 @@
           setError('Failed to load data: ' + err.message);
         }
       };
-
       return (
         <div className="container">
           <header>
             <h1>🍞 Bakery Dashboard</h1>
             <p className="subtitle">Monthly Profit, Cost of Goods, and Operating Expenses</p>
           </header>
-
           {error && <div className="error">{error}</div>}
-
           <div className="controls">
             <div>
               <label style={{ fontSize: '13px', color: '#666', marginRight: '10px', fontWeight: '600' }}>Timeframe:</label>
-              <select value={dateRangeStart} onChange={(e) => setDateRangeStart(parseInt(e.target.value))}
-                      style={{ padding: '6px', marginRight: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
-                {months.map((m, i) => (
-                  <option key={i} value={i}>From {m}</option>
-                ))}
+              <select value={dateRangeStart} onChange={(e) => setDateRangeStart(parseInt(e.target.value))} style={{ padding: '6px', marginRight: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
+                {months.map((m, i) => (<option key={i} value={i}>From {m}</option>))}
               </select>
-              <select value={dateRangeEnd} onChange={(e) => setDateRangeEnd(parseInt(e.target.value))}
-                      style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
-                {months.map((m, i) => (
-                  <option key={i} value={i}>To {m}</option>
-                ))}
+              <select value={dateRangeEnd} onChange={(e) => setDateRangeEnd(parseInt(e.target.value))} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
+                {months.map((m, i) => (<option key={i} value={i}>To {m}</option>))}
               </select>
             </div>
             <div className="view-toggle">
-              <button
-                className={viewMode === 'dollars' ? 'active' : ''}
-                onClick={() => setViewMode('dollars')}
-              >
-                Dollars
-              </button>
-              <button
-                className={viewMode === 'percent' ? 'active' : ''}
-                onClick={() => setViewMode('percent')}
-              >
-                % of Revenue
-              </button>
+              <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
+              <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
             </div>
           </div>
-
           <div className="chart-container">
-            <div className="chart-title">
-              COGS, Operating Expenses & Profit/Loss by Month ({viewMode === 'percent' ? '% of Revenue' : '$'})
-            </div>
+            <div className="chart-title">COGS, Operating Expenses & Profit/Loss by Month ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
             <StackedBarChart data={filteredData} viewMode={viewMode} />
           </div>
         </div>
       );
     }
 
-    function BakeryDashboard() {
-      const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-      if (!isAuthenticated) {
-        return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
-      }
-
-      return <DashboardContent />;
+    const round2 = (n) => Math.round(n * 100) / 100;
+    const fmtHours = (h) => `${h.toFixed(1)}h`;
+    const fmtMoney = (v) => `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmtMoneyShort = (v) => { if (v >= 1000) return `$${Math.round(v / 1000).toLocaleString()}k`; return `$${Math.round(v)}`; };
+    const pct = (part, whole) => (whole > 0 ? `${((part / whole) * 100).toFixed(1)}%` : '0%');
+    const fmtMonthLabel = (monthKey) => { const [y, m] = monthKey.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }); };
+    const niceMax = (v) => { if (v <= 0) return 100; const magnitude = Math.pow(10, Math.floor(Math.log10(v))); const residual = v / magnitude; let niceResidual; if (residual <= 1) niceResidual = 1; else if (residual <= 2) niceResidual = 2; else if (residual <= 5) niceResidual = 5; else niceResidual = 10; return niceResidual * magnitude; };
+    const BAKERY_FUNCTIONS = new Set(['Baker AM', 'Baker Night', 'Baker PM', 'LSK Cold Line', 'LSK Hot Line', 'LSK Prep Only', 'LSK-Arc BOH', 'Dishwasher/ Porter']);
+    const classifyFunction = (name) => { if (BAKERY_FUNCTIONS.has(name)) return 'bakery'; if (/\bbaker\b|\bboh\b|\bprep\b|dishwash|porter|\bline\b|\bkitchen\b/i.test(name)) return 'bakery'; return 'non-bakery'; };
+    function buildMonthlyData(weeks) {
+      const monthMap = new Map();
+      weeks.forEach((w) => {
+        const monthKey = w.weekStart.slice(0, 7);
+        if (!monthMap.has(monthKey)) monthMap.set(monthKey, { monthKey, functionTotals: new Map() });
+        const m = monthMap.get(monthKey);
+        w.functions.forEach((f) => {
+          const category = classifyFunction(f.function);
+          const prev = m.functionTotals.get(f.function) || { function: f.function, category, regularHours: 0, otHours: 0, ot15Hours: 0, ot2Hours: 0, regularWage: 0, otWage: 0, employeeMap: new Map() };
+          prev.regularHours += f.regularHours;
+          prev.otHours += f.otHours;
+          prev.ot15Hours += f.ot15Hours;
+          prev.ot2Hours += f.ot2Hours;
+          prev.regularWage += f.regularWage;
+          prev.otWage += f.otWage;
+          (f.employees || []).forEach((e) => {
+            const pe = prev.employeeMap.get(e.name) || { name: e.name, otHours: 0, otWage: 0 };
+            pe.otHours += e.otHours;
+            pe.otWage += e.otWage;
+            prev.employeeMap.set(e.name, pe);
+          });
+          m.functionTotals.set(f.function, prev);
+        });
+      });
+      return [...monthMap.values()].sort((a, b) => a.monthKey.localeCompare(b.monthKey)).map((m) => {
+        const functions = [...m.functionTotals.values()].map((f) => ({ function: f.function, category: f.category, regularHours: round2(f.regularHours), otHours: round2(f.otHours), ot15Hours: round2(f.ot15Hours), ot2Hours: round2(f.ot2Hours), regularWage: round2(f.regularWage), otWage: round2(f.otWage), employees: [...f.employeeMap.values()].sort((a, b) => b.otWage - a.otWage).map((e) => ({ name: e.name, otHours: round2(e.otHours), otWage: round2(e.otWage) })) })).sort((a, b) => b.otWage - a.otWage);
+        const totalWage = functions.reduce((s, f) => s + f.regularWage + f.otWage, 0);
+        const bakeryOtWage = functions.filter((f) => f.category === 'bakery').reduce((s, f) => s + f.otWage, 0);
+        const nonBakeryOtWage = functions.filter((f) => f.category === 'non-bakery').reduce((s, f) => s + f.otWage, 0);
+        return { monthKey: m.monthKey, totalWage: round2(totalWage), bakeryOtWage: round2(bakeryOtWage), nonBakeryOtWage: round2(nonBakeryOtWage), baseWage: round2(Math.max(totalWage - bakeryOtWage - nonBakeryOtWage, 0)), totalOtWage: round2(bakeryOtWage + nonBakeryOtWage), functions };
+      });
+    }
+    const CHART_HEIGHT = 320;
+    function MonthlyStackedBarChart({ months, selectedMonth, onSelectMonth }) {
+      const [hovered, setHovered] = useState(null);
+      const maxTotal = niceMax(Math.max(...months.map((m) => m.totalWage), 0) * 1.08);
+      const tickCount = 5;
+      const ticks = Array.from({ length: tickCount }, (_, i) => (maxTotal / (tickCount - 1)) * i);
+      return (
+        <div className="stacked-chart">
+          <div className="chart-y-axis" style={{ height: CHART_HEIGHT }}>
+            {ticks.map((t) => (<div key={t} className="y-tick" style={{ bottom: `${(t / maxTotal) * CHART_HEIGHT}px` }}>{fmtMoneyShort(t)}</div>))}
+          </div>
+          <div className="chart-plot" style={{ height: CHART_HEIGHT }}>
+            {ticks.map((t) => (<div key={t} className="gridline" style={{ bottom: `${(t / maxTotal) * CHART_HEIGHT}px` }} />))}
+            <div className="chart-bars">
+              {months.map((m) => {
+                const barPx = maxTotal > 0 ? (m.totalWage / maxTotal) * CHART_HEIGHT : 0;
+                const basePx = m.totalWage > 0 ? (m.baseWage / m.totalWage) * barPx : 0;
+                const bakeryPx = m.totalWage > 0 ? (m.bakeryOtWage / m.totalWage) * barPx : 0;
+                const nonBakeryPx = m.totalWage > 0 ? (m.nonBakeryOtWage / m.totalWage) * barPx : 0;
+                const isSelected = m.monthKey === selectedMonth;
+                return (
+                  <div className="bar-col-wrap" key={m.monthKey}>
+                    <div className={`bar-col${isSelected ? ' selected' : ''}`} style={{ height: `${Math.max(barPx, 2)}px` }} onMouseEnter={() => setHovered(m.monthKey)} onMouseLeave={() => setHovered(null)} onClick={() => onSelectMonth(m.monthKey)}>
+                      <div className="seg seg-base" style={{ height: `${basePx}px` }} />
+                      <div className="seg seg-bakery" style={{ height: `${bakeryPx}px` }} />
+                      <div className="seg seg-nonbakery" style={{ height: `${nonBakeryPx}px` }} />
+                      {hovered === m.monthKey && (<div className="stack-tooltip"><strong>{fmtMonthLabel(m.monthKey)}</strong><br />Total labor: {fmtMoney(m.totalWage)}<br />Bakery OT: {fmtMoney(m.bakeryOtWage)} ({pct(m.bakeryOtWage, m.totalWage)} of total)<br />Non-bakery OT: {fmtMoney(m.nonBakeryOtWage)} ({pct(m.nonBakeryOtWage, m.totalWage)} of total)</div>)}
+                    </div>
+                    <div className="bar-x-label">{fmtMonthLabel(m.monthKey)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    function FunctionTable({ functions, employeeDetail }) {
+      const [expanded, setExpanded] = useState(null);
+      const toggle = (fn) => setExpanded(expanded === fn ? null : fn);
+      return (
+        <table>
+          <thead><tr><th>Function</th><th className="num">Regular Hrs</th><th className="num">OT Hrs (1.5x)</th><th className="num">OT Hrs (2x)</th><th className="num">OT Wage</th></tr></thead>
+          <tbody>
+            {functions.map((f) => (
+              <React.Fragment key={f.function}>
+                <tr className="fn-row" onClick={() => toggle(f.function)}>
+                  <td><span className="expand-icon">{expanded === f.function ? '▾' : '▸'}</span>{f.function}<span className={`category-tag ${f.category}`}>{f.category === 'bakery' ? 'Bakery' : 'Non-Bakery'}</span></td>
+                  <td className="num">{fmtHours(f.regularHours)}</td><td className="num">{fmtHours(f.ot15Hours)}</td><td className="num">{fmtHours(f.ot2Hours)}</td><td className="num">{fmtMoney(f.otWage)}</td>
+                </tr>
+                {expanded === f.function && (
+                  !employeeDetail ? (<tr className="employee-detail"><td colSpan="5">Employee-level detail requires a live Square connection (this view is showing an aggregate snapshot).</td></tr>)
+                  : f.employees.length ? f.employees.map((e) => (<tr className="employee-detail" key={e.name}><td colSpan="3">{e.name}</td><td className="num" colSpan="1">{fmtHours(e.otHours)}</td><td className="num">{fmtMoney(e.otWage)}</td></tr>))
+                  : (<tr className="employee-detail"><td colSpan="5">No individual employee crossed into overtime this month for this function.</td></tr>)
+                )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      );
+    }
+    function OvertimeContent() {
+      const [months, setMonths] = useState([]);
+      const [employeeDetail, setEmployeeDetail] = useState(true);
+      const [selectedMonth, setSelectedMonth] = useState(null);
+      const [status, setStatus] = useState('loading');
+      const [error, setError] = useState('');
+      useEffect(() => { fetchData(); }, []);
+      const fetchData = async () => {
+        try {
+          setStatus('loading');
+          const baseUrl = window.location.origin;
+          const response = await fetch(`${baseUrl}/api/overtime?weeks=104`);
+          const result = await response.json();
+          if (result.error) { setError(result.error); setStatus('error'); return; }
+          const built = buildMonthlyData(result.weeks || []);
+          setMonths(built);
+          setEmployeeDetail(result.employeeDetail !== false);
+          setSelectedMonth(built.length ? built[built.length - 1].monthKey : null);
+          setStatus(built.length ? 'ready' : 'empty');
+        } catch (err) {
+          setError('Failed to load data: ' + err.message);
+          setStatus('error');
+        }
+      };
+      const month = months.find((m) => m.monthKey === selectedMonth) || months[months.length - 1];
+      return (
+        <div className="container">
+          <header><h1>⏰ Overtime Report</h1><p className="subtitle">Monthly labor cost and overtime by function, from Square timecards</p></header>
+          {status === 'loading' && <div className="loading">Loading timecards from Square…</div>}
+          {status === 'error' && <div className="error">{error}</div>}
+          {status === 'empty' && <div className="empty">No timecards found.</div>}
+          {status === 'ready' && month && (
+            <React.Fragment>
+              <div className="panel">
+                <div className="panel-title">Total Labor Cost by Month</div>
+                <div className="panel-hint">Hover a bar for the exact split.</div>
+                <div className="legend">
+                  <div className="legend-item"><span className="swatch swatch-base"></span>Regular &amp; other wages</div>
+                  <div className="legend-item"><span className="swatch swatch-bakery"></span>Bakery overtime</div>
+                  <div className="legend-item"><span className="swatch swatch-nonbakery"></span>Non-bakery overtime</div>
+                </div>
+                <MonthlyStackedBarChart months={months} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
+              </div>
+              <div className="metrics">
+                <div className="metric-card">
+                  <div className="metric-label">{fmtMonthLabel(month.monthKey)} — Total Labor $</div>
+                  <div className="metric-value">{fmtMoney(month.totalWage)}</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Bakery Overtime $</div>
+                  <div className="metric-value">{fmtMoney(month.bakeryOtWage)}</div>
+                  <div className="metric-sub">{pct(month.bakeryOtWage, month.totalWage)} of total labor</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Non-Bakery Overtime $</div>
+                  <div className="metric-value">{fmtMoney(month.nonBakeryOtWage)}</div>
+                  <div className="metric-sub">{pct(month.nonBakeryOtWage, month.totalWage)} of total labor</div>
+                </div>
+              </div>
+            </React.Fragment>
+          )}
+        </div>
+      );
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<BakeryDashboard />);
+    function MainApp() {
+      const [activeTab, setActiveTab] = useState('dashboard');
+      return (
+        <div>
+          <div style={{ background: '#f5f1ed', borderBottom: '2px solid #d4b5a0', paddingTop: '20px' }}>
+            <div className="container">
+              <div className="tabs">
+                <button className={`tab-button ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>Financial Dashboard</button>
+                <button className={`tab-button ${activeTab === 'overtime' ? 'active' : ''}`} onClick={() => setActiveTab('overtime')}>Overtime Report</button>
+              </div>
+            </div>
+          </div>
+          <div className={`tab-content ${activeTab === 'dashboard' ? 'active' : ''}`}><DashboardContent /></div>
+          <div className={`tab-content ${activeTab === 'overtime' ? 'active' : ''}`}><OvertimeContent /></div>
+        </div>
+      );
+    }
+    function App() {
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+      if (!isAuthenticated) return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
+      return <MainApp />;
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
