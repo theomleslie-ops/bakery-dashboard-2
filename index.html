@@ -42,9 +42,9 @@
     .error { background: #fee; color: #c33; padding: 16px; border-radius: 6px; margin: 20px 0; }
     .loading { background: white; color: #8b6c57; padding: 24px; border-radius: 8px; margin: 20px 0; }
     .tabs { display: flex; gap: 12px; margin-bottom: 30px; border-bottom: 2px solid #d4b5a0; }
-    .tab-button { padding: 12px 20px; background: transparent; border: none; border-bottom: 3px solid transparent; color: #6b4423; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; margin-bottom: -2px; }
-    .tab-button:hover { background: transparent; border-bottom-color: #d4b5a0; color: #6b4423; }
-    .tab-button.active { border-bottom-color: #6b4423; color: #6b4423; }
+    .tab-button { padding: 12px 20px; background: transparent; border: none; border-bottom: 3px solid #d4b5a0; color: #8b6c57; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; margin-bottom: -2px; }
+    .tab-button:hover { background: #f5f1ed; border-bottom-color: #8b6c57; }
+    .tab-button.active { border-bottom-color: #6b4423; color: #6b4423; background: transparent; font-weight: 600; }
     .tab-content { display: none; } .tab-content.active { display: block; }
     .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin: 30px 0; }
     .metric-card { background: white; padding: 24px; border-radius: 8px; border-left: 4px solid #6b4423; }
@@ -96,9 +96,9 @@
       body { background: #1a1614; color: #e8ddd5; }
       button { background: #2c2416; color: #e8b9a0; border-color: #5a3a1e; }
       button:hover { background: #3a3228; }
-      .tab-button { color: #e8b9a0; }
-      .tab-button:hover { border-bottom-color: #5a3a1e; }
-      .tab-button.active { border-bottom-color: #e8b9a0; color: #e8b9a0; }
+      .tab-button { color: #b09a86; border-bottom-color: #5a3a1e; }
+      .tab-button:hover { background: #3a3228; border-bottom-color: #b09a86; }
+      .tab-button.active { border-bottom-color: #e8b9a0; color: #e8b9a0; font-weight: 600; }
       .chart-container, .metric-card, .panel, .empty, .loading { background: #2c2416; color: #e8ddd5; }
       h1, .metric-value, .panel-title, .bar-row-value { color: #e8b9a0; }
       .metric-sub, .panel-hint, .legend-item, .y-tick { color: #b09a86; }
@@ -148,11 +148,11 @@
     ];
     const formatDollars = (val) => `$${(val / 1000).toFixed(0)}k`;
     const formatDollarsPrecise = (val) => `$${Math.round(val).toLocaleString()}`;
-    const formatPercent = (val) => `${val.toFixed(0)}%`;
-    const formatPercentPrecise = (val) => `${val.toFixed(1)}%`;
+    const formatPercent = (val) => `${Math.abs(val).toFixed(0)}%`;
+    const formatPercentPrecise = (val) => `${Math.abs(val).toFixed(1)}%`;
 
     const StackedBarChart = ({ data, viewMode }) => {
-      const [hoveredIdx, setHoveredIdx] = React.useState(null);
+      const [hoveredMonth, setHoveredMonth] = React.useState(null);
       const rawValue = (d, key) => parseFloat(d[key]) || 0;
       const scaled = (d, key) => {
         const raw = rawValue(d, key);
@@ -162,43 +162,30 @@
         }
         return raw;
       };
-      const stacks = data.map(d => {
-        let posCum = 0;
-        const segments = COST_SERIES.map(s => {
-          const val = scaled(d, s.key);
-          const start = posCum;
-          posCum += val;
-          return { ...s, val, start, end: posCum };
-        });
+      const bars = data.map(d => {
+        const cogs = scaled(d, 'cogs');
+        const opex = scaled(d, 'opex');
         const pl = scaled(d, 'pl');
-        if (pl >= 0) {
-          segments.push({ key: 'pl', label: 'Profit', color: 'var(--series-pl-good)', val: pl, start: posCum, end: posCum + pl });
-          posCum += pl;
-        } else {
-          segments.push({ key: 'pl', label: 'Loss', color: 'var(--series-pl-bad)', val: pl, start: 0, end: pl });
-        }
-        return { month: d.month, revenue: rawValue(d, 'revenue'), segments, posTotal: posCum, negTotal: Math.min(pl, 0) };
+        return { month: d.month, revenue: rawValue(d, 'revenue'), cogs, opex, pl };
       });
-      const maxVal = Math.max(...stacks.map(s => s.posTotal), 0);
-      const minVal = Math.min(...stacks.map(s => s.negTotal), 0);
-      const range = maxVal - minVal || 1;
-      const positiveRange = maxVal || 1;
-      const negativeRange = -minVal || 1;
+      const allVals = bars.flatMap(b => [b.cogs, b.opex, b.pl]);
+      const maxVal = Math.max(...allVals.filter(v => v >= 0), 0);
+      const minVal = Math.min(...allVals.filter(v => v < 0), 0);
+      const range = maxVal + Math.abs(minVal) || 1;
       const chartHeight = 450;
-      const posPixels = (positiveRange / range) * chartHeight;
-      const negPixels = (negativeRange / range) * chartHeight;
+      const posPixels = (maxVal / range) * chartHeight;
+      const negPixels = (Math.abs(minVal) / range) * chartHeight;
       const zeroY = 50 + posPixels;
       const getY = (val) => {
-        if (val >= 0) return zeroY - (val / positiveRange) * posPixels;
-        return zeroY + (Math.abs(val) / negativeRange) * negPixels;
+        if (val >= 0) return zeroY - (val / maxVal) * posPixels;
+        return zeroY + (Math.abs(val) / Math.abs(minVal)) * negPixels;
       };
       const n = data.length || 1;
       const slotWidth = 700 / n;
-      const barWidth = Math.max(6, Math.min(24, slotWidth - 12));
+      const barWidth = 12;
+      const barGap = 5;
       const xCenter = (i) => 50 + slotWidth * i + slotWidth / 2;
-      const gap = 2;
       const formatAxis = viewMode === 'percent' ? formatPercent : formatDollars;
-      const formatTooltip = viewMode === 'percent' ? formatPercentPrecise : formatDollarsPrecise;
       const legendItems = [
         { label: 'COGS', color: 'var(--series-cogs)' },
         { label: 'Operating Expenses', color: 'var(--series-opex)' },
@@ -219,7 +206,7 @@
             <line x1="50" y1={zeroY} x2="750" y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
             <line x1="50" y1="20" x2="50" y2="480" stroke="var(--chart-axis)" strokeWidth="2" />
             {[1, 2, 3, 4, 5].map(i => {
-              const posVal = (i * positiveRange / 5);
+              const posVal = (i * maxVal / 5);
               const posY = zeroY - (i * posPixels / 5);
               return posY > 50 ? (
                 <g key={`pos-grid${i}`}>
@@ -229,58 +216,48 @@
               ) : null;
             })}
             {[1, 2, 3].map(i => {
-              const negVal = -(i * negativeRange / 3);
+              const negVal = -(i * Math.abs(minVal) / 3);
               const negY = zeroY + (i * negPixels / 3);
-              return negY < 500 && negativeRange > 0 ? (
+              return negY < 500 && minVal < 0 ? (
                 <g key={`neg-grid${i}`}>
                   <line x1="50" y1={negY} x2="750" y2={negY} stroke="var(--chart-grid)" strokeWidth="1" />
                   <text x="40" y={negY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{formatAxis(negVal)}</text>
                 </g>
               ) : null;
             })}
-            {stacks.map((stack, i) => {
+            {bars.map((bar, i) => {
               const cx = xCenter(i);
-              const left = cx - barWidth / 2;
+              const offset = -(barWidth * 1.5 + barGap);
               return (
-                <g key={`bar${i}`}>
-                  {stack.segments.map((seg, sidx) => {
-                    if (seg.val === 0) return null;
-                    const yStart = getY(seg.start);
-                    const yEnd = getY(seg.end);
-                    const top = Math.min(yStart, yEnd);
-                    const rawHeight = Math.abs(yStart - yEnd);
-                    const height = Math.max(0, rawHeight - gap);
-                    const y = top + gap / 2;
-                    const isOuterEnd = (seg.val > 0 && seg.end === stack.posTotal && stack.posTotal > 0) || (seg.val < 0 && seg.end === stack.negTotal && stack.negTotal < 0);
-                    return <rect key={`seg${sidx}`} x={left} y={y} width={barWidth} height={height} fill={seg.color} rx={isOuterEnd ? 4 : 0} />;
-                  })}
-                  <rect x={50 + i * slotWidth} y="20" width={slotWidth} height="460" fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)} />
+                <g key={`bars${i}`}>
+                  <rect x={cx + offset} y={getY(bar.cogs)} width={barWidth} height={Math.abs(getY(bar.cogs) - zeroY)} fill="var(--series-cogs)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
+                  <rect x={cx + offset + barWidth + barGap} y={getY(bar.opex)} width={barWidth} height={Math.abs(getY(bar.opex) - zeroY)} fill="var(--series-opex)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
+                  <rect x={cx + offset + (barWidth + barGap) * 2} y={getY(bar.pl)} width={barWidth} height={Math.abs(getY(bar.pl) - zeroY)} fill={bar.pl >= 0 ? 'var(--series-pl-good)' : 'var(--series-pl-bad)'} rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
+                  <rect x={50 + i * slotWidth} y="20" width={slotWidth} height="460" fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
                 </g>
               );
             })}
-            {stacks.map((stack, i) => (<text key={`label${i}`} x={xCenter(i)} y={zeroY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{stack.month}</text>))}
-            {stacks.map((stack, i) => {
-              if (hoveredIdx !== i) return null;
-              const cx = xCenter(i);
-              const tooltipWidth = 190;
-              const tooltipHeight = 44 + stack.segments.length * 20;
-              const tooltipX = cx < 400 ? cx + 12 : cx - tooltipWidth - 12;
-              const tooltipY = 30;
-              return (
-                <g key={`tooltip${i}`}>
-                  <line x1={cx} y1="20" x2={cx} y2="480" stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
-                  <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
-                  <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{stack.month} · Revenue {formatDollarsPrecise(stack.revenue)}</text>
-                  {stack.segments.map((seg, sidx) => (
-                    <g key={`ttrow${sidx}`}>
-                      <rect x={tooltipX + 10} y={tooltipY + 28 + sidx * 20} width="8" height="8" fill={seg.color} />
-                      <text x={tooltipX + 24} y={tooltipY + 36 + sidx * 20} fontSize="11" fill="var(--chart-ink-secondary)">{seg.label}</text>
-                      <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 36 + sidx * 20} fontSize="11" fontWeight="700" textAnchor="end" fill="var(--chart-ink)">{formatTooltip(seg.val)}</text>
-                    </g>
-                  ))}
-                </g>
-              );
-            })}
+            {bars.map((bar, i) => (<text key={`label${i}`} x={xCenter(i)} y={zeroY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{bar.month}</text>))}
+            {hoveredMonth !== null && (
+              (() => {
+                const bar = bars[hoveredMonth];
+                const cx = xCenter(hoveredMonth);
+                const tooltipWidth = 180;
+                const tooltipHeight = 100;
+                const tooltipX = cx < 400 ? cx + 12 : cx - tooltipWidth - 12;
+                const tooltipY = 30;
+                return (
+                  <g key={`tooltip${hoveredMonth}`}>
+                    <line x1={cx} y1="20" x2={cx} y2="480" stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
+                    <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
+                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{bar.month}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">COGS: {formatPercentPrecise(bar.cogs)}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">OpEx: {formatPercentPrecise(bar.opex)}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fill="var(--chart-ink-secondary)">{bar.pl >= 0 ? 'Profit' : 'Loss'}: {formatPercentPrecise(bar.pl)}</text>
+                  </g>
+                );
+              })()
+            )}
           </svg>
         </div>
       );
@@ -448,7 +425,7 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/overtime?weeks=104`);
+          const response = await fetch(`${baseUrl}/api/overtime?weeks=156`);
           const result = await response.json();
           if (result.error) { setError(result.error); setStatus('error'); return; }
           const built = buildMonthlyData(result.weeks || []);
