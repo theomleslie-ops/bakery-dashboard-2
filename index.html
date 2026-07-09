@@ -15,6 +15,34 @@
       box-sizing: border-box;
     }
 
+    :root {
+      --series-cogs: #2a78d6;
+      --series-opex: #1baf7a;
+      --series-pl-good: #0ca30c;
+      --series-pl-bad: #d03b3b;
+      --chart-surface: #ffffff;
+      --chart-ink: #0b0b0b;
+      --chart-ink-secondary: #52514e;
+      --chart-muted: #898781;
+      --chart-grid: #e1e0d9;
+      --chart-axis: #c3c2b7;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --series-cogs: #3987e5;
+        --series-opex: #199e70;
+        --series-pl-good: #0ca30c;
+        --series-pl-bad: #d03b3b;
+        --chart-surface: #2c2416;
+        --chart-ink: #ffffff;
+        --chart-ink-secondary: #c3c2b7;
+        --chart-muted: #898781;
+        --chart-grid: #3a3228;
+        --chart-axis: #5a3a1e;
+      }
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       background: #f5f1ed;
@@ -48,12 +76,12 @@
       margin: 30px 0;
       flex-wrap: wrap;
       align-items: center;
+      justify-content: space-between;
     }
 
-    .month-buttons {
+    .view-toggle {
       display: flex;
       gap: 8px;
-      flex-wrap: wrap;
     }
 
     button {
@@ -107,46 +135,6 @@
       background: #5a3a1e;
     }
 
-    .metrics {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 20px;
-      margin: 30px 0;
-    }
-
-    .metric-card {
-      background: white;
-      padding: 24px;
-      border-radius: 8px;
-      border-left: 4px solid #6b4423;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .metric-card:hover {
-      box-shadow: 0 4px 12px rgba(107, 68, 35, 0.15);
-      transform: translateY(-2px);
-    }
-
-    .metric-card.active {
-      background: #f5ede5;
-      box-shadow: 0 4px 16px rgba(107, 68, 35, 0.25);
-    }
-
-    .metric-label {
-      font-size: 12px;
-      color: #8b6c57;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
-    }
-
-    .metric-value {
-      font-size: 28px;
-      font-weight: 600;
-      color: #6b4423;
-    }
-
     .chart-container {
       background: white;
       padding: 24px;
@@ -160,6 +148,28 @@
       font-weight: 600;
       color: #6b4423;
       margin-bottom: 20px;
+    }
+
+    .chart-legend {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .chart-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--chart-ink-secondary);
+    }
+
+    .chart-legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      flex-shrink: 0;
     }
 
     .error {
@@ -190,10 +200,6 @@
       }
       button:hover {
         background: #3a3228;
-      }
-      .metric-card {
-        background: #2c2416;
-        color: #e8ddd5;
       }
       .chart-container {
         background: #2c2416;
@@ -285,255 +291,206 @@
       );
     }
 
-    // Chart components
-    const LineChart = ({ data, lines }) => {
-      const [hoveredMonth, setHoveredMonth] = React.useState(null);
+    // Fixed cost/profit breakdown: COGS + Operating Expenses + Profit/Loss sum to
+    // (approximately) Revenue, so those three are what gets stacked — stacking
+    // Revenue in as a fourth segment would double-count it.
+    const COST_SERIES = [
+      { key: 'cogs', label: 'COGS', color: 'var(--series-cogs)' },
+      { key: 'opex', label: 'Operating Expenses', color: 'var(--series-opex)' },
+    ];
 
-      // Calculate min/max for all data points
-      const allValues = [];
-      lines.forEach(line => {
-        data.forEach(d => {
-          const val = parseFloat(d[line.key]) || 0;
-          allValues.push(val);
+    const formatDollars = (val) => `$${(val / 1000).toFixed(0)}k`;
+    const formatDollarsPrecise = (val) => `$${Math.round(val).toLocaleString()}`;
+    const formatPercent = (val) => `${val.toFixed(0)}%`;
+    const formatPercentPrecise = (val) => `${val.toFixed(1)}%`;
+
+    // Stacked bar chart: COGS and Operating Expenses stack up from zero, and
+    // Profit/Loss either continues the stack upward (a profit) or forms its own
+    // bar below zero (a loss) — colored green/red so a loss month is unmistakable.
+    const StackedBarChart = ({ data, viewMode }) => {
+      const [hoveredIdx, setHoveredIdx] = React.useState(null);
+
+      const rawValue = (d, key) => parseFloat(d[key]) || 0;
+      const scaled = (d, key) => {
+        const raw = rawValue(d, key);
+        if (viewMode === 'percent') {
+          const revenue = rawValue(d, 'revenue');
+          return revenue ? (raw / revenue) * 100 : 0;
+        }
+        return raw;
+      };
+
+      const stacks = data.map(d => {
+        let posCum = 0;
+        const segments = COST_SERIES.map(s => {
+          const val = scaled(d, s.key);
+          const start = posCum;
+          posCum += val;
+          return { ...s, val, start, end: posCum };
         });
+        const pl = scaled(d, 'pl');
+        if (pl >= 0) {
+          segments.push({ key: 'pl', label: 'Profit', color: 'var(--series-pl-good)', val: pl, start: posCum, end: posCum + pl });
+          posCum += pl;
+        } else {
+          segments.push({ key: 'pl', label: 'Loss', color: 'var(--series-pl-bad)', val: pl, start: 0, end: pl });
+        }
+        return { month: d.month, revenue: rawValue(d, 'revenue'), segments, posTotal: posCum, negTotal: Math.min(pl, 0) };
       });
-      const maxVal = Math.max(...allValues, 0);
-      const minVal = Math.min(...allValues, 0);
+
+      const maxVal = Math.max(...stacks.map(s => s.posTotal), 0);
+      const minVal = Math.min(...stacks.map(s => s.negTotal), 0);
       const range = maxVal - minVal || 1;
+      const positiveRange = maxVal || 1;
+      const negativeRange = -minVal || 1;
 
-      const lineLabels = { 'pl': 'Profit/Loss', 'cogs': 'COGS', 'opex': 'Operating Expenses', 'revenue': 'Revenue' };
-      const lineColors = { 'pl': '#6b4423', 'cogs': '#a88968', 'opex': '#d4b5a0', 'revenue': '#4a90e2' };
-
-      // Allocate space proportionally to positive and negative values
-      const positiveRange = maxVal - 0;
-      const negativeRange = 0 - minVal;
-
-      // Allocate space proportionally based on actual ranges
       const chartHeight = 450; // y=50 to y=500
       const posPixels = (positiveRange / range) * chartHeight;
       const negPixels = (negativeRange / range) * chartHeight;
-
-      // Zero line positioned to give most space to positive values
       const zeroY = 50 + posPixels;
 
-      // Helper function to convert data value to Y position
       const getY = (val) => {
         if (val >= 0) {
           return zeroY - (val / positiveRange) * posPixels;
-        } else {
-          return zeroY + (Math.abs(val) / negativeRange) * negPixels;
         }
+        return zeroY + (Math.abs(val) / negativeRange) * negPixels;
       };
+
+      const n = data.length || 1;
+      const slotWidth = 700 / n;
+      const barWidth = Math.max(6, Math.min(24, slotWidth - 12));
+      const xCenter = (i) => 50 + slotWidth * i + slotWidth / 2;
+      const gap = 2;
+
+      const formatAxis = viewMode === 'percent' ? formatPercent : formatDollars;
+      const formatTooltip = viewMode === 'percent' ? formatPercentPrecise : formatDollarsPrecise;
+
+      const legendItems = [
+        { label: 'COGS', color: 'var(--series-cogs)' },
+        { label: 'Operating Expenses', color: 'var(--series-opex)' },
+        { label: 'Profit', color: 'var(--series-pl-good)' },
+        { label: 'Loss', color: 'var(--series-pl-bad)' },
+      ];
 
       return (
         <div style={{ width: '100%' }}>
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '10px', flexWrap: 'wrap' }}>
-            {lines.map(line => (
-              <div key={line.key} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '12px', height: '12px', backgroundColor: line.color, borderRadius: '2px' }}></div>
-                <span style={{ fontSize: '12px', color: '#666' }}>{lineLabels[line.key] || line.key}</span>
+          <div className="chart-legend">
+            {legendItems.map(item => (
+              <div key={item.label} className="chart-legend-item">
+                <div className="chart-legend-swatch" style={{ backgroundColor: item.color }}></div>
+                <span>{item.label}</span>
               </div>
             ))}
           </div>
-          <svg width="100%" height="500" viewBox="0 0 800 500" style={{ border: '1px solid #eee' }}>
-            {/* X-axis (at zero) */}
-            <line x1="50" y1={zeroY} x2="750" y2={zeroY} stroke="#333" strokeWidth="2" />
+          <svg width="100%" height="500" viewBox="0 0 800 500">
+            <line x1="50" y1={zeroY} x2="750" y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
+            <line x1="50" y1="20" x2="50" y2="480" stroke="var(--chart-axis)" strokeWidth="2" />
 
-            {/* Y-axis */}
-            <line x1="50" y1="20" x2="50" y2="480" stroke="#333" strokeWidth="2" />
-
-            {/* Grid and labels for positive side */}
             {[1, 2, 3, 4, 5].map(i => {
               const posVal = (i * positiveRange / 5);
               const posY = zeroY - (i * posPixels / 5);
               return posY > 50 ? (
                 <g key={`pos-grid${i}`}>
-                  <line x1="50" y1={posY} x2="750" y2={posY} stroke="#e0e0e0" strokeDasharray="4" />
-                  <text x="40" y={posY + 4} textAnchor="end" fontSize="11" fill="#666">
-                    ${(posVal / 1000).toFixed(0)}k
+                  <line x1="50" y1={posY} x2="750" y2={posY} stroke="var(--chart-grid)" strokeWidth="1" />
+                  <text x="40" y={posY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">
+                    {formatAxis(posVal)}
                   </text>
                 </g>
               ) : null;
             })}
 
-            {/* Grid and labels for negative side */}
             {[1, 2, 3].map(i => {
               const negVal = -(i * negativeRange / 3);
               const negY = zeroY + (i * negPixels / 3);
-              return negY < 500 ? (
+              return negY < 500 && negativeRange > 0 ? (
                 <g key={`neg-grid${i}`}>
-                  <line x1="50" y1={negY} x2="750" y2={negY} stroke="#e0e0e0" strokeDasharray="4" />
-                  <text x="40" y={negY + 4} textAnchor="end" fontSize="11" fill="#666">
-                    ${(negVal / 1000).toFixed(0)}k
+                  <line x1="50" y1={negY} x2="750" y2={negY} stroke="var(--chart-grid)" strokeWidth="1" />
+                  <text x="40" y={negY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">
+                    {formatAxis(negVal)}
                   </text>
                 </g>
               ) : null;
             })}
 
-            {/* Lines */}
-            {lines.map((line, idx) => {
-              const points = data.map((d, i) => {
-                const x = 50 + (i * 700 / 11);
-                const val = parseFloat(d[line.key]) || 0;
-                const y = getY(val);
-                return `${x},${y}`;
-              }).join(' ');
-              return (
-                <g key={`line${idx}`}>
-                  <polyline points={points} fill="none" stroke={line.color} strokeWidth="3" />
-                  {/* Data points */}
-                  {data.map((d, i) => {
-                    const x = 50 + (i * 700 / 11);
-                    const val = parseFloat(d[line.key]) || 0;
-                    const y = getY(val);
-                    return (
-                      <circle key={`point${i}`} cx={x} cy={y} r="3" fill={line.color} />
-                    );
-                  })}
-                </g>
-              );
-            })}
-
-            {/* Month labels on X-axis */}
-            {data.map((d, i) => (
-              <text key={`label${i}`} x={50 + (i * 700 / 11)} y={zeroY + 20} textAnchor="middle"
-                    fontSize="12" fill="#333" fontWeight="600">
-                {d.month}
-              </text>
-            ))}
-
-            {/* Hover zones and tooltips */}
-            {data.map((d, filteredIdx) => {
-              const dataIdx = filteredIdx;
-              const numMonths = data.length;
-              const x = 50 + (filteredIdx * 700 / (numMonths > 1 ? numMonths - 1 : 1));
-              return (
-                <g key={`hover${dataIdx}`}>
-                  <rect x={x - 50} y="20" width="100" height="460" fill="transparent"
-                        style={{ cursor: 'pointer', pointerEvents: 'all' }}
-                        onMouseEnter={() => setHoveredMonth(dataIdx)}
-                        onMouseLeave={() => setHoveredMonth(null)} />
-                  {hoveredMonth === dataIdx && (
-                    <g>
-                      <line x1={x} y1="20" x2={x} y2={zeroY + 200} stroke="#ccc" strokeWidth="1" strokeDasharray="2" />
-                      {lines.map((line, lidx) => {
-                        const val = parseFloat(d[line.key]) || 0;
-                        const y = getY(val);
-                        const tooltipOffsetX = lidx % 2 === 0 ? -160 : 5;
-                        const tooltipOffsetY = Math.floor(lidx / 2) * 45;
-                        return (
-                          <g key={`tooltip${lidx}`}>
-                            <rect x={x + tooltipOffsetX} y={Math.max(25, y - 15 + tooltipOffsetY)} width="155" height="38"
-                                  fill="white" stroke={line.color} strokeWidth="2" rx="4" />
-                            <text x={x + tooltipOffsetX + 8} y={Math.max(35, y + 2 + tooltipOffsetY)} fontSize="11"
-                                  fill={line.color} fontWeight="600">
-                              {lineLabels[line.key]}
-                            </text>
-                            <text x={x + tooltipOffsetX + 8} y={Math.max(45, y + 13 + tooltipOffsetY)} fontSize="13"
-                                  fill={line.color} fontWeight="700">
-                              ${(val / 1000).toFixed(1)}k
-                            </text>
-                          </g>
-                        );
-                      })}
-                    </g>
-                  )}
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-      );
-    };
-
-    const BarChart = ({ data, dataKey, color }) => {
-      const values = data.map(d => parseFloat(d[dataKey]) || 0);
-      const maxVal = Math.max(...values, 0);
-      const minVal = Math.min(...values, 0);
-      const range = maxVal - minVal || 1;
-
-      // Allocate space proportionally based on actual ranges
-      const positiveRange = maxVal - 0;
-      const negativeRange = 0 - minVal;
-
-      const chartHeight = 450; // y=50 to y=500
-      const posPixels = (positiveRange / range) * chartHeight;
-      const negPixels = (negativeRange / range) * chartHeight;
-
-      // Zero line positioned to give most space to positive values
-      const zeroY = 50 + posPixels;
-
-      // Helper to convert value to Y position
-      const getY = (val) => {
-        if (val >= 0) {
-          return zeroY - (val / positiveRange) * posPixels;
-        } else {
-          return zeroY + (Math.abs(val) / negativeRange) * negPixels;
-        }
-      };
-
-      return (
-        <div style={{ width: '100%', height: 500 }}>
-          <svg width="100%" height="100%" viewBox="0 0 800 500">
-            {/* X-axis (at zero) */}
-            <line x1="50" y1={zeroY} x2="750" y2={zeroY} stroke="#333" strokeWidth="2" />
-
-            {/* Y-axis */}
-            <line x1="50" y1="20" x2="50" y2="480" stroke="#333" strokeWidth="2" />
-
-            {/* Grid and labels for positive side */}
-            {[1, 2, 3, 4, 5].map(i => {
-              const posVal = (i * positiveRange / 5);
-              const posY = zeroY - (i * posPixels / 5);
-              return posY > 50 ? (
-                <g key={`pos-grid${i}`}>
-                  <line x1="50" y1={posY} x2="750" y2={posY} stroke="#e0e0e0" strokeDasharray="4" />
-                  <text x="40" y={posY + 4} textAnchor="end" fontSize="11" fill="#666">
-                    ${(posVal / 1000).toFixed(0)}k
-                  </text>
-                </g>
-              ) : null;
-            })}
-
-            {/* Grid and labels for negative side */}
-            {[1, 2, 3].map(i => {
-              const negVal = -(i * negativeRange / 3);
-              const negY = zeroY + (i * negPixels / 3);
-              return negY < 500 ? (
-                <g key={`neg-grid${i}`}>
-                  <line x1="50" y1={negY} x2="750" y2={negY} stroke="#e0e0e0" strokeDasharray="4" />
-                  <text x="40" y={negY + 4} textAnchor="end" fontSize="11" fill="#666">
-                    ${(negVal / 1000).toFixed(0)}k
-                  </text>
-                </g>
-              ) : null;
-            })}
-
-            {/* Bars */}
-            {data.map((d, i) => {
-              const x = 50 + (i * 700 / 12) + 20;
-              const val = parseFloat(d[dataKey]) || 0;
-              const y = getY(val);
-              const displayVal = (val / 1000).toFixed(0) + 'k';
+            {stacks.map((stack, i) => {
+              const cx = xCenter(i);
+              const left = cx - barWidth / 2;
               return (
                 <g key={`bar${i}`}>
-                  <rect x={x} y={Math.min(y, zeroY)} width="40" height={Math.abs(y - zeroY)}
-                        fill={val >= 0 ? color : '#d9534f'} opacity={0.8} />
-                  <text x={x + 20} y={val >= 0 ? y - 8 : zeroY + 18} textAnchor="middle"
-                        fontSize="11" fill={val >= 0 ? color : '#d9534f'} fontWeight="600">
-                    {displayVal}
-                  </text>
+                  {stack.segments.map((seg, sidx) => {
+                    if (seg.val === 0) return null;
+                    const yStart = getY(seg.start);
+                    const yEnd = getY(seg.end);
+                    const top = Math.min(yStart, yEnd);
+                    const rawHeight = Math.abs(yStart - yEnd);
+                    const height = Math.max(0, rawHeight - gap);
+                    const y = top + gap / 2;
+                    const isOuterEnd =
+                      (seg.val > 0 && seg.end === stack.posTotal && stack.posTotal > 0) ||
+                      (seg.val < 0 && seg.end === stack.negTotal && stack.negTotal < 0);
+                    return (
+                      <rect
+                        key={`seg${sidx}`}
+                        x={left}
+                        y={y}
+                        width={barWidth}
+                        height={height}
+                        fill={seg.color}
+                        rx={isOuterEnd ? 4 : 0}
+                      />
+                    );
+                  })}
+                  <rect
+                    x={50 + i * slotWidth}
+                    y="20"
+                    width={slotWidth}
+                    height="460"
+                    fill="transparent"
+                    style={{ cursor: 'pointer' }}
+                    onMouseEnter={() => setHoveredIdx(i)}
+                    onMouseLeave={() => setHoveredIdx(null)}
+                  />
                 </g>
               );
             })}
 
-            {/* Month labels on X-axis */}
-            {data.map((d, i) => (
-              <text key={`label${i}`} x={50 + (i * 700 / 12) + 40} y={zeroY + 20}
-                    textAnchor="middle" fontSize="12" fill="#333" fontWeight="600">
-                {d.month}
+            {stacks.map((stack, i) => (
+              <text key={`label${i}`} x={xCenter(i)} y={zeroY + 20} textAnchor="middle"
+                    fontSize="12" fill="var(--chart-ink)" fontWeight="600">
+                {stack.month}
               </text>
             ))}
+
+            {stacks.map((stack, i) => {
+              if (hoveredIdx !== i) return null;
+              const cx = xCenter(i);
+              const tooltipWidth = 190;
+              const tooltipHeight = 44 + stack.segments.length * 20;
+              const tooltipX = cx < 400 ? cx + 12 : cx - tooltipWidth - 12;
+              const tooltipY = 30;
+              return (
+                <g key={`tooltip${i}`}>
+                  <line x1={cx} y1="20" x2={cx} y2="480" stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
+                  <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight}
+                        fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
+                  <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">
+                    {stack.month} · Revenue {formatDollarsPrecise(stack.revenue)}
+                  </text>
+                  {stack.segments.map((seg, sidx) => (
+                    <g key={`ttrow${sidx}`}>
+                      <rect x={tooltipX + 10} y={tooltipY + 28 + sidx * 20} width="8" height="8" fill={seg.color} />
+                      <text x={tooltipX + 24} y={tooltipY + 36 + sidx * 20} fontSize="11" fill="var(--chart-ink-secondary)">
+                        {seg.label}
+                      </text>
+                      <text x={tooltipX + tooltipWidth - 10} y={tooltipY + 36 + sidx * 20} fontSize="11"
+                            fontWeight="700" textAnchor="end" fill="var(--chart-ink)">
+                        {formatTooltip(seg.val)}
+                      </text>
+                    </g>
+                  ))}
+                </g>
+              );
+            })}
           </svg>
         </div>
       );
@@ -541,11 +498,10 @@
 
     function DashboardContent() {
       const [data, setData] = useState([]);
-      const [selectedMonth, setSelectedMonth] = useState(0);
-      const [selectedMetric, setSelectedMetric] = useState(null);
       const [error, setError] = useState('');
       const [dateRangeStart, setDateRangeStart] = useState(0);
       const [dateRangeEnd, setDateRangeEnd] = useState(11);
+      const [viewMode, setViewMode] = useState('dollars');
 
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -567,81 +523,52 @@
         }
       };
 
-      const currentMonth = data[selectedMonth] || {};
-      const metrics = currentMonth.pl ? [
-        { label: 'Revenue', value: currentMonth.revenue, key: 'revenue' },
-        { label: 'Profit/Loss', value: currentMonth.pl, key: 'pl' },
-        { label: 'COGS', value: currentMonth.cogs, key: 'cogs' },
-        { label: 'OPEX', value: currentMonth.opex, key: 'opex' },
-      ] : [];
-
       return (
         <div className="container">
           <header>
-            <h1>🍞 Bakery P/L Dashboard</h1>
+            <h1>🍞 Bakery Dashboard</h1>
             <p className="subtitle">Monthly Profit, Cost of Goods, and Operating Expenses</p>
           </header>
 
           {error && <div className="error">{error}</div>}
 
           <div className="controls">
-            <div className="month-buttons">
-              {months.map((m, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSelectedMonth(i)}
-                  className={selectedMonth === i ? 'active' : ''}
-                  style={{ opacity: i >= dateRangeStart && i <= dateRangeEnd ? 1 : 0.5 }}
-                >
-                  {m}
-                </button>
-              ))}
+            <div>
+              <label style={{ fontSize: '13px', color: '#666', marginRight: '10px', fontWeight: '600' }}>Timeframe:</label>
+              <select value={dateRangeStart} onChange={(e) => setDateRangeStart(parseInt(e.target.value))}
+                      style={{ padding: '6px', marginRight: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
+                {months.map((m, i) => (
+                  <option key={i} value={i}>From {m}</option>
+                ))}
+              </select>
+              <select value={dateRangeEnd} onChange={(e) => setDateRangeEnd(parseInt(e.target.value))}
+                      style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
+                {months.map((m, i) => (
+                  <option key={i} value={i}>To {m}</option>
+                ))}
+              </select>
             </div>
-          </div>
-
-          <div className="metrics">
-            {metrics.map((m) => (
-              <div
-                key={m.key}
-                className={`metric-card ${selectedMetric === m.key ? 'active' : ''}`}
-                onClick={() => setSelectedMetric(selectedMetric === m.key ? null : m.key)}
+            <div className="view-toggle">
+              <button
+                className={viewMode === 'dollars' ? 'active' : ''}
+                onClick={() => setViewMode('dollars')}
               >
-                <div className="metric-label">{m.label}</div>
-                <div className="metric-value">${(m.value / 1000).toFixed(1)}k</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ fontSize: '13px', color: '#666', marginRight: '10px', fontWeight: '600' }}>Timeframe:</label>
-            <select value={dateRangeStart} onChange={(e) => setDateRangeStart(parseInt(e.target.value))}
-                    style={{ padding: '6px', marginRight: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
-              {months.map((m, i) => (
-                <option key={i} value={i}>From {m}</option>
-              ))}
-            </select>
-            <select value={dateRangeEnd} onChange={(e) => setDateRangeEnd(parseInt(e.target.value))}
-                    style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
-              {months.map((m, i) => (
-                <option key={i} value={i}>To {m}</option>
-              ))}
-            </select>
+                Dollars
+              </button>
+              <button
+                className={viewMode === 'percent' ? 'active' : ''}
+                onClick={() => setViewMode('percent')}
+              >
+                % of Revenue
+              </button>
+            </div>
           </div>
 
           <div className="chart-container">
             <div className="chart-title">
-              {selectedMetric ? `${metrics.find(m => m.key === selectedMetric)?.label} by Month` : 'All Metrics by Month'}
+              COGS, Operating Expenses & Profit/Loss by Month ({viewMode === 'percent' ? '% of Revenue' : '$'})
             </div>
-            {selectedMetric ? (
-              <BarChart data={filteredData} dataKey={selectedMetric} color="#6b4423" />
-            ) : (
-              <LineChart data={filteredData} lines={[
-                { key: 'revenue', color: '#4a90e2' },
-                { key: 'pl', color: '#6b4423' },
-                { key: 'cogs', color: '#a88968' },
-                { key: 'opex', color: '#d4b5a0' },
-              ]} />
-            )}
+            <StackedBarChart data={filteredData} viewMode={viewMode} />
           </div>
         </div>
       );
