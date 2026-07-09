@@ -703,9 +703,9 @@
                       onMouseLeave={() => setHovered(null)}
                       onClick={() => onSelectMonth(m.monthKey)}
                     >
-                      <div className="seg seg-nonbakery" style={{ height: `${nonBakeryPx}px` }} />
-                      <div className="seg seg-bakery" style={{ height: `${bakeryPx}px` }} />
                       <div className="seg seg-base" style={{ height: `${basePx}px` }} />
+                      <div className="seg seg-bakery" style={{ height: `${bakeryPx}px` }} />
+                      <div className="seg seg-nonbakery" style={{ height: `${nonBakeryPx}px` }} />
                       {hovered === m.monthKey && (
                         <div className="stack-tooltip">
                           <strong>{fmtMonthLabel(m.monthKey)}</strong><br />
@@ -828,7 +828,7 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/overtime?weeks=26`);
+          const response = await fetch(`${baseUrl}/api/overtime?weeks=104`);
           const result = await response.json();
           if (result.error) {
             setError(result.error);
@@ -863,7 +863,7 @@
             <React.Fragment>
               <div className="panel">
                 <div className="panel-title">Total Labor Cost by Month</div>
-                <div className="panel-hint">Hover a bar for the exact split. Click a bar to see its function breakdown below.</div>
+                <div className="panel-hint">Hover a bar for the exact split.</div>
                 <div className="legend">
                   <div className="legend-item"><span className="swatch swatch-base"></span>Regular &amp; other wages</div>
                   <div className="legend-item"><span className="swatch swatch-bakery"></span>Bakery overtime</div>
@@ -889,27 +889,6 @@
                 </div>
               </div>
 
-              <div className="panel">
-                <div className="panel-title">Overtime Wages by Function &mdash; {fmtMonthLabel(month.monthKey)}</div>
-                {month.functions.some((f) => f.otWage > 0) ? (
-                  <OvertimeBarChart functions={month.functions.filter((f) => f.otWage > 0)} />
-                ) : (
-                  <p style={{ color: '#8b6c57', fontSize: '13px' }}>No overtime this month.</p>
-                )}
-              </div>
-
-              <div className="panel">
-                <div className="panel-title">By Function</div>
-                <FunctionTable functions={month.functions} employeeDetail={employeeDetail} />
-                <div className="footnote">
-                  Overtime is estimated under California rules: 1.5&times; after 8 hrs/day or 40 hrs/week, 2&times; after 12 hrs/day,
-                  and 1.5&times;/2&times; on the 7th consecutive workday in a workweek, computed per employee per workweek and then
-                  rolled up into months (a workweek is counted in the month its start date falls in). "Bakery" functions are baker,
-                  prep, hot/cold line, back-of-house, and dishwasher/porter roles; all other functions (sellers, drivers, managers)
-                  are "non-bakery." When an employee splits time across more than one function, their overtime is allocated in
-                  proportion to hours worked in each. Click a function row to see which employees drove its overtime.
-                </div>
-              </div>
             </React.Fragment>
           )}
         </div>

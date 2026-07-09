@@ -374,7 +374,7 @@ app.get('/api/overtime', async (req, res) => {
     const startDow = await fetchWorkweekStartDow();
 
     const requestedWeeks = parseInt(req.query.weeks, 10);
-    const weekCount = Number.isFinite(requestedWeeks) && requestedWeeks > 0 ? Math.min(requestedWeeks, 26) : 8;
+    const weekCount = Number.isFinite(requestedWeeks) && requestedWeeks > 0 ? Math.min(requestedWeeks, 104) : 8;
 
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
