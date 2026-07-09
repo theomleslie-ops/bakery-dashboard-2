@@ -246,14 +246,15 @@
                 const tooltipHeight = 100;
                 const tooltipX = cx < 400 ? cx + 12 : cx - tooltipWidth - 12;
                 const tooltipY = 30;
+                const format = viewMode === 'percent' ? formatPercentPrecise : formatDollarsPrecise;
                 return (
                   <g key={`tooltip${hoveredMonth}`}>
                     <line x1={cx} y1="20" x2={cx} y2="480" stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
                     <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
                     <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{bar.month}</text>
-                    <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">COGS: {formatPercentPrecise(bar.cogs)}</text>
-                    <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">OpEx: {formatPercentPrecise(bar.opex)}</text>
-                    <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fill="var(--chart-ink-secondary)">{bar.pl >= 0 ? 'Profit' : 'Loss'}: {formatPercentPrecise(bar.pl)}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">COGS: {format(bar.cogs)}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">OpEx: {format(bar.opex)}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fill="var(--chart-ink-secondary)">{bar.pl >= 0 ? 'Profit' : 'Loss'}: {format(bar.pl)}</text>
                   </g>
                 );
               })()
