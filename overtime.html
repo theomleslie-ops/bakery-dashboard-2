@@ -41,13 +41,6 @@
       font-size: 14px;
     }
 
-    .week-buttons {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin: 30px 0;
-    }
-
     button {
       padding: 10px 16px;
       border: 1px solid #d4b5a0;
@@ -62,12 +55,6 @@
 
     button:hover {
       background: #e8ddd5;
-      border-color: #6b4423;
-    }
-
-    button.active {
-      background: #6b4423;
-      color: white;
       border-color: #6b4423;
     }
 
@@ -99,6 +86,12 @@
       color: #6b4423;
     }
 
+    .metric-sub {
+      font-size: 12px;
+      color: #8b6c57;
+      margin-top: 4px;
+    }
+
     .panel {
       background: white;
       padding: 24px;
@@ -111,9 +104,150 @@
       font-size: 16px;
       font-weight: 600;
       color: #6b4423;
+      margin-bottom: 6px;
+    }
+
+    .panel-hint {
+      font-size: 12px;
+      color: #8b6c57;
       margin-bottom: 20px;
     }
 
+    /* ---- Legend ---- */
+    .legend {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #5a4a3a;
+    }
+
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    .swatch-base { background: #3f8361; }
+    .swatch-bakery { background: #2b6cb0; }
+    .swatch-nonbakery { background: #c05621; }
+
+    /* ---- Stacked bar chart ---- */
+    .stacked-chart {
+      display: flex;
+      gap: 12px;
+    }
+
+    .chart-y-axis {
+      position: relative;
+      width: 56px;
+      flex-shrink: 0;
+    }
+
+    .y-tick {
+      position: absolute;
+      right: 8px;
+      transform: translateY(50%);
+      font-size: 11px;
+      color: #8b6c57;
+      white-space: nowrap;
+    }
+
+    .chart-plot {
+      position: relative;
+      flex: 1;
+      border-left: 1px solid #d4b5a0;
+      border-bottom: 1px solid #d4b5a0;
+      overflow-x: auto;
+      overflow-y: visible;
+    }
+
+    .gridline {
+      position: absolute;
+      left: 0;
+      right: 0;
+      border-top: 1px dashed #ece2d8;
+    }
+
+    .chart-bars {
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      gap: 28px;
+      height: 100%;
+      padding: 0 20px;
+      min-width: max-content;
+    }
+
+    .bar-col-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      justify-content: flex-end;
+    }
+
+    .bar-col {
+      width: 56px;
+      display: flex;
+      flex-direction: column;
+      border-radius: 4px 4px 0 0;
+      overflow: hidden;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .bar-col.selected {
+      outline: 2px solid #6b4423;
+      outline-offset: 2px;
+    }
+
+    .seg {
+      width: 100%;
+      transition: filter 0.15s;
+    }
+
+    .bar-col:hover .seg {
+      filter: brightness(1.1);
+    }
+
+    .seg-nonbakery { background: #c05621; }
+    .seg-bakery { background: #2b6cb0; }
+    .seg-base { background: #3f8361; }
+
+    .bar-x-label {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #6b4423;
+      font-weight: 500;
+      text-align: center;
+    }
+
+    .stack-tooltip {
+      position: absolute;
+      bottom: calc(100% + 10px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2c2416;
+      color: white;
+      font-size: 12px;
+      line-height: 1.6;
+      padding: 10px 12px;
+      border-radius: 6px;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ---- Function bar chart (per-function OT within a month) ---- */
     .bar-row {
       display: grid;
       grid-template-columns: 180px 1fr 130px;
@@ -203,6 +337,27 @@
       background: #faf6f2;
     }
 
+    .category-tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 8px;
+    }
+
+    .category-tag.bakery {
+      background: #e3edf7;
+      color: #2b6cb0;
+    }
+
+    .category-tag.non-bakery {
+      background: #fbe8d9;
+      color: #c05621;
+    }
+
     .expand-icon {
       display: inline-block;
       width: 14px;
@@ -267,6 +422,21 @@
       .metric-value, .panel-title, .bar-row-value {
         color: #e8b9a0;
       }
+      .metric-sub, .panel-hint, .legend-item, .y-tick {
+        color: #b09a86;
+      }
+      .chart-plot {
+        border-color: #5a3a1e;
+      }
+      .gridline {
+        border-top-color: #3a3228;
+      }
+      .bar-x-label {
+        color: #e8b9a0;
+      }
+      .bar-col.selected {
+        outline-color: #e8b9a0;
+      }
       .bar-track {
         background: #3a3228;
       }
@@ -287,6 +457,14 @@
         background: #241d17;
         color: #cbb9a8;
         border-bottom-color: #3a3228;
+      }
+      .category-tag.bakery {
+        background: #1e3a54;
+        color: #8fc0ec;
+      }
+      .category-tag.non-bakery {
+        background: #4a2c14;
+        color: #f0b083;
       }
     }
   </style>
@@ -372,20 +550,186 @@
       );
     }
 
+    // ---- Formatting helpers ----
+    const round2 = (n) => Math.round(n * 100) / 100;
     const fmtHours = (h) => `${h.toFixed(1)}h`;
     const fmtMoney = (v) => `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const fmtWeekLabel = (weekStart, weekEnd) => {
-      const opts = { month: 'short', day: 'numeric' };
-      const s = new Date(`${weekStart}T00:00:00`).toLocaleDateString(undefined, opts);
-      const e = new Date(`${weekEnd}T00:00:00`).toLocaleDateString(undefined, opts);
-      return `${s} – ${e}`;
+    const fmtMoneyShort = (v) => {
+      if (v >= 1000) return `$${Math.round(v / 1000).toLocaleString()}k`;
+      return `$${Math.round(v)}`;
+    };
+    const pct = (part, whole) => (whole > 0 ? `${((part / whole) * 100).toFixed(1)}%` : '0%');
+    const fmtMonthLabel = (monthKey) => {
+      const [y, m] = monthKey.split('-').map(Number);
+      return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
     };
 
-    // Single-series horizontal bar chart: one hue, sorted by magnitude, direct labels, hover tooltip
+    // Round a max value up to a "nice" number so axis ticks look clean
+    const niceMax = (v) => {
+      if (v <= 0) return 100;
+      const magnitude = Math.pow(10, Math.floor(Math.log10(v)));
+      const residual = v / magnitude;
+      let niceResidual;
+      if (residual <= 1) niceResidual = 1;
+      else if (residual <= 2) niceResidual = 2;
+      else if (residual <= 5) niceResidual = 5;
+      else niceResidual = 10;
+      return niceResidual * magnitude;
+    };
+
+    // ---- Bakery vs. non-bakery classification ----
+    // Known job/function titles from Square, mapped explicitly. Anything unrecognized
+    // falls back to a keyword heuristic so new functions still classify sensibly.
+    const BAKERY_FUNCTIONS = new Set([
+      'Baker AM', 'Baker Night', 'Baker PM',
+      'LSK Cold Line', 'LSK Hot Line', 'LSK Prep Only', 'LSK-Arc BOH',
+      'Dishwasher/ Porter',
+    ]);
+    const classifyFunction = (name) => {
+      if (BAKERY_FUNCTIONS.has(name)) return 'bakery';
+      if (/\bbaker\b|\bboh\b|\bprep\b|dishwash|porter|\bline\b|\bkitchen\b/i.test(name)) return 'bakery';
+      return 'non-bakery';
+    };
+
+    // Roll weekly, by-function data up into months, split into bakery vs. non-bakery
+    // overtime, and keep a by-function breakdown (with employee detail when available).
+    function buildMonthlyData(weeks) {
+      const monthMap = new Map();
+
+      weeks.forEach((w) => {
+        const monthKey = w.weekStart.slice(0, 7); // YYYY-MM
+        if (!monthMap.has(monthKey)) monthMap.set(monthKey, { monthKey, functionTotals: new Map() });
+        const m = monthMap.get(monthKey);
+
+        w.functions.forEach((f) => {
+          const category = classifyFunction(f.function);
+          const prev = m.functionTotals.get(f.function) || {
+            function: f.function,
+            category,
+            regularHours: 0, otHours: 0, ot15Hours: 0, ot2Hours: 0,
+            regularWage: 0, otWage: 0,
+            employeeMap: new Map(),
+          };
+          prev.regularHours += f.regularHours;
+          prev.otHours += f.otHours;
+          prev.ot15Hours += f.ot15Hours;
+          prev.ot2Hours += f.ot2Hours;
+          prev.regularWage += f.regularWage;
+          prev.otWage += f.otWage;
+          (f.employees || []).forEach((e) => {
+            const pe = prev.employeeMap.get(e.name) || { name: e.name, otHours: 0, otWage: 0 };
+            pe.otHours += e.otHours;
+            pe.otWage += e.otWage;
+            prev.employeeMap.set(e.name, pe);
+          });
+          m.functionTotals.set(f.function, prev);
+        });
+      });
+
+      return [...monthMap.values()]
+        .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+        .map((m) => {
+          const functions = [...m.functionTotals.values()]
+            .map((f) => ({
+              function: f.function,
+              category: f.category,
+              regularHours: round2(f.regularHours),
+              otHours: round2(f.otHours),
+              ot15Hours: round2(f.ot15Hours),
+              ot2Hours: round2(f.ot2Hours),
+              regularWage: round2(f.regularWage),
+              otWage: round2(f.otWage),
+              employees: [...f.employeeMap.values()]
+                .sort((a, b) => b.otWage - a.otWage)
+                .map((e) => ({ name: e.name, otHours: round2(e.otHours), otWage: round2(e.otWage) })),
+            }))
+            .sort((a, b) => b.otWage - a.otWage);
+
+          const totalWage = functions.reduce((s, f) => s + f.regularWage + f.otWage, 0);
+          const bakeryOtWage = functions.filter((f) => f.category === 'bakery').reduce((s, f) => s + f.otWage, 0);
+          const nonBakeryOtWage = functions.filter((f) => f.category === 'non-bakery').reduce((s, f) => s + f.otWage, 0);
+
+          return {
+            monthKey: m.monthKey,
+            totalWage: round2(totalWage),
+            bakeryOtWage: round2(bakeryOtWage),
+            nonBakeryOtWage: round2(nonBakeryOtWage),
+            baseWage: round2(Math.max(totalWage - bakeryOtWage - nonBakeryOtWage, 0)),
+            totalOtWage: round2(bakeryOtWage + nonBakeryOtWage),
+            functions,
+          };
+        });
+    }
+
+    const CHART_HEIGHT = 320;
+
+    // Vertical stacked bar chart, one bar per month. Bar height = total labor $ for
+    // the month; the bar is stacked bottom-to-top as [other wages, bakery OT, non-bakery
+    // OT] so the OT segments visibly eat into the total instead of adding beyond it.
+    // All months render on one screen (no chart pagination). Origin is 0 at the
+    // bottom-left, values only increase upward/rightward (quadrant 1).
+    function MonthlyStackedBarChart({ months, selectedMonth, onSelectMonth }) {
+      const [hovered, setHovered] = useState(null);
+      const maxTotal = niceMax(Math.max(...months.map((m) => m.totalWage), 0) * 1.08);
+      const tickCount = 5;
+      const ticks = Array.from({ length: tickCount }, (_, i) => (maxTotal / (tickCount - 1)) * i);
+
+      return (
+        <div className="stacked-chart">
+          <div className="chart-y-axis" style={{ height: CHART_HEIGHT }}>
+            {ticks.map((t) => (
+              <div key={t} className="y-tick" style={{ bottom: `${(t / maxTotal) * CHART_HEIGHT}px` }}>
+                {fmtMoneyShort(t)}
+              </div>
+            ))}
+          </div>
+          <div className="chart-plot" style={{ height: CHART_HEIGHT }}>
+            {ticks.map((t) => (
+              <div key={t} className="gridline" style={{ bottom: `${(t / maxTotal) * CHART_HEIGHT}px` }} />
+            ))}
+            <div className="chart-bars">
+              {months.map((m) => {
+                const barPx = maxTotal > 0 ? (m.totalWage / maxTotal) * CHART_HEIGHT : 0;
+                const basePx = m.totalWage > 0 ? (m.baseWage / m.totalWage) * barPx : 0;
+                const bakeryPx = m.totalWage > 0 ? (m.bakeryOtWage / m.totalWage) * barPx : 0;
+                const nonBakeryPx = m.totalWage > 0 ? (m.nonBakeryOtWage / m.totalWage) * barPx : 0;
+                const isSelected = m.monthKey === selectedMonth;
+                return (
+                  <div className="bar-col-wrap" key={m.monthKey}>
+                    <div
+                      className={`bar-col${isSelected ? ' selected' : ''}`}
+                      style={{ height: `${Math.max(barPx, 2)}px` }}
+                      onMouseEnter={() => setHovered(m.monthKey)}
+                      onMouseLeave={() => setHovered(null)}
+                      onClick={() => onSelectMonth(m.monthKey)}
+                    >
+                      <div className="seg seg-nonbakery" style={{ height: `${nonBakeryPx}px` }} />
+                      <div className="seg seg-bakery" style={{ height: `${bakeryPx}px` }} />
+                      <div className="seg seg-base" style={{ height: `${basePx}px` }} />
+                      {hovered === m.monthKey && (
+                        <div className="stack-tooltip">
+                          <strong>{fmtMonthLabel(m.monthKey)}</strong><br />
+                          Total labor: {fmtMoney(m.totalWage)}<br />
+                          Bakery OT: {fmtMoney(m.bakeryOtWage)} ({pct(m.bakeryOtWage, m.totalWage)} of total)<br />
+                          Non-bakery OT: {fmtMoney(m.nonBakeryOtWage)} ({pct(m.nonBakeryOtWage, m.totalWage)} of total)
+                        </div>
+                      )}
+                    </div>
+                    <div className="bar-x-label">{fmtMonthLabel(m.monthKey)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Single-series horizontal bar chart of OT $ by function within the selected month
     function OvertimeBarChart({ functions }) {
       const [hovered, setHovered] = useState(null);
-      const sorted = [...functions].sort((a, b) => b.otHours - a.otHours);
-      const maxHours = Math.max(...sorted.map((f) => f.otHours), 0.01);
+      const sorted = [...functions].sort((a, b) => b.otWage - a.otWage);
+      const maxWage = Math.max(...sorted.map((f) => f.otWage), 0.01);
 
       return (
         <div>
@@ -395,7 +739,10 @@
               <div className="bar-track">
                 <div
                   className="bar-fill"
-                  style={{ width: `${Math.max((f.otHours / maxHours) * 100, 1)}%` }}
+                  style={{
+                    width: `${Math.max((f.otWage / maxWage) * 100, 1)}%`,
+                    background: f.category === 'bakery' ? '#2b6cb0' : '#c05621',
+                  }}
                   onMouseEnter={() => setHovered(f.function)}
                   onMouseLeave={() => setHovered(null)}
                 >
@@ -435,6 +782,7 @@
                   <td>
                     <span className="expand-icon">{expanded === f.function ? '▾' : '▸'}</span>
                     {f.function}
+                    <span className={`category-tag ${f.category}`}>{f.category === 'bakery' ? 'Bakery' : 'Non-Bakery'}</span>
                   </td>
                   <td className="num">{fmtHours(f.regularHours)}</td>
                   <td className="num">{fmtHours(f.ot15Hours)}</td>
@@ -454,7 +802,7 @@
                     </tr>
                   )) : (
                     <tr className="employee-detail">
-                      <td colSpan="5">No individual employee crossed into overtime this week for this function.</td>
+                      <td colSpan="5">No individual employee crossed into overtime this month for this function.</td>
                     </tr>
                   )
                 )}
@@ -466,9 +814,9 @@
     }
 
     function OvertimeContent() {
-      const [weeks, setWeeks] = useState([]);
+      const [months, setMonths] = useState([]);
       const [employeeDetail, setEmployeeDetail] = useState(true);
-      const [selectedWeek, setSelectedWeek] = useState(0);
+      const [selectedMonth, setSelectedMonth] = useState(null);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
 
@@ -480,82 +828,85 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/overtime?weeks=8`);
+          const response = await fetch(`${baseUrl}/api/overtime?weeks=26`);
           const result = await response.json();
           if (result.error) {
             setError(result.error);
             setStatus('error');
             return;
           }
-          const sorted = [...(result.weeks || [])].sort((a, b) => b.weekStart.localeCompare(a.weekStart));
-          setWeeks(sorted);
+          const built = buildMonthlyData(result.weeks || []);
+          setMonths(built);
           setEmployeeDetail(result.employeeDetail !== false);
-          setSelectedWeek(0);
-          setStatus(sorted.length ? 'ready' : 'empty');
+          setSelectedMonth(built.length ? built[built.length - 1].monthKey : null);
+          setStatus(built.length ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
         }
       };
 
-      const week = weeks[selectedWeek];
+      const month = months.find((m) => m.monthKey === selectedMonth) || months[months.length - 1];
 
       return (
         <div className="container">
           <header>
             <h1>🍞 Bakery Overtime Report</h1>
-            <p className="subtitle">Weekly overtime wages by function, from Square timecards</p>
+            <p className="subtitle">Monthly labor cost and overtime by function, from Square timecards</p>
           </header>
 
           {status === 'loading' && <div className="loading">Loading timecards from Square&hellip;</div>}
           {status === 'error' && <div className="error">{error}</div>}
-          {status === 'empty' && <div className="empty">No timecards found for the selected weeks.</div>}
+          {status === 'empty' && <div className="empty">No timecards found.</div>}
 
-          {status === 'ready' && (
+          {status === 'ready' && month && (
             <React.Fragment>
-              <div className="week-buttons">
-                {weeks.map((w, i) => (
-                  <button
-                    key={w.weekStart}
-                    className={selectedWeek === i ? 'active' : ''}
-                    onClick={() => setSelectedWeek(i)}
-                  >
-                    {fmtWeekLabel(w.weekStart, w.weekEnd)}
-                  </button>
-                ))}
+              <div className="panel">
+                <div className="panel-title">Total Labor Cost by Month</div>
+                <div className="panel-hint">Hover a bar for the exact split. Click a bar to see its function breakdown below.</div>
+                <div className="legend">
+                  <div className="legend-item"><span className="swatch swatch-base"></span>Regular &amp; other wages</div>
+                  <div className="legend-item"><span className="swatch swatch-bakery"></span>Bakery overtime</div>
+                  <div className="legend-item"><span className="swatch swatch-nonbakery"></span>Non-bakery overtime</div>
+                </div>
+                <MonthlyStackedBarChart months={months} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
               </div>
 
               <div className="metrics">
                 <div className="metric-card">
-                  <div className="metric-label">Total OT Hours</div>
-                  <div className="metric-value">{fmtHours(week.totalOtHours)}</div>
+                  <div className="metric-label">{fmtMonthLabel(month.monthKey)} &mdash; Total Labor $</div>
+                  <div className="metric-value">{fmtMoney(month.totalWage)}</div>
                 </div>
                 <div className="metric-card">
-                  <div className="metric-label">Total OT Wages</div>
-                  <div className="metric-value">{fmtMoney(week.totalOtWage)}</div>
+                  <div className="metric-label">Bakery Overtime $</div>
+                  <div className="metric-value">{fmtMoney(month.bakeryOtWage)}</div>
+                  <div className="metric-sub">{pct(month.bakeryOtWage, month.totalWage)} of total labor</div>
                 </div>
                 <div className="metric-card">
-                  <div className="metric-label">Functions with OT</div>
-                  <div className="metric-value">{week.functions.filter((f) => f.otHours > 0).length}</div>
+                  <div className="metric-label">Non-Bakery Overtime $</div>
+                  <div className="metric-value">{fmtMoney(month.nonBakeryOtWage)}</div>
+                  <div className="metric-sub">{pct(month.nonBakeryOtWage, month.totalWage)} of total labor</div>
                 </div>
               </div>
 
               <div className="panel">
-                <div className="panel-title">Overtime Hours by Function &mdash; {fmtWeekLabel(week.weekStart, week.weekEnd)}</div>
-                {week.functions.some((f) => f.otHours > 0) ? (
-                  <OvertimeBarChart functions={week.functions.filter((f) => f.otHours > 0)} />
+                <div className="panel-title">Overtime Wages by Function &mdash; {fmtMonthLabel(month.monthKey)}</div>
+                {month.functions.some((f) => f.otWage > 0) ? (
+                  <OvertimeBarChart functions={month.functions.filter((f) => f.otWage > 0)} />
                 ) : (
-                  <p style={{ color: '#8b6c57', fontSize: '13px' }}>No overtime this week.</p>
+                  <p style={{ color: '#8b6c57', fontSize: '13px' }}>No overtime this month.</p>
                 )}
               </div>
 
               <div className="panel">
                 <div className="panel-title">By Function</div>
-                <FunctionTable functions={week.functions} employeeDetail={employeeDetail} />
+                <FunctionTable functions={month.functions} employeeDetail={employeeDetail} />
                 <div className="footnote">
                   Overtime is estimated under California rules: 1.5&times; after 8 hrs/day or 40 hrs/week, 2&times; after 12 hrs/day,
-                  and 1.5&times;/2&times; on the 7th consecutive workday in a workweek. When an employee split time across more
-                  than one function in a week, their overtime hours and wages are allocated across those functions in
+                  and 1.5&times;/2&times; on the 7th consecutive workday in a workweek, computed per employee per workweek and then
+                  rolled up into months (a workweek is counted in the month its start date falls in). "Bakery" functions are baker,
+                  prep, hot/cold line, back-of-house, and dishwasher/porter roles; all other functions (sellers, drivers, managers)
+                  are "non-bakery." When an employee splits time across more than one function, their overtime is allocated in
                   proportion to hours worked in each. Click a function row to see which employees drove its overtime.
                 </div>
               </div>
