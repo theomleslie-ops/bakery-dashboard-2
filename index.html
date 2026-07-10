@@ -564,56 +564,32 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const [dashResponse, overtimeResponse] = await Promise.all([
-            fetch(`${baseUrl}/api/dashboard`),
-            fetch(`${baseUrl}/api/overtime?weeks=156`),
-          ]);
-          const dashData = await dashResponse.json();
-          const overtimeData = await overtimeResponse.json();
-          if (!dashData.monthlyData || !overtimeData.weeks) {
-            throw new Error('Missing data from server');
+          const response = await fetch(`${baseUrl}/api/dashboard`);
+          const dashData = await response.json();
+          if (!dashData.monthlyData) {
+            throw new Error('Missing financial data from server');
           }
-          const monthMap = {};
-          dashData.monthlyData.forEach(m => {
-            if (m.revenue > 0) {
-              monthMap[m.month] = { month: m.month, revenue: m.revenue, cogs: m.cogs };
-            }
-          });
-          const monthMap2 = new Map();
-          (overtimeData.weeks || []).forEach(w => {
-            const monthKey = w.weekStart.slice(0, 7);
-            const weekWage = (w.functions || []).reduce((sum, f) => sum + (f.regularWage || 0) + (f.otWage || 0), 0);
-            monthMap2.set(monthKey, (monthMap2.get(monthKey) || 0) + weekWage);
-          });
-          console.log('monthMap2 contents:', Array.from(monthMap2.entries()));
           const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
           const combined = [];
-          Object.values(monthMap).forEach(m => {
-            const monthIdx = monthShorts.indexOf(m.month);
-            const monthNum = String(monthIdx + 1).padStart(2, '0');
-            let labor = 0;
-            for (const [key, value] of monthMap2) {
-              if (key.endsWith('-' + monthNum)) {
-                labor = value;
-                break;
-              }
+          dashData.monthlyData.forEach(m => {
+            if (m.revenue > 0) {
+              const labor = m.opex || 0;
+              const foodPercent = (m.cogs / m.revenue) * 100;
+              const laborPercent = (labor / m.revenue) * 100;
+              const totalPercent = foodPercent + laborPercent;
+              combined.push({
+                monthLabel: m.month,
+                revenue: m.revenue,
+                foodPercent,
+                laborPercent,
+                totalPercent,
+              });
             }
-            const foodPercent = (m.cogs / m.revenue) * 100;
-            const laborPercent = (labor / m.revenue) * 100;
-            const totalPercent = foodPercent + laborPercent;
-            combined.push({
-              monthLabel: m.month,
-              revenue: m.revenue,
-              foodPercent,
-              laborPercent,
-              totalPercent,
-            });
           });
           setMonths(combined.sort((a, b) => {
-            const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
             return monthShorts.indexOf(a.monthLabel) - monthShorts.indexOf(b.monthLabel);
           }));
-          setStatus('ready');
+          setStatus(combined.length > 0 ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
@@ -650,7 +626,7 @@
             </>
           )}
           {status === 'ready' && months.length === 0 && (
-            <div className="empty">No financial or labor data available. Please upload financial data and connect Square.</div>
+            <div className="empty">No financial data available. Please upload financial data.</div>
           )}
         </div>
       );
