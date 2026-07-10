@@ -46,7 +46,9 @@
       "Artifact",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(npm list *)",
+      "Bash(git push *)"
     ]
   }
 }
