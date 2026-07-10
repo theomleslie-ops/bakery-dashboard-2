@@ -598,15 +598,16 @@
           console.log('monthMap2 contents:', Array.from(monthMap2.entries()));
           const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
           const combined = [];
-          const overtimeMonths = Array.from(monthMap2.keys());
-          console.log('Available overtime months:', overtimeMonths);
-          const inferredYear = overtimeMonths.length > 0 ? parseInt(overtimeMonths[0].split('-')[0]) : new Date().getFullYear();
-          console.log('Using year:', inferredYear);
           Object.values(monthMap).forEach(m => {
             const monthIdx = monthShorts.indexOf(m.month);
-            const monthKey = new Date(inferredYear, monthIdx, 1).toISOString().slice(0, 7);
-            const labor = monthMap2.get(monthKey) || 0;
-            console.log(`${m.month} (idx=${monthIdx}) -> ${monthKey}: labor=${labor}`);
+            const monthNum = String(monthIdx + 1).padStart(2, '0');
+            let labor = 0;
+            for (const [key, value] of monthMap2) {
+              if (key.endsWith('-' + monthNum)) {
+                labor = value;
+                break;
+              }
+            }
             const foodPercent = (m.cogs / m.revenue) * 100;
             const laborPercent = (labor / m.revenue) * 100;
             const totalPercent = foodPercent + laborPercent;
