@@ -783,7 +783,7 @@
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
 
-      const locations = ['All Locations', ...LOCATION_CHANNELS];
+      const locations = ['All Locations', ...LOCATION_CHANNELS, 'All Markets'];
       const markets = ['All Markets', ...MARKETS_CHANNELS];
       const filterOptions = filterType === 'location' ? locations : markets;
 
