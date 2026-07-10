@@ -591,10 +591,11 @@
           });
           const monthMap2 = new Map();
           (overtimeData.weeks || []).forEach(w => {
-            if (!w.monthKey) return;
-            const monthKey = w.monthKey.slice(0, 7);
+            if (!w.weekStart) return;
+            const monthKey = w.weekStart.slice(0, 7);
+            const totalWage = (w.functions || []).reduce((sum, f) => sum + (f.regularWage || 0) + (f.otWage || 0), 0);
             if (!monthMap2.has(monthKey)) monthMap2.set(monthKey, 0);
-            monthMap2.set(monthKey, monthMap2.get(monthKey) + w.totalWage);
+            monthMap2.set(monthKey, monthMap2.get(monthKey) + totalWage);
           });
           const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
           const combined = [];
