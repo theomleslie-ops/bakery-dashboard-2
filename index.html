@@ -212,12 +212,12 @@
             {bars.map((bar, i) => {
               const cx = xCenter(i);
               const offset = -(barWidth * 1.5 + barGap);
-              const cogsY = getY(bar.cogs);
-              const cogsHeight = Math.abs(cogsY - zeroY);
-              const opexY = cogsY - (Math.abs(bar.opex) / maxVal) * chartHeight;
-              const opexHeight = Math.abs(opexY - cogsY);
+              const cogsHeight = (Math.abs(bar.cogs) / maxVal) * chartHeight;
+              const opexHeight = (Math.abs(bar.opex) / maxVal) * chartHeight;
               const plHeight = (Math.abs(bar.pl) / maxVal) * chartHeight;
-              const plY = opexY - plHeight;
+              const cogsY = zeroY - cogsHeight;
+              const opexY = zeroY - opexHeight;
+              const plY = zeroY - plHeight;
               return (
                 <g key={`bars${i}`}>
                   <rect x={cx + offset} y={cogsY} width={barWidth} height={cogsHeight} fill="var(--series-cogs)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
