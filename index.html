@@ -166,19 +166,16 @@
         const cogs = scaled(d, 'cogs');
         const opex = scaled(d, 'opex');
         const pl = scaled(d, 'pl');
-        return { month: d.month, revenue: rawValue(d, 'revenue'), cogs, opex, pl };
+        return { month: d.month, revenue: rawValue(d, 'revenue'), cogs, opex, pl, plRaw: scaled(d, 'pl') };
       });
-      const allVals = bars.flatMap(b => [b.cogs, b.opex, b.pl]);
-      const maxVal = Math.max(...allVals.filter(v => v >= 0), 0);
-      const minVal = Math.min(...allVals.filter(v => v < 0), 0);
-      const range = maxVal + Math.abs(minVal) || 1;
+      const allVals = bars.flatMap(b => [b.cogs, b.opex, Math.abs(b.pl)]);
+      const maxVal = Math.max(...allVals, 0);
+      const range = maxVal || 1;
       const chartHeight = 450;
-      const posPixels = (maxVal / range) * chartHeight;
-      const negPixels = (Math.abs(minVal) / range) * chartHeight;
-      const zeroY = 50 + posPixels;
+      const zeroY = 430;
       const getY = (val) => {
-        if (val >= 0) return zeroY - (val / maxVal) * posPixels;
-        return zeroY + (Math.abs(val) / Math.abs(minVal)) * negPixels;
+        const absVal = Math.abs(val);
+        return zeroY - (absVal / maxVal) * chartHeight;
       };
       const n = data.length || 1;
       const slotWidth = 700 / n;
@@ -204,24 +201,14 @@
           </div>
           <svg width="100%" height="500" viewBox="0 0 800 500">
             <line x1="50" y1={zeroY} x2="750" y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
-            <line x1="50" y1="20" x2="50" y2="480" stroke="var(--chart-axis)" strokeWidth="2" />
+            <line x1="50" y1="20" x2="50" y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
             {[1, 2, 3, 4, 5].map(i => {
               const posVal = (i * maxVal / 5);
-              const posY = zeroY - (i * posPixels / 5);
-              return posY > 50 ? (
+              const posY = zeroY - (i * chartHeight / 5);
+              return posY > 20 ? (
                 <g key={`pos-grid${i}`}>
                   <line x1="50" y1={posY} x2="750" y2={posY} stroke="var(--chart-grid)" strokeWidth="1" />
                   <text x="40" y={posY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{formatAxis(posVal)}</text>
-                </g>
-              ) : null;
-            })}
-            {[1, 2, 3].map(i => {
-              const negVal = -(i * Math.abs(minVal) / 3);
-              const negY = zeroY + (i * negPixels / 3);
-              return negY < 500 && minVal < 0 ? (
-                <g key={`neg-grid${i}`}>
-                  <line x1="50" y1={negY} x2="750" y2={negY} stroke="var(--chart-grid)" strokeWidth="1" />
-                  <text x="40" y={negY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{formatAxis(negVal)}</text>
                 </g>
               ) : null;
             })}
@@ -232,7 +219,7 @@
                 <g key={`bars${i}`}>
                   <rect x={cx + offset} y={getY(bar.cogs)} width={barWidth} height={Math.abs(getY(bar.cogs) - zeroY)} fill="var(--series-cogs)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
                   <rect x={cx + offset + barWidth + barGap} y={getY(bar.opex)} width={barWidth} height={Math.abs(getY(bar.opex) - zeroY)} fill="var(--series-opex)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <rect x={cx + offset + (barWidth + barGap) * 2} y={getY(bar.pl)} width={barWidth} height={Math.abs(getY(bar.pl) - zeroY)} fill={bar.pl >= 0 ? 'var(--series-pl-good)' : 'var(--series-pl-bad)'} rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
+                  <rect x={cx + offset + (barWidth + barGap) * 2} y={getY(bar.pl)} width={barWidth} height={Math.abs(getY(bar.pl) - zeroY)} fill={bar.plRaw >= 0 ? 'var(--series-pl-good)' : 'var(--series-pl-bad)'} rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
                   <rect x={50 + i * slotWidth} y="20" width={slotWidth} height="460" fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
                 </g>
               );
@@ -254,7 +241,7 @@
                     <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{bar.month}</text>
                     <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">COGS: {format(bar.cogs)}</text>
                     <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">OpEx: {format(bar.opex)}</text>
-                    <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fill="var(--chart-ink-secondary)">{bar.pl >= 0 ? 'Profit' : 'Loss'}: {format(bar.pl)}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fill="var(--chart-ink-secondary)">{bar.plRaw >= 0 ? 'Profit' : 'Loss'}: {format(bar.plRaw)}</text>
                   </g>
                 );
               })()
