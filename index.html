@@ -589,10 +589,11 @@
               monthMap[m.month] = { month: m.month, revenue: m.revenue, cogs: m.cogs };
             }
           });
-          const monthlyLabor = buildMonthlyData(overtimeData.weeks || []);
           const monthMap2 = new Map();
-          monthlyLabor.forEach(m => {
-            monthMap2.set(m.monthKey, m.totalWage);
+          (overtimeData.weeks || []).forEach(w => {
+            const monthKey = w.weekStart.slice(0, 7);
+            const weekWage = (w.functions || []).reduce((sum, f) => sum + (f.regularWage || 0) + (f.otWage || 0), 0);
+            monthMap2.set(monthKey, (monthMap2.get(monthKey) || 0) + weekWage);
           });
           const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
           const combined = [];
