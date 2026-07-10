@@ -165,14 +165,15 @@
       const bars = data.map(d => {
         const cogs = scaled(d, 'cogs');
         const opex = scaled(d, 'opex');
-        const pl = Math.abs(scaled(d, 'pl'));
+        const pl = scaled(d, 'pl');
         return { month: d.month, revenue: rawValue(d, 'revenue'), cogs, opex, pl };
       });
-      const allVals = bars.flatMap(b => [b.cogs, b.opex, b.pl]);
-      const maxVal = Math.max(...allVals, 0);
+      const allVals = bars.flatMap(b => [b.cogs, b.opex, Math.abs(b.pl)]);
+      const maxVal = Math.max(...allVals.filter(v => v >= 0), 0);
+      const range = maxVal || 1;
       const chartHeight = 450;
-      const baselineY = 470;
-      const getY = (val) => baselineY - (val / maxVal) * chartHeight;
+      const zeroY = 50 + chartHeight;
+      const getY = (val) => zeroY - (Math.abs(val) / maxVal) * chartHeight;
       const n = data.length || 1;
       const slotWidth = 700 / n;
       const barWidth = 12;
@@ -182,7 +183,8 @@
       const legendItems = [
         { label: 'COGS', color: 'var(--series-cogs)' },
         { label: 'Operating Expenses', color: 'var(--series-opex)' },
-        { label: 'P&L (Absolute)', color: 'var(--series-pl-good)' },
+        { label: 'Profit', color: 'var(--series-pl-good)' },
+        { label: 'Loss', color: 'var(--series-pl-bad)' },
       ];
       return (
         <div style={{ width: '100%' }}>
@@ -195,37 +197,37 @@
             ))}
           </div>
           <svg width="100%" height="500" viewBox="0 0 800 500">
-            <line x1="50" y1={baselineY} x2="750" y2={baselineY} stroke="var(--chart-axis)" strokeWidth="2" />
-            <line x1="50" y1="20" x2="50" y2={baselineY} stroke="var(--chart-axis)" strokeWidth="2" />
+            <line x1="50" y1={zeroY} x2="750" y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
+            <line x1="50" y1="20" x2="50" y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
             {[1, 2, 3, 4, 5].map(i => {
-              const val = (i * maxVal / 5);
-              const y = baselineY - (i * chartHeight / 5);
-              return y > 50 ? (
-                <g key={`grid${i}`}>
-                  <line x1="50" y1={y} x2="750" y2={y} stroke="var(--chart-grid)" strokeWidth="1" />
-                  <text x="40" y={y + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{formatAxis(val)}</text>
+              const posVal = (i * maxVal / 5);
+              const posY = zeroY - (i * chartHeight / 5);
+              return posY > 50 ? (
+                <g key={`pos-grid${i}`}>
+                  <line x1="50" y1={posY} x2="750" y2={posY} stroke="var(--chart-grid)" strokeWidth="1" />
+                  <text x="40" y={posY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{formatAxis(posVal)}</text>
                 </g>
               ) : null;
             })}
             {bars.map((bar, i) => {
               const cx = xCenter(i);
               const offset = -(barWidth * 1.5 + barGap);
-              const cogsHeight = (bar.cogs / maxVal) * chartHeight;
-              const opexHeight = (bar.opex / maxVal) * chartHeight;
-              const plHeight = (bar.pl / maxVal) * chartHeight;
-              const cogsY = baselineY - cogsHeight;
-              const opexY = cogsY - opexHeight;
+              const cogsY = getY(bar.cogs);
+              const cogsHeight = Math.abs(cogsY - zeroY);
+              const opexY = cogsY - (Math.abs(bar.opex) / maxVal) * chartHeight;
+              const opexHeight = Math.abs(opexY - cogsY);
+              const plHeight = (Math.abs(bar.pl) / maxVal) * chartHeight;
               const plY = opexY - plHeight;
               return (
                 <g key={`bars${i}`}>
                   <rect x={cx + offset} y={cogsY} width={barWidth} height={cogsHeight} fill="var(--series-cogs)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
                   <rect x={cx + offset + barWidth + barGap} y={opexY} width={barWidth} height={opexHeight} fill="var(--series-opex)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <rect x={cx + offset + (barWidth + barGap) * 2} y={plY} width={barWidth} height={plHeight} fill="var(--series-pl-good)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <rect x={50 + i * slotWidth} y="20" width={slotWidth} height={baselineY - 20} fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
+                  <rect x={cx + offset + (barWidth + barGap) * 2} y={plY} width={barWidth} height={plHeight} fill={bar.pl >= 0 ? 'var(--series-pl-good)' : 'var(--series-pl-bad)'} rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
+                  <rect x={50 + i * slotWidth} y="20" width={slotWidth} height={zeroY - 20} fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
                 </g>
               );
             })}
-            {bars.map((bar, i) => (<text key={`label${i}`} x={xCenter(i)} y={baselineY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{bar.month}</text>))}
+            {bars.map((bar, i) => (<text key={`label${i}`} x={xCenter(i)} y={zeroY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{bar.month}</text>))}
             {hoveredMonth !== null && (
               (() => {
                 const bar = bars[hoveredMonth];
@@ -237,12 +239,12 @@
                 const format = viewMode === 'percent' ? formatPercentPrecise : formatDollarsPrecise;
                 return (
                   <g key={`tooltip${hoveredMonth}`}>
-                    <line x1={cx} y1="20" x2={cx} y2={baselineY} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
+                    <line x1={cx} y1="20" x2={cx} y2={zeroY} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
                     <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
                     <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{bar.month}</text>
                     <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">COGS: {format(bar.cogs)}</text>
                     <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">OpEx: {format(bar.opex)}</text>
-                    <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fill="var(--chart-ink-secondary)">P&L: {format(bar.pl)}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fill="var(--chart-ink-secondary)">{bar.pl >= 0 ? 'Profit' : 'Loss'}: {format(Math.abs(bar.pl))}</text>
                   </g>
                 );
               })()
@@ -294,7 +296,7 @@
             </div>
           </div>
           <div className="chart-container">
-            <div className="chart-title">COGS, Operating Expenses & P&L (Absolute) by Month ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
+            <div className="chart-title">COGS, Operating Expenses & Profit/Loss by Month ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
             <StackedBarChart data={filteredData} viewMode={viewMode} />
           </div>
         </div>
