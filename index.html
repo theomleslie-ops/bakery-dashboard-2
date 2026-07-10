@@ -217,9 +217,9 @@
               const offset = -(barWidth * 1.5 + barGap);
               return (
                 <g key={`bars${i}`}>
-                  <rect x={cx + offset} y={getY(bar.cogs)} width={barWidth} height={Math.abs(getY(bar.cogs) - zeroY)} fill="var(--series-cogs)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <rect x={cx + offset + barWidth + barGap} y={getY(bar.opex)} width={barWidth} height={Math.abs(getY(bar.opex) - zeroY)} fill="var(--series-opex)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <rect x={cx + offset + (barWidth + barGap) * 2} y={getY(bar.pl)} width={barWidth} height={Math.abs(getY(bar.pl) - zeroY)} fill={bar.plRaw >= 0 ? 'var(--series-pl-good)' : 'var(--series-pl-bad)'} rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
+                  <rect x={cx + offset} y={getY(bar.cogs)} width={barWidth} height={Math.abs(getY(bar.cogs) - zeroY)} fill="var(--series-cogs)" rx="2" pointerEvents="none" />
+                  <rect x={cx + offset + barWidth + barGap} y={getY(bar.opex)} width={barWidth} height={Math.abs(getY(bar.opex) - zeroY)} fill="var(--series-opex)" rx="2" pointerEvents="none" />
+                  <rect x={cx + offset + (barWidth + barGap) * 2} y={getY(bar.pl)} width={barWidth} height={Math.abs(getY(bar.pl) - zeroY)} fill={bar.plRaw >= 0 ? 'var(--series-pl-good)' : 'var(--series-pl-bad)'} rx="2" pointerEvents="none" />
                   <rect x={50 + i * slotWidth} y="20" width={slotWidth} height="460" fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
                 </g>
               );
