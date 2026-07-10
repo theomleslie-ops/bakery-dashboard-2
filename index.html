@@ -591,13 +591,20 @@
           });
           const monthMap2 = new Map();
           (overtimeData.weeks || []).forEach(w => {
-            if (!w.weekStart) return;
+            if (!w.weekStart) {
+              console.warn('Week missing weekStart:', w);
+              return;
+            }
             const monthKey = w.weekStart.slice(0, 7);
-            const weekTotal = (w.functions || []).reduce((sum, f) => sum + (f.regularWage || 0) + (f.otWage || 0), 0);
+            const weekTotal = (w.functions || []).reduce((sum, f) => {
+              const fWage = (parseFloat(f.regularWage) || 0) + (parseFloat(f.otWage) || 0);
+              return sum + fWage;
+            }, 0);
+            console.log(`Week ${w.weekStart}: total=${weekTotal}, functions=${(w.functions || []).length}`);
             if (!monthMap2.has(monthKey)) monthMap2.set(monthKey, 0);
             monthMap2.set(monthKey, monthMap2.get(monthKey) + weekTotal);
           });
-          console.log('Labor by month:', Object.fromEntries(monthMap2));
+          console.log('Final labor by month:', Object.fromEntries(monthMap2));
           const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
           const combined = [];
           const overtimeMonths = Array.from(monthMap2.keys());
