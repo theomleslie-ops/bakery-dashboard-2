@@ -480,6 +480,184 @@
       );
     }
 
+    const PrimeCostChart = ({ months }) => {
+      const [hoveredMonth, setHoveredMonth] = useState(null);
+      const chartHeight = 400;
+      const benchmarkPercent = 60;
+      const niceMax = (v) => { if (v <= 0) return 100; const magnitude = Math.pow(10, Math.floor(Math.log10(v))); const residual = v / magnitude; let niceResidual; if (residual <= 1) niceResidual = 1; else if (residual <= 2) niceResidual = 2; else if (residual <= 5) niceResidual = 5; else niceResidual = 10; return niceResidual * magnitude; };
+      const actualMax = Math.max(...months.map(m => m.totalPercent), benchmarkPercent);
+      const chartMax = niceMax(actualMax * 1.1);
+      const scaledBenchmarkY = chartHeight - (benchmarkPercent / chartMax) * chartHeight;
+      const getScaledBarHeight = (percent) => (percent / chartMax) * chartHeight;
+      const legendItems = [
+        { label: 'Food Cost', color: '#2a78d6' },
+        { label: 'Labor', color: '#1baf7a' },
+        { label: '60% Goal', color: '#d9534f', style: 'dashed' },
+      ];
+      return (
+        <div style={{ width: '100%' }}>
+          <div className="chart-legend">
+            {legendItems.map(item => (
+              <div key={item.label} className="chart-legend-item">
+                <div className="chart-legend-swatch" style={{ backgroundColor: item.color, borderBottom: item.style === 'dashed' ? '2px dashed' : 'none' }}></div>
+                <span>{item.label}</span>
+              </div>
+            ))}
+          </div>
+          <svg width="100%" height="500" viewBox="0 0 1000 500" style={{ overflow: 'visible' }}>
+            <line x1="60" y1={chartHeight + 50} x2="960" y2={chartHeight + 50} stroke="var(--chart-axis)" strokeWidth="2" />
+            <line x1="60" y1="20" x2="60" y2={chartHeight + 50} stroke="var(--chart-axis)" strokeWidth="2" />
+            {[0, 1, 2, 3, 4, 5].map(i => {
+              const val = (i * chartMax / 5);
+              const y = chartHeight + 50 - (i * chartHeight / 5);
+              return (
+                <g key={`grid${i}`}>
+                  <line x1="60" y1={y} x2="960" y2={y} stroke="var(--chart-grid)" strokeWidth="1" />
+                  <text x="50" y={y + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{val.toFixed(0)}%</text>
+                </g>
+              );
+            })}
+            <line x1="60" y1={chartHeight + 50 - scaledBenchmarkY} x2="960" y2={chartHeight + 50 - scaledBenchmarkY} stroke="#d9534f" strokeWidth="2" strokeDasharray="5,5" />
+            {months.map((month, i) => {
+              const n = months.length || 1;
+              const slotWidth = 900 / n;
+              const barWidth = Math.min(40, slotWidth * 0.6);
+              const cx = 60 + slotWidth * i + slotWidth / 2;
+              const foodHeight = getScaledBarHeight(month.foodPercent);
+              const laborHeight = getScaledBarHeight(month.laborPercent);
+              const baselineY = chartHeight + 50;
+              const foodY = baselineY - foodHeight;
+              const laborY = foodY - laborHeight;
+              return (
+                <g key={`bar${i}`}>
+                  <rect x={cx - barWidth / 2} y={foodY} width={barWidth} height={foodHeight} fill="#2a78d6" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
+                  <rect x={cx - barWidth / 2} y={laborY} width={barWidth} height={laborHeight} fill="#1baf7a" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
+                  <rect x={cx - slotWidth / 2} y="20" width={slotWidth} height={chartHeight + 30} fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
+                  <text x={cx} y={baselineY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{month.monthLabel}</text>
+                </g>
+              );
+            })}
+            {hoveredMonth !== null && (
+              (() => {
+                const month = months[hoveredMonth];
+                const n = months.length || 1;
+                const slotWidth = 900 / n;
+                const cx = 60 + slotWidth * hoveredMonth + slotWidth / 2;
+                const tooltipWidth = 200;
+                const tooltipHeight = 120;
+                const tooltipX = cx < 500 ? cx + 12 : cx - tooltipWidth - 12;
+                const tooltipY = 30;
+                return (
+                  <g key={`tooltip${hoveredMonth}`}>
+                    <line x1={cx} y1="20" x2={cx} y2={chartHeight + 50} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
+                    <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
+                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{month.monthLabel}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">Food Cost: {month.foodPercent.toFixed(1)}%</text>
+                    <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">Labor: {month.laborPercent.toFixed(1)}%</text>
+                    <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fontWeight="600" fill="var(--chart-ink)">Prime Cost: {month.totalPercent.toFixed(1)}%</text>
+                    <text x={tooltipX + 10} y={tooltipY + 105} fontSize="10" fill="var(--chart-ink-secondary)">Revenue: ${(month.revenue / 1000).toFixed(0)}k</text>
+                  </g>
+                );
+              })()
+            )}
+          </svg>
+        </div>
+      );
+    };
+
+    function PrimeCostDashboard() {
+      const [months, setMonths] = useState([]);
+      const [status, setStatus] = useState('loading');
+      const [error, setError] = useState('');
+      useEffect(() => { fetchData(); }, []);
+      const fetchData = async () => {
+        try {
+          setStatus('loading');
+          const baseUrl = window.location.origin;
+          const [dashResponse, overtimeResponse] = await Promise.all([
+            fetch(`${baseUrl}/api/dashboard`),
+            fetch(`${baseUrl}/api/overtime?weeks=156`),
+          ]);
+          const dashData = await dashResponse.json();
+          const overtimeData = await overtimeResponse.json();
+          if (!dashData.monthlyData || !overtimeData.weeks) {
+            throw new Error('Missing data from server');
+          }
+          const monthMap = {};
+          dashData.monthlyData.forEach(m => {
+            if (m.revenue > 0) {
+              monthMap[m.month] = { month: m.month, revenue: m.revenue, cogs: m.cogs };
+            }
+          });
+          const monthMap2 = new Map();
+          (overtimeData.weeks || []).forEach(w => {
+            const monthKey = w.monthKey.slice(0, 7);
+            if (!monthMap2.has(monthKey)) monthMap2.set(monthKey, 0);
+            monthMap2.set(monthKey, monthMap2.get(monthKey) + w.totalWage);
+          });
+          const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const combined = [];
+          Object.values(monthMap).forEach(m => {
+            const monthKey = new Date(new Date().getFullYear(), monthShorts.indexOf(m.month), 1).toISOString().slice(0, 7);
+            const labor = monthMap2.get(monthKey) || 0;
+            const foodPercent = (m.cogs / m.revenue) * 100;
+            const laborPercent = (labor / m.revenue) * 100;
+            const totalPercent = foodPercent + laborPercent;
+            combined.push({
+              monthLabel: m.month,
+              revenue: m.revenue,
+              foodPercent,
+              laborPercent,
+              totalPercent,
+            });
+          });
+          setMonths(combined.sort((a, b) => {
+            const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return monthShorts.indexOf(a.monthLabel) - monthShorts.indexOf(b.monthLabel);
+          }));
+          setStatus('ready');
+        } catch (err) {
+          setError('Failed to load data: ' + err.message);
+          setStatus('error');
+        }
+      };
+      const goalMet = months.filter(m => m.totalPercent <= 60).length;
+      const avgPrimeCost = months.length > 0 ? months.reduce((s, m) => s + m.totalPercent, 0) / months.length : 0;
+      return (
+        <div className="container">
+          <header>
+            <h1>🎯 Prime Cost Dashboard</h1>
+            <p className="subtitle">Food Cost + Labor as % of Revenue (Goal: ≤60%)</p>
+          </header>
+          {status === 'loading' && <div className="loading">Loading financial and labor data…</div>}
+          {status === 'error' && <div className="error">{error}</div>}
+          {status === 'ready' && months.length > 0 && (
+            <>
+              <div className="metrics">
+                <div className="metric-card">
+                  <div className="metric-label">Average Prime Cost</div>
+                  <div className="metric-value">{avgPrimeCost.toFixed(1)}%</div>
+                  <div className="metric-sub">{goalMet} of {months.length} months at goal</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Goal</div>
+                  <div className="metric-value">60%</div>
+                  <div className="metric-sub">Target prime cost ceiling</div>
+                </div>
+              </div>
+              <div className="chart-container">
+                <div className="chart-title">Prime Cost by Month (% of Revenue)</div>
+                <PrimeCostChart months={months} />
+              </div>
+            </>
+          )}
+          {status === 'ready' && months.length === 0 && (
+            <div className="empty">No financial or labor data available. Please upload financial data and connect Square.</div>
+          )}
+        </div>
+      );
+    }
+
     function MainApp() {
       const [activeTab, setActiveTab] = useState('dashboard');
       return (
@@ -489,11 +667,13 @@
               <div className="tabs">
                 <button className={`tab-button ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>Financial Dashboard</button>
                 <button className={`tab-button ${activeTab === 'overtime' ? 'active' : ''}`} onClick={() => setActiveTab('overtime')}>Overtime Report</button>
+                <button className={`tab-button ${activeTab === 'prime-cost' ? 'active' : ''}`} onClick={() => setActiveTab('prime-cost')}>Prime Cost</button>
               </div>
             </div>
           </div>
           <div className={`tab-content ${activeTab === 'dashboard' ? 'active' : ''}`}><DashboardContent /></div>
           <div className={`tab-content ${activeTab === 'overtime' ? 'active' : ''}`}><OvertimeContent /></div>
+          <div className={`tab-content ${activeTab === 'prime-cost' ? 'active' : ''}`}><PrimeCostDashboard /></div>
         </div>
       );
     }
