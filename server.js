@@ -666,6 +666,34 @@ app.get('/api/dashboard', async (req, res) => {
   }
 });
 
+// P&L by Channel
+app.get('/api/pl-by-channel', (req, res) => {
+  try {
+    const PL_CHANNEL_FILE = path.join(DATA_DIR, 'pl-by-channel.json');
+    const plData = loadData(PL_CHANNEL_FILE);
+
+    if (!plData || plData.length === 0) {
+      return res.json({
+        channels: [
+          { name: 'ARC', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+          { name: 'LSK', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+          { name: 'State St', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+          { name: 'Catering', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+          { name: 'Delivery 506', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+        ],
+        message: 'No P&L data provided yet. Upload bakery allocation data to populate this view.',
+      });
+    }
+
+    res.json({
+      channels: plData,
+      lastUpdated: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============= HEALTH CHECK =============
 
 app.get('/api/health', (req, res) => {
