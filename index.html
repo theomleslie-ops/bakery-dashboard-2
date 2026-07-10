@@ -595,6 +595,7 @@
             const weekWage = (w.functions || []).reduce((sum, f) => sum + (f.regularWage || 0) + (f.otWage || 0), 0);
             monthMap2.set(monthKey, (monthMap2.get(monthKey) || 0) + weekWage);
           });
+          console.log('monthMap2 contents:', Array.from(monthMap2.entries()));
           const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
           const combined = [];
           const overtimeMonths = Array.from(monthMap2.keys());
