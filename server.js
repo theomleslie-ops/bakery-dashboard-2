@@ -193,7 +193,7 @@ app.get('/api/square/payroll', async (req, res) => {
 // 7th-consecutive-workday rule), grouped by week and by job/function.
 
 const SQUARE_API_BASE = 'https://connect.squareup.com/v2';
-const SQUARE_API_VERSION = '2025-01-23';
+const SQUARE_API_VERSION = '2026-07-01';
 const DOW_INDEX = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
 
 const squareHeaders = () => ({
