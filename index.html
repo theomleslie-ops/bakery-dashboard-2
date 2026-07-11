@@ -170,21 +170,21 @@
         return { month: d.month, revenue, cogs, opex, pl };
       });
 
+      // Independent line chart: each line scales independently
       const allValues = points.flatMap(p => [p.revenue, p.cogs, p.opex, p.pl]);
-      const positiveVals = allValues.filter(v => v >= 0);
-      const negativeVals = allValues.filter(v => v < 0);
-      const maxVal = positiveVals.length > 0 ? Math.max(...positiveVals) : 100000;
-      const minVal = negativeVals.length > 0 ? Math.min(...negativeVals) : 0;
-      const range = maxVal + Math.abs(minVal) || 1;
+      const maxVal = Math.max(...allValues.filter(v => v >= 0), 1);
+      const minVal = Math.min(...allValues.filter(v => v < 0), 0);
       const chartHeight = 400;
-      const zeroY = 50 + (chartHeight * Math.abs(minVal)) / range;
+      const range = maxVal - minVal || 1;
       const n = data.length || 1;
       const slotWidth = 700 / n;
       const xPos = (i) => 50 + slotWidth * i + slotWidth / 2;
       const getY = (val) => {
         const safeVal = isNaN(val) ? 0 : val;
-        return zeroY - (safeVal / range) * chartHeight;
+        // Linear scale: maxVal at top (Y=50), minVal at bottom (Y=450)
+        return 50 + ((maxVal - safeVal) / range) * chartHeight;
       };
+      const zeroY = 50 + ((maxVal - 0) / range) * chartHeight;
       const formatAxis = viewMode === 'percent' ? formatPercent : formatDollars;
 
       const makePath = (key) => {
@@ -213,7 +213,7 @@
             <line x1="50" y1="50" x2="50" y2={50 + chartHeight} stroke="var(--chart-axis)" strokeWidth="2" />
             {[0, 1, 2, 3, 4, 5].map(i => {
               const y = 50 + (chartHeight / 5) * i;
-              const val = maxVal - (maxVal + Math.abs(minVal)) * (i / 5);
+              const val = maxVal - (range * i / 5);
               return (
                 <g key={`grid${i}`}>
                   <line x1="50" y1={y} x2="750" y2={y} stroke="var(--chart-grid)" strokeWidth="1" />
