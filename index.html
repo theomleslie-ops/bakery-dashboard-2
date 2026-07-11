@@ -192,10 +192,10 @@
       };
 
       const legendItems = [
-        { label: 'Revenue', color: '#2d3748' },
-        { label: 'COGS', color: '#2d3748' },
-        { label: 'Operating Expenses', color: '#2d3748' },
-        { label: 'Profit/Loss', color: '#2d3748' },
+        { label: 'Revenue', color: '#2a78d6' },
+        { label: 'COGS', color: '#ff9500' },
+        { label: 'Operating Expenses', color: '#8b5cf6' },
+        { label: 'Profit/Loss', color: '#10b981' },
       ];
 
       return (
@@ -221,14 +221,14 @@
                 </g>
               );
             })}
-            <polyline points={makePath('revenue')} fill="none" stroke="#2d3748" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            <polyline points={makePath('cogs')} fill="none" stroke="#2d3748" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            <polyline points={makePath('opex')} fill="none" stroke="#2d3748" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            <polyline points={makePath('pl')} fill="none" stroke="#2d3748" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            {points.map((p, i) => (<circle key={`rev${i}`} cx={xPos(i)} cy={getY(p.revenue)} r="3" fill="#2d3748" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => (<circle key={`cogs${i}`} cx={xPos(i)} cy={getY(p.cogs)} r="3" fill="#2d3748" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => (<circle key={`opex${i}`} cx={xPos(i)} cy={getY(p.opex)} r="3" fill="#2d3748" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => (<circle key={`pl${i}`} cx={xPos(i)} cy={getY(p.pl)} r="3" fill="#2d3748" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
+            <polyline points={makePath('revenue')} fill="none" stroke="#2a78d6" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+            <polyline points={makePath('cogs')} fill="none" stroke="#ff9500" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+            <polyline points={makePath('opex')} fill="none" stroke="#8b5cf6" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+            <polyline points={makePath('pl')} fill="none" stroke="#10b981" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+            {points.map((p, i) => (<circle key={`rev${i}`} cx={xPos(i)} cy={getY(p.revenue)} r="3" fill="#2a78d6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
+            {points.map((p, i) => (<circle key={`cogs${i}`} cx={xPos(i)} cy={getY(p.cogs)} r="3" fill="#ff9500" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
+            {points.map((p, i) => (<circle key={`opex${i}`} cx={xPos(i)} cy={getY(p.opex)} r="3" fill="#8b5cf6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
+            {points.map((p, i) => (<circle key={`pl${i}`} cx={xPos(i)} cy={getY(p.pl)} r="3" fill="#10b981" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
             {points.map((p, i) => (<text key={`label${i}`} x={xPos(i)} y={50 + chartHeight + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{p.month}</text>))}
             {hoveredMonth !== null && (
               (() => {
