@@ -188,7 +188,7 @@
       const formatAxis = viewMode === 'percent' ? formatPercent : formatDollars;
 
       const makePath = (key) => {
-        return points.map((p, i) => `${xPos(i)},${getY(p[key])}`).join(' L ');
+        return points.map((p, i) => `${xPos(i)},${getY(p[key])}`).join(' ');
       };
 
       const legendItems = [
