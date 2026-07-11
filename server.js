@@ -393,9 +393,14 @@ app.get('/api/overtime', async (req, res) => {
     const weeks = buildOvertimeReport(timecards, teamNames, startDow);
     res.json({ success: true, weeks, rangeStart, rangeEnd: addDays(rangeEndExclusive, -1), employeeDetail: true });
   } catch (err) {
+    const snapshot = loadOvertimeSnapshot();
+    if (snapshot && snapshot.weeks) {
+      return res.json({ ...snapshot, success: true, source: 'snapshot (Square API unavailable)', weeks: snapshot.weeks || [] });
+    }
     res.status(500).json({
       error: 'Square API error',
       message: err.response?.data?.errors?.[0]?.detail || err.message,
+      weeks: [],
     });
   }
 });
