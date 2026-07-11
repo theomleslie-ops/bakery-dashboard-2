@@ -167,7 +167,7 @@
         const cogs = scaled(d, 'cogs');
         const opex = scaled(d, 'opex');
         const pl = scaled(d, 'pl');
-        return { month: d.month, revenue, cogs, opex, pl };
+        return { month: d.month, year: d.year, label: `${d.month} ${d.year}`, revenue, cogs, opex, pl };
       });
 
       // Independent line chart: each line scales independently
@@ -229,7 +229,7 @@
             {points.map((p, i) => (<circle key={`cogs${i}`} cx={xPos(i)} cy={getY(p.cogs)} r="3" fill="#ff9500" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
             {points.map((p, i) => (<circle key={`opex${i}`} cx={xPos(i)} cy={getY(p.opex)} r="3" fill="#8b5cf6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
             {points.map((p, i) => (<circle key={`pl${i}`} cx={xPos(i)} cy={getY(p.pl)} r="3" fill="#10b981" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => (<text key={`label${i}`} x={xPos(i)} y={50 + chartHeight + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{p.month}</text>))}
+            {points.map((p, i) => (<text key={`label${i}`} x={xPos(i)} y={50 + chartHeight + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{p.label}</text>))}
             {hoveredMonth !== null && (
               (() => {
                 const p = points[hoveredMonth];
@@ -243,7 +243,7 @@
                   <g key={`tooltip${hoveredMonth}`}>
                     <line x1={cx} y1="50" x2={cx} y2={50 + chartHeight} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
                     <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
-                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{p.month}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{p.label}</text>
                     <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">Revenue: {format(p.revenue)}</text>
                     <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">COGS: {format(p.cogs)}</text>
                     <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fill="var(--chart-ink-secondary)">OpEx: {format(p.opex)}</text>
