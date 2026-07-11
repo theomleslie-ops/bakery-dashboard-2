@@ -162,30 +162,35 @@
         }
         return raw;
       };
-      const bars = data.map(d => {
-        const cogs = scaled(d, 'cogs');
-        const opex = scaled(d, 'opex');
+      const points = data.map(d => {
+        const revenue = scaled(d, 'revenue');
         const pl = scaled(d, 'pl');
-        return { month: d.month, revenue: rawValue(d, 'revenue'), cogs, opex, pl };
+        return { month: d.month, revenue, pl };
       });
-      const allVals = bars.flatMap(b => [b.cogs, b.opex, Math.abs(b.pl)]);
-      const maxVal = Math.max(...allVals.filter(v => v >= 0), 0);
-      const range = maxVal || 1;
-      const chartHeight = 450;
-      const zeroY = 50 + chartHeight;
-      const getY = (val) => zeroY - (Math.abs(val) / maxVal) * chartHeight;
+
+      const positiveValues = points.map(p => Math.max(p.revenue, p.pl > 0 ? p.pl : 0)).filter(v => v > 0);
+      const negativeValues = points.map(p => p.pl < 0 ? Math.abs(p.pl) : 0).filter(v => v > 0);
+      const maxPositive = Math.max(...positiveValues, 0);
+      const maxNegative = Math.max(...negativeValues, 0);
+      const maxVal = Math.max(maxPositive, maxNegative);
+      const chartHeight = 400;
+      const zeroY = chartHeight / 2 + 50;
       const n = data.length || 1;
       const slotWidth = 700 / n;
-      const barWidth = 12;
-      const barGap = 5;
-      const xCenter = (i) => 50 + slotWidth * i + slotWidth / 2;
+      const xPos = (i) => 50 + slotWidth * i + slotWidth / 2;
+      const getY = (val) => {
+        if (val >= 0) return zeroY - (val / maxVal) * (chartHeight / 2);
+        return zeroY + (Math.abs(val) / maxVal) * (chartHeight / 2);
+      };
       const formatAxis = viewMode === 'percent' ? formatPercent : formatDollars;
       const legendItems = [
-        { label: 'COGS', color: 'var(--series-cogs)' },
-        { label: 'Operating Expenses', color: 'var(--series-opex)' },
-        { label: 'Profit', color: 'var(--series-pl-good)' },
-        { label: 'Loss', color: 'var(--series-pl-bad)' },
+        { label: 'Revenue', color: 'var(--series-cogs)' },
+        { label: 'Profit/Loss', color: 'var(--series-opex)' },
       ];
+
+      const revenuePath = points.map((p, i) => `${xPos(i)},${getY(p.revenue)}`).join(' L ');
+      const plPath = points.map((p, i) => `${xPos(i)},${getY(p.pl)}`).join(' L ');
+
       return (
         <div style={{ width: '100%' }}>
           <div className="chart-legend">
@@ -198,53 +203,45 @@
           </div>
           <svg width="100%" height="550" viewBox="0 0 800 550">
             <line x1="50" y1={zeroY} x2="750" y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
-            <line x1="50" y1="20" x2="50" y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
-            {[1, 2, 3, 4, 5].map(i => {
-              const posVal = (i * maxVal / 5);
-              const posY = zeroY - (i * chartHeight / 5);
-              return posY > 50 ? (
-                <g key={`pos-grid${i}`}>
+            <line x1="50" y1="20" x2="50" y2={chartHeight + 50} stroke="var(--chart-axis)" strokeWidth="2" />
+            {[1, 2, 3].map(i => {
+              const posVal = (i * maxVal / 3);
+              const posY = zeroY - (i * (chartHeight / 2) / 3);
+              const negY = zeroY + (i * (chartHeight / 2) / 3);
+              return (
+                <g key={`grid${i}`}>
                   <line x1="50" y1={posY} x2="750" y2={posY} stroke="var(--chart-grid)" strokeWidth="1" />
                   <text x="40" y={posY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{formatAxis(posVal)}</text>
-                </g>
-              ) : null;
-            })}
-            {bars.map((bar, i) => {
-              const cx = xCenter(i);
-              const offset = -(barWidth * 1.5 + barGap);
-              const cogsHeight = (Math.abs(bar.cogs) / maxVal) * chartHeight;
-              const opexHeight = (Math.abs(bar.opex) / maxVal) * chartHeight;
-              const plHeight = (Math.abs(bar.pl) / maxVal) * chartHeight;
-              const cogsY = zeroY - cogsHeight;
-              const opexY = zeroY - opexHeight;
-              const plY = zeroY - plHeight;
-              return (
-                <g key={`bars${i}`}>
-                  <rect x={cx + offset} y={cogsY} width={barWidth} height={cogsHeight} fill="var(--series-cogs)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <rect x={cx + offset + barWidth + barGap} y={opexY} width={barWidth} height={opexHeight} fill="var(--series-opex)" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <rect x={cx + offset + (barWidth + barGap) * 2} y={plY} width={barWidth} height={plHeight} fill={bar.pl >= 0 ? 'var(--series-pl-good)' : 'var(--series-pl-bad)'} rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <rect x={50 + i * slotWidth} y="20" width={slotWidth} height={zeroY - 20} fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
+                  <line x1="50" y1={negY} x2="750" y2={negY} stroke="var(--chart-grid)" strokeWidth="1" />
+                  <text x="40" y={negY + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{formatAxis(-posVal)}</text>
                 </g>
               );
             })}
-            {bars.map((bar, i) => (<text key={`label${i}`} x={xCenter(i)} y={zeroY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{bar.month}</text>))}
+            <polyline points={revenuePath} fill="none" stroke="var(--series-cogs)" strokeWidth="2.5" />
+            <polyline points={plPath} fill="none" stroke="var(--series-opex)" strokeWidth="2.5" />
+            {points.map((p, i) => (
+              <circle key={`rev${i}`} cx={xPos(i)} cy={getY(p.revenue)} r="3" fill="var(--series-cogs)" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />
+            ))}
+            {points.map((p, i) => (
+              <circle key={`pl${i}`} cx={xPos(i)} cy={getY(p.pl)} r="3" fill="var(--series-opex)" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />
+            ))}
+            {points.map((p, i) => (<text key={`label${i}`} x={xPos(i)} y={chartHeight + 70} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{p.month}</text>))}
             {hoveredMonth !== null && (
               (() => {
-                const bar = bars[hoveredMonth];
-                const cx = xCenter(hoveredMonth);
-                const tooltipWidth = 180;
-                const tooltipHeight = 100;
+                const p = points[hoveredMonth];
+                const cx = xPos(hoveredMonth);
+                const tooltipWidth = 200;
+                const tooltipHeight = 90;
                 const tooltipX = cx < 400 ? cx + 12 : cx - tooltipWidth - 12;
                 const tooltipY = 30;
                 const format = viewMode === 'percent' ? formatPercentPrecise : formatDollarsPrecise;
                 return (
                   <g key={`tooltip${hoveredMonth}`}>
-                    <line x1={cx} y1="20" x2={cx} y2={zeroY} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
+                    <line x1={cx} y1="20" x2={cx} y2={chartHeight + 50} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
                     <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
-                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{bar.month}</text>
-                    <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">COGS: {format(bar.cogs)}</text>
-                    <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">OpEx: {format(bar.opex)}</text>
-                    <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fill="var(--chart-ink-secondary)">{bar.pl >= 0 ? 'Profit' : 'Loss'}: {format(Math.abs(bar.pl))}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{p.month}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">Revenue: {format(p.revenue)}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill={p.pl >= 0 ? '#0ca30c' : '#d03b3b'} fontWeight="600">{p.pl >= 0 ? 'Profit' : 'Loss'}: {format(Math.abs(p.pl))}</text>
                   </g>
                 );
               })()
@@ -573,7 +570,7 @@
           const combined = [];
           dashData.monthlyData.forEach(m => {
             if (m.revenue > 0) {
-              const labor = m.opex || 0;
+              const labor = m.labor || 0;
               const foodPercent = (m.cogs / m.revenue) * 100;
               const laborPercent = (labor / m.revenue) * 100;
               const totalPercent = foodPercent + laborPercent;

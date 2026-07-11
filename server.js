@@ -556,6 +556,7 @@ const parseQBMonthlyPL = (report) => {
   const revenueVals = getVals(findQBSummaryRow(report.Rows?.Row, 'Income'));
   const cogsVals = getVals(findQBSummaryRow(report.Rows?.Row, 'COGS'));
   const opexVals = getVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
+  const laborVals = getVals(findQBSummaryRow(report.Rows?.Row, 'Payroll'));
   const netVals = getVals(report.Rows?.Row?.find((r) => r.group === 'NetIncome'));
 
   return monthCols.map((col) => {
@@ -566,6 +567,7 @@ const parseQBMonthlyPL = (report) => {
       revenue: revenueVals[col.index] || 0,
       cogs: cogsVals[col.index] || 0,
       opex: opexVals[col.index] || 0,
+      labor: laborVals[col.index] || 0,
       pl: netVals[col.index] || 0,
     };
   });
@@ -635,22 +637,25 @@ app.get('/api/dashboard', async (req, res) => {
         pl: data ? data.pl : 0,
         cogs: data ? data.cogs : 0,
         opex: data ? data.opex : 0,
+        labor: data ? data.labor : 0,
         revenue: data ? data.revenue : 0,
       };
     });
 
     // Calculate totals
-    let totalRevenue = 0, totalCogs = 0, totalOpex = 0;
+    let totalRevenue = 0, totalCogs = 0, totalOpex = 0, totalLabor = 0;
     Object.values(monthlyFinancial).forEach(m => {
       totalRevenue += m.revenue || 0;
       totalCogs += m.cogs || 0;
       totalOpex += m.opex || 0;
+      totalLabor += m.labor || 0;
     });
 
     const summary = totalRevenue > 0 ? {
       revenue: totalRevenue,
       cogs: totalCogs,
       opex: totalOpex,
+      labor: totalLabor,
       pl: totalRevenue - totalCogs - totalOpex,
       source: 'Multi-month P/L Statements'
     } : { source: 'No financial data uploaded yet' };
