@@ -513,7 +513,7 @@
                   <rect x={cx - barWidth / 2} y={foodY} width={barWidth} height={foodHeight} fill="#2a78d6" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
                   <rect x={cx - barWidth / 2} y={laborY} width={barWidth} height={laborHeight} fill="#1baf7a" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
                   <rect x={cx - slotWidth / 2} y="20" width={slotWidth} height={chartHeight + 30} fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <text x={cx} y={baselineY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{month.monthLabel}</text>
+                  <text x={cx} y={baselineY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{month.monthLabel.split(' ')[0]}</text>
                 </g>
               );
             })}
