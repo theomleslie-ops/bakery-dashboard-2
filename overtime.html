@@ -848,6 +848,12 @@
 
       const month = months.find((m) => m.monthKey === selectedMonth) || months[months.length - 1];
 
+      // Calculate totals across all months
+      const totalLabor = months.reduce((sum, m) => sum + m.totalWage, 0);
+      const totalBakeryOt = months.reduce((sum, m) => sum + m.bakeryOtWage, 0);
+      const totalNonBakeryOt = months.reduce((sum, m) => sum + m.nonBakeryOtWage, 0);
+      const totalOtWage = totalBakeryOt + totalNonBakeryOt;
+
       return (
         <div className="container">
           <header>
@@ -874,18 +880,23 @@
 
               <div className="metrics">
                 <div className="metric-card">
-                  <div className="metric-label">{fmtMonthLabel(month.monthKey)} &mdash; Total Labor $</div>
-                  <div className="metric-value">{fmtMoney(month.totalWage)}</div>
+                  <div className="metric-label">Total Labor $ ({months.length} months)</div>
+                  <div className="metric-value">{fmtMoney(totalLabor)}</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Total Overtime $</div>
+                  <div className="metric-value">{fmtMoney(totalOtWage)}</div>
+                  <div className="metric-sub">{pct(totalOtWage, totalLabor)} of total labor</div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-label">Bakery Overtime $</div>
-                  <div className="metric-value">{fmtMoney(month.bakeryOtWage)}</div>
-                  <div className="metric-sub">{pct(month.bakeryOtWage, month.totalWage)} of total labor</div>
+                  <div className="metric-value">{fmtMoney(totalBakeryOt)}</div>
+                  <div className="metric-sub">{pct(totalBakeryOt, totalLabor)} of total labor</div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-label">Non-Bakery Overtime $</div>
-                  <div className="metric-value">{fmtMoney(month.nonBakeryOtWage)}</div>
-                  <div className="metric-sub">{pct(month.nonBakeryOtWage, month.totalWage)} of total labor</div>
+                  <div className="metric-value">{fmtMoney(totalNonBakeryOt)}</div>
+                  <div className="metric-sub">{pct(totalNonBakeryOt, totalLabor)} of total labor</div>
                 </div>
               </div>
 
