@@ -697,23 +697,19 @@ app.get('/api/dashboard', async (req, res) => {
     const ingredients = loadData(INGREDIENTS_FILE);
     const monthlyFinancial = loadData('data/monthly-financial.json') || {};
 
-    const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    // Build monthly data from uploaded files (only include months with data)
-    let monthlyData = Array.from({ length: 12 }, (_, i) => {
-      const month = monthShorts[i];
-      const data = monthlyFinancial[month];
-
-      return {
-        month,
-        name: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][i],
-        pl: data ? data.pl : 0,
-        cogs: data ? data.cogs : 0,
-        opex: data ? data.opex : 0,
-        labor: data ? data.labor : 0,
-        revenue: data ? data.revenue : 0,
-      };
-    }).filter(m => m.revenue > 0);
+    // Build monthly data from uploaded files (handles year-month keys like "2026-Jun")
+    let monthlyData = Object.entries(monthlyFinancial)
+      .map(([key, data]) => ({
+        ...data,
+        sortKey: key, // for chronological sorting
+      }))
+      .sort((a, b) => {
+        // Sort by year-month key chronologically
+        const aKey = a.sortKey || `${a.year}-${a.month}`;
+        const bKey = b.sortKey || `${b.year}-${b.month}`;
+        return aKey.localeCompare(bKey);
+      })
+      .filter(m => m.revenue > 0);
 
     // Calculate totals
     let totalRevenue = 0, totalCogs = 0, totalOpex = 0, totalLabor = 0;
