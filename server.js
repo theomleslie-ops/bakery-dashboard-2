@@ -699,7 +699,7 @@ app.get('/api/dashboard', async (req, res) => {
 
     const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    // Build monthly data from uploaded files
+    // Build monthly data from uploaded files (only include months with data)
     let monthlyData = Array.from({ length: 12 }, (_, i) => {
       const month = monthShorts[i];
       const data = monthlyFinancial[month];
@@ -713,7 +713,7 @@ app.get('/api/dashboard', async (req, res) => {
         labor: data ? data.labor : 0,
         revenue: data ? data.revenue : 0,
       };
-    });
+    }).filter(m => m.revenue > 0);
 
     // Calculate totals
     let totalRevenue = 0, totalCogs = 0, totalOpex = 0, totalLabor = 0;
