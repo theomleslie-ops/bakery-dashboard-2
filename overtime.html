@@ -668,7 +668,7 @@
     // OT] so the OT segments visibly eat into the total instead of adding beyond it.
     // All months render on one screen (no chart pagination). Origin is 0 at the
     // bottom-left, values only increase upward/rightward (quadrant 1).
-    function MonthlyStackedBarChart({ months, selectedMonth, onSelectMonth }) {
+    function MonthlyStackedBarChart({ months, selectedMonth, onSelectMonth, yearlyTotals, year }) {
       const [hovered, setHovered] = useState(null);
       const maxTotal = niceMax(Math.max(...months.map((m) => m.totalWage), 0) * 1.08);
       const tickCount = 5;
@@ -706,13 +706,19 @@
                       <div className="seg seg-base" style={{ height: `${basePx}px` }} />
                       <div className="seg seg-bakery" style={{ height: `${bakeryPx}px` }} />
                       <div className="seg seg-nonbakery" style={{ height: `${nonBakeryPx}px` }} />
-                      {hovered === m.monthKey && (
+                      {hovered === m.monthKey && yearlyTotals && (
                         <div className="stack-tooltip">
-                          <strong>{fmtMonthLabel(m.monthKey)}</strong><br />
-                          Total labor: {fmtMoney(m.totalWage)}<br />
-                          Bakery OT: {fmtMoney(m.bakeryOtWage)} ({pct(m.bakeryOtWage, m.totalWage)} of total)<br />
-                          Non-bakery OT: {fmtMoney(m.nonBakeryOtWage)} ({pct(m.nonBakeryOtWage, m.totalWage)} of total)<br />
-                          <strong>Total OT: {fmtMoney(m.bakeryOtWage + m.nonBakeryOtWage)}</strong>
+                          <strong>{year} — Total Labor $</strong><br />
+                          {fmtMoney(yearlyTotals.totalLabor)}<br />
+                          <br />
+                          <strong>Total OT $</strong><br />
+                          {fmtMoney(yearlyTotals.totalOtWage)}<br />
+                          <br />
+                          <strong>Bakery OT $</strong><br />
+                          {fmtMoney(yearlyTotals.totalBakeryOt)} ({pct(yearlyTotals.totalBakeryOt, yearlyTotals.totalLabor)} of total)<br />
+                          <br />
+                          <strong>Non-Bakery OT $</strong><br />
+                          {fmtMoney(yearlyTotals.totalNonBakeryOt)} ({pct(yearlyTotals.totalNonBakeryOt, yearlyTotals.totalLabor)} of total)
                         </div>
                       )}
                     </div>
@@ -878,30 +884,9 @@
                   <div className="legend-item"><span className="swatch swatch-bakery"></span>Bakery overtime</div>
                   <div className="legend-item"><span className="swatch swatch-nonbakery"></span>Non-bakery overtime</div>
                 </div>
-                <MonthlyStackedBarChart months={months} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
+                <MonthlyStackedBarChart months={months} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} yearlyTotals={{ totalLabor, totalBakeryOt, totalNonBakeryOt, totalOtWage }} year={selectedYear} />
               </div>
 
-              <div className="metrics">
-                <div className="metric-card">
-                  <div className="metric-label">{selectedYear} — Total Labor $</div>
-                  <div className="metric-value">{fmtMoney(totalLabor)}</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Total Overtime $</div>
-                  <div className="metric-value">{fmtMoney(totalOtWage)}</div>
-                  <div className="metric-sub">{pct(totalOtWage, totalLabor)} of total labor</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Bakery Overtime $</div>
-                  <div className="metric-value">{fmtMoney(totalBakeryOt)}</div>
-                  <div className="metric-sub">{pct(totalBakeryOt, totalLabor)} of total labor</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Non-Bakery Overtime $</div>
-                  <div className="metric-value">{fmtMoney(totalNonBakeryOt)}</div>
-                  <div className="metric-sub">{pct(totalNonBakeryOt, totalLabor)} of total labor</div>
-                </div>
-              </div>
 
             </React.Fragment>
           )}
