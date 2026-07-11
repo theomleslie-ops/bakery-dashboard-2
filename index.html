@@ -260,11 +260,7 @@
     function DashboardContent() {
       const [data, setData] = useState([]);
       const [error, setError] = useState('');
-      const [dateRangeStart, setDateRangeStart] = useState(0);
-      const [dateRangeEnd, setDateRangeEnd] = useState(11);
       const [viewMode, setViewMode] = useState('dollars');
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const filteredData = data.slice(dateRangeStart, dateRangeEnd + 1);
       useEffect(() => { fetchData(); }, []);
       const fetchData = async () => {
         try {
@@ -284,15 +280,6 @@
           </header>
           {error && <div className="error">{error}</div>}
           <div className="controls">
-            <div>
-              <label style={{ fontSize: '13px', color: '#666', marginRight: '10px', fontWeight: '600' }}>Timeframe:</label>
-              <select value={dateRangeStart} onChange={(e) => setDateRangeStart(parseInt(e.target.value))} style={{ padding: '6px', marginRight: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
-                {months.map((m, i) => (<option key={i} value={i}>From {m}</option>))}
-              </select>
-              <select value={dateRangeEnd} onChange={(e) => setDateRangeEnd(parseInt(e.target.value))} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
-                {months.map((m, i) => (<option key={i} value={i}>To {m}</option>))}
-              </select>
-            </div>
             <div className="view-toggle">
               <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
               <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
@@ -300,7 +287,7 @@
           </div>
           <div className="chart-container">
             <div className="chart-title">COGS, Operating Expenses & Profit/Loss by Month ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
-            <StackedBarChart data={filteredData} viewMode={viewMode} />
+            <StackedBarChart data={data} viewMode={viewMode} />
           </div>
         </div>
       );
