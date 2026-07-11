@@ -1,56 +1,242 @@
 {
-  "Jun": {
-    "month": "Jun",
-    "name": "June",
-    "revenue": 702228.59,
-    "cogs": 153855.76,
-    "labor": 291312.38,
-    "opex": 107279.35,
-    "pl": 149781.1
-  },
-  "May": {
-    "month": "May",
-    "name": "May",
-    "revenue": 610507.3,
-    "cogs": 199774.01,
-    "labor": 287380.68,
-    "opex": 84143.26,
-    "pl": 39209.35
-  },
-  "Apr": {
-    "month": "Apr",
-    "name": "April",
-    "revenue": 535199.56,
-    "cogs": 177590.06000000003,
-    "labor": 414924.75,
-    "opex": 91220.84,
-    "pl": -148536.09
-  },
-  "Mar": {
-    "month": "Mar",
-    "name": "March",
-    "revenue": 605767.12,
-    "cogs": 197292.44,
-    "labor": 283309.48,
-    "opex": 90160.86,
-    "pl": 35004.34
-  },
-  "Feb": {
-    "month": "Feb",
-    "name": "February",
-    "revenue": 505906.78,
-    "cogs": 153225.53,
-    "labor": 279014.86,
-    "opex": 95408.9,
-    "pl": -21742.51
-  },
-  "Jan": {
+  "2026-Jan": {
     "month": "Jan",
     "name": "January",
+    "year": 2026,
     "revenue": 567651.07,
     "cogs": 146119.84,
     "labor": 239701.1,
-    "opex": 115513.92,
+    "opex": 111312.24,
     "pl": 66316.21
+  },
+  "2026-Feb": {
+    "month": "Feb",
+    "name": "February",
+    "year": 2026,
+    "revenue": 505906.78,
+    "cogs": 153225.53,
+    "labor": 279014.86,
+    "opex": 91534.87,
+    "pl": -21742.51
+  },
+  "2026-Mar": {
+    "month": "Mar",
+    "name": "March",
+    "year": 2026,
+    "revenue": 605767.12,
+    "cogs": 197292.44,
+    "labor": 283309.48,
+    "opex": 86348.64,
+    "pl": 35004.34
+  },
+  "2026-Apr": {
+    "month": "Apr",
+    "name": "April",
+    "year": 2026,
+    "revenue": 535199.56,
+    "cogs": 177590.06,
+    "labor": 414924.75,
+    "opex": 87377.61,
+    "pl": -148536.09
+  },
+  "2026-May": {
+    "month": "May",
+    "name": "May",
+    "year": 2026,
+    "revenue": 610507.3,
+    "cogs": 199774.01,
+    "labor": 287380.68,
+    "opex": 80639.74,
+    "pl": 39209.35
+  },
+  "2026-Jun": {
+    "month": "Jun",
+    "name": "June",
+    "year": 2026,
+    "revenue": 702228.59,
+    "cogs": 153855.76,
+    "labor": 291312.38,
+    "opex": 101308.14,
+    "pl": 149781.1
+  },
+  "2025-Jan": {
+    "month": "Jan",
+    "name": "January",
+    "year": 2025,
+    "revenue": 462587.82,
+    "cogs": 172688.53,
+    "labor": 245670.72,
+    "opex": 86440.15,
+    "pl": -48487.11
+  },
+  "2025-Feb": {
+    "month": "Feb",
+    "name": "February",
+    "year": 2025,
+    "revenue": 406045.26,
+    "cogs": 166297.88,
+    "labor": 295397.04,
+    "opex": 80916.94,
+    "pl": -140593.67
+  },
+  "2025-Mar": {
+    "month": "Mar",
+    "name": "March",
+    "year": 2025,
+    "revenue": 523089.11,
+    "cogs": 186689.18,
+    "labor": 236450.63,
+    "opex": 77550.26,
+    "pl": 18333.42
+  },
+  "2025-Apr": {
+    "month": "Apr",
+    "name": "April",
+    "year": 2025,
+    "revenue": 525243.35,
+    "cogs": 182806.83,
+    "labor": 235211.89,
+    "opex": 92779.46,
+    "pl": 9960.88
+  },
+  "2025-May": {
+    "month": "May",
+    "name": "May",
+    "year": 2025,
+    "revenue": 563334.11,
+    "cogs": 207738.8,
+    "labor": 369747.08,
+    "opex": 66759.84,
+    "pl": -85128.89
+  },
+  "2025-Jun": {
+    "month": "Jun",
+    "name": "June",
+    "year": 2025,
+    "revenue": 635101.6,
+    "cogs": 250719.85,
+    "labor": 270927.23,
+    "opex": 76174.27,
+    "pl": 32194.79
+  },
+  "2025-Jul": {
+    "month": "Jul",
+    "name": "July",
+    "year": 2025,
+    "revenue": 605360.82,
+    "cogs": 188393.78,
+    "labor": 267612.33,
+    "opex": 93304.92,
+    "pl": 51806.84
+  },
+  "2025-Aug": {
+    "month": "Aug",
+    "name": "August",
+    "year": 2025,
+    "revenue": 589595.17,
+    "cogs": 214591.97,
+    "labor": 290240.67,
+    "opex": 95938.62,
+    "pl": -15530.36
+  },
+  "2025-Sep": {
+    "month": "Sep",
+    "name": "September",
+    "year": 2025,
+    "revenue": 645972.6,
+    "cogs": 217351.7,
+    "labor": 274971,
+    "opex": 79138.81,
+    "pl": 70217.68
+  },
+  "2025-Oct": {
+    "month": "Oct",
+    "name": "October",
+    "year": 2025,
+    "revenue": 587568.38,
+    "cogs": 191889.25,
+    "labor": 417257.06,
+    "opex": 73636.9,
+    "pl": -99271.23
+  },
+  "2025-Nov": {
+    "month": "Nov",
+    "name": "November",
+    "year": 2025,
+    "revenue": 599237.63,
+    "cogs": 176012.24,
+    "labor": 279834.65,
+    "opex": 80671.3,
+    "pl": 58790.77
+  },
+  "2025-Dec": {
+    "month": "Dec",
+    "name": "December",
+    "year": 2025,
+    "revenue": 547567.82,
+    "cogs": 172968.14,
+    "labor": 290387.04,
+    "opex": 100897,
+    "pl": -21939.68
+  },
+  "2024-Jul": {
+    "month": "Jul",
+    "name": "July",
+    "year": 2024,
+    "revenue": 435264.42,
+    "cogs": 284540.05,
+    "labor": 98189.84,
+    "opex": 117974.53,
+    "pl": -67538.12
+  },
+  "2024-Aug": {
+    "month": "Aug",
+    "name": "August",
+    "year": 2024,
+    "revenue": 490774.6,
+    "cogs": 349806.34,
+    "labor": 14560.1,
+    "opex": 104663.07,
+    "pl": 19424.65
+  },
+  "2024-Sep": {
+    "month": "Sep",
+    "name": "September",
+    "year": 2024,
+    "revenue": 524327.72,
+    "cogs": 316410.36,
+    "labor": 43464.39,
+    "opex": 133113.94,
+    "pl": 28872.57
+  },
+  "2024-Oct": {
+    "month": "Oct",
+    "name": "October",
+    "year": 2024,
+    "revenue": 475411.24,
+    "cogs": 308923.08,
+    "labor": 153895.04,
+    "opex": 101056.51,
+    "pl": -90729.68
+  },
+  "2024-Nov": {
+    "month": "Nov",
+    "name": "November",
+    "year": 2024,
+    "revenue": 504244.77,
+    "cogs": 311546.21,
+    "labor": 91127.51,
+    "opex": 121368.89,
+    "pl": -22645.06
+  },
+  "2024-Dec": {
+    "month": "Dec",
+    "name": "December",
+    "year": 2024,
+    "revenue": 273249.65,
+    "cogs": 118027.21,
+    "labor": 197377.09,
+    "opex": 47374.08,
+    "pl": -148699.34
   }
 }
