@@ -711,7 +711,8 @@
                           <strong>{fmtMonthLabel(m.monthKey)}</strong><br />
                           Total labor: {fmtMoney(m.totalWage)}<br />
                           Bakery OT: {fmtMoney(m.bakeryOtWage)} ({pct(m.bakeryOtWage, m.totalWage)} of total)<br />
-                          Non-bakery OT: {fmtMoney(m.nonBakeryOtWage)} ({pct(m.nonBakeryOtWage, m.totalWage)} of total)
+                          Non-bakery OT: {fmtMoney(m.nonBakeryOtWage)} ({pct(m.nonBakeryOtWage, m.totalWage)} of total)<br />
+                          <strong>Total OT: {fmtMoney(m.bakeryOtWage + m.nonBakeryOtWage)}</strong>
                         </div>
                       )}
                     </div>
@@ -847,11 +848,13 @@
       };
 
       const month = months.find((m) => m.monthKey === selectedMonth) || months[months.length - 1];
+      const selectedYear = month.monthKey.split('-')[0];
 
-      // Calculate totals across all months
-      const totalLabor = months.reduce((sum, m) => sum + m.totalWage, 0);
-      const totalBakeryOt = months.reduce((sum, m) => sum + m.bakeryOtWage, 0);
-      const totalNonBakeryOt = months.reduce((sum, m) => sum + m.nonBakeryOtWage, 0);
+      // Calculate totals for the selected year
+      const yearMonths = months.filter(m => m.monthKey.split('-')[0] === selectedYear);
+      const totalLabor = yearMonths.reduce((sum, m) => sum + m.totalWage, 0);
+      const totalBakeryOt = yearMonths.reduce((sum, m) => sum + m.bakeryOtWage, 0);
+      const totalNonBakeryOt = yearMonths.reduce((sum, m) => sum + m.nonBakeryOtWage, 0);
       const totalOtWage = totalBakeryOt + totalNonBakeryOt;
 
       return (
@@ -880,7 +883,7 @@
 
               <div className="metrics">
                 <div className="metric-card">
-                  <div className="metric-label">Total Labor $ ({months.length} months)</div>
+                  <div className="metric-label">{selectedYear} — Total Labor $</div>
                   <div className="metric-value">{fmtMoney(totalLabor)}</div>
                 </div>
                 <div className="metric-card">
