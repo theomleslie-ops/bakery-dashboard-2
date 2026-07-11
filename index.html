@@ -192,10 +192,10 @@
       };
 
       const legendItems = [
-        { label: 'Revenue', color: '#2a78d6' },
-        { label: 'COGS', color: 'var(--series-cogs)' },
-        { label: 'Operating Expenses', color: 'var(--series-opex)' },
-        { label: 'Profit/Loss', color: 'var(--series-pl-good)' },
+        { label: 'Revenue', color: '#2d3748' },
+        { label: 'COGS', color: '#2d3748' },
+        { label: 'Operating Expenses', color: '#2d3748' },
+        { label: 'Profit/Loss', color: '#2d3748' },
       ];
 
       return (
@@ -221,27 +221,14 @@
                 </g>
               );
             })}
-            <polyline points={makePath('revenue')} fill="none" stroke="#2a78d6" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            <polyline points={makePath('cogs')} fill="none" stroke="var(--series-cogs)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            <polyline points={makePath('opex')} fill="none" stroke="var(--series-opex)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            {points.map((p, i) => {
-              if (i < points.length - 1) {
-                const x1 = xPos(i);
-                const y1 = getY(p.pl);
-                const x2 = xPos(i + 1);
-                const y2 = getY(points[i + 1].pl);
-                const color = p.pl >= 0 ? 'var(--series-pl-good)' : 'var(--series-pl-bad)';
-                return <line key={`pl-line${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth="2.5" vectorEffect="non-scaling-stroke" />;
-              }
-              return null;
-            })}
-            {points.map((p, i) => (<circle key={`rev${i}`} cx={xPos(i)} cy={getY(p.revenue)} r="3" fill="#2a78d6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => (<circle key={`cogs${i}`} cx={xPos(i)} cy={getY(p.cogs)} r="3" fill="var(--series-cogs)" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => (<circle key={`opex${i}`} cx={xPos(i)} cy={getY(p.opex)} r="3" fill="var(--series-opex)" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => {
-              const plColor = p.pl >= 0 ? 'var(--series-pl-good)' : 'var(--series-pl-bad)';
-              return <circle key={`pl${i}`} cx={xPos(i)} cy={getY(p.pl)} r="3" fill={plColor} onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />;
-            })}
+            <polyline points={makePath('revenue')} fill="none" stroke="#2d3748" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+            <polyline points={makePath('cogs')} fill="none" stroke="#2d3748" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+            <polyline points={makePath('opex')} fill="none" stroke="#2d3748" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+            <polyline points={makePath('pl')} fill="none" stroke="#2d3748" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+            {points.map((p, i) => (<circle key={`rev${i}`} cx={xPos(i)} cy={getY(p.revenue)} r="3" fill="#2d3748" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
+            {points.map((p, i) => (<circle key={`cogs${i}`} cx={xPos(i)} cy={getY(p.cogs)} r="3" fill="#2d3748" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
+            {points.map((p, i) => (<circle key={`opex${i}`} cx={xPos(i)} cy={getY(p.opex)} r="3" fill="#2d3748" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
+            {points.map((p, i) => (<circle key={`pl${i}`} cx={xPos(i)} cy={getY(p.pl)} r="3" fill="#2d3748" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
             {points.map((p, i) => (<text key={`label${i}`} x={xPos(i)} y={50 + chartHeight + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{p.month}</text>))}
             {hoveredMonth !== null && (
               (() => {
@@ -260,7 +247,7 @@
                     <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">Revenue: {format(p.revenue)}</text>
                     <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">COGS: {format(p.cogs)}</text>
                     <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fill="var(--chart-ink-secondary)">OpEx: {format(p.opex)}</text>
-                    <text x={tooltipX + 10} y={tooltipY + 90} fontSize="11" fill={p.pl >= 0 ? 'var(--series-pl-good)' : 'var(--series-pl-bad)'} fontWeight="600">{p.pl >= 0 ? 'Profit' : 'Loss'}: {format(Math.abs(p.pl))}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 90} fontSize="11" fill="var(--chart-ink-secondary)" fontWeight="600">{p.pl >= 0 ? 'Profit' : 'Loss'}: {format(Math.abs(p.pl))}</text>
                   </g>
                 );
               })()
