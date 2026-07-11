@@ -568,7 +568,9 @@
               const laborPercent = (labor / m.revenue) * 100;
               const totalPercent = foodPercent + laborPercent;
               combined.push({
-                monthLabel: m.month,
+                monthLabel: `${m.month} ${m.year}`,
+                year: m.year,
+                monthNum: monthShorts.indexOf(m.month) + 1,
                 revenue: m.revenue,
                 foodPercent,
                 laborPercent,
@@ -577,7 +579,8 @@
             }
           });
           setMonths(combined.sort((a, b) => {
-            return monthShorts.indexOf(a.monthLabel) - monthShorts.indexOf(b.monthLabel);
+            if (a.year !== b.year) return a.year - b.year;
+            return a.monthNum - b.monthNum;
           }));
           setStatus(combined.length > 0 ? 'ready' : 'empty');
         } catch (err) {
