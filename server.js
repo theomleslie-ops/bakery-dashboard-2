@@ -29,9 +29,9 @@ class CacheManager {
   }
 
   set(key, value, ttlMs) {
-    this.cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+    this.cache.set(key, { value, expiresAt: ttlMs === Infinity ? Infinity : Date.now() + ttlMs });
     if (this.timers.has(key)) clearTimeout(this.timers.get(key));
-    if (ttlMs > 0) {
+    if (ttlMs > 0 && ttlMs !== Infinity) {
       const timer = setTimeout(() => {
         this.cache.delete(key);
         this.timers.delete(key);
@@ -62,10 +62,12 @@ class CacheManager {
   status() {
     const entries = [];
     this.cache.forEach((entry, key) => {
+      const expiresAt = entry.expiresAt === Infinity ? 'never' : new Date(entry.expiresAt).toISOString();
+      const expiresIn = entry.expiresAt === Infinity ? 'indefinite' : Math.ceil((entry.expiresAt - Date.now()) / 1000) + 's';
       entries.push({
         key,
-        expiresAt: new Date(entry.expiresAt).toISOString(),
-        expiresIn: Math.ceil((entry.expiresAt - Date.now()) / 1000) + 's',
+        expiresAt,
+        expiresIn,
       });
     });
     return entries;
@@ -137,7 +139,7 @@ app.get('/api/recipes', (req, res) => {
   let recipes = cacheManager.get('recipes');
   if (!recipes) {
     recipes = loadData(RECIPES_FILE);
-    cacheManager.set('recipes', recipes, 365 * 24 * 60 * 60 * 1000); // Cache for 1 year (until invalidated)
+    cacheManager.set('recipes', recipes, Infinity); // Cache indefinitely (until invalidated by new upload)
   }
   res.json(recipes);
 });
@@ -147,7 +149,7 @@ app.get('/api/ingredients', (req, res) => {
   let ingredients = cacheManager.get('ingredients');
   if (!ingredients) {
     ingredients = loadData(INGREDIENTS_FILE);
-    cacheManager.set('ingredients', ingredients, 365 * 24 * 60 * 60 * 1000); // Cache for 1 year (until invalidated)
+    cacheManager.set('ingredients', ingredients, Infinity); // Cache indefinitely (until invalidated by new upload)
   }
   res.json(ingredients);
 });
