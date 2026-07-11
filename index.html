@@ -171,14 +171,20 @@
       });
 
       const allValues = points.flatMap(p => [p.revenue, p.cogs, p.opex, p.pl]);
-      const maxVal = Math.max(...allValues.filter(v => v >= 0), 0);
-      const minVal = Math.min(...allValues.filter(v => v < 0), 0);
+      const positiveVals = allValues.filter(v => v >= 0);
+      const negativeVals = allValues.filter(v => v < 0);
+      const maxVal = positiveVals.length > 0 ? Math.max(...positiveVals) : 100000;
+      const minVal = negativeVals.length > 0 ? Math.min(...negativeVals) : 0;
+      const range = maxVal + Math.abs(minVal) || 1;
       const chartHeight = 400;
-      const zeroY = 50 + (chartHeight * Math.abs(minVal)) / (maxVal + Math.abs(minVal));
+      const zeroY = 50 + (chartHeight * Math.abs(minVal)) / range;
       const n = data.length || 1;
       const slotWidth = 700 / n;
       const xPos = (i) => 50 + slotWidth * i + slotWidth / 2;
-      const getY = (val) => zeroY - (val / (maxVal + Math.abs(minVal))) * chartHeight;
+      const getY = (val) => {
+        const safeVal = isNaN(val) ? 0 : val;
+        return zeroY - (safeVal / range) * chartHeight;
+      };
       const formatAxis = viewMode === 'percent' ? formatPercent : formatDollars;
 
       const makePath = (key) => {
