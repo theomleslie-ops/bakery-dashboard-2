@@ -593,6 +593,40 @@
 
     // Roll weekly, by-function data up into months, split into bakery vs. non-bakery
     // overtime, and keep a by-function breakdown (with employee detail when available).
+    function buildWeeklyData(weeks) {
+      return weeks.map((w) => {
+        const functions = (w.functions || [])
+          .map((f) => ({
+            function: f.function,
+            category: classifyFunction(f.function),
+            regularHours: round2(f.regularHours || 0),
+            otHours: round2(f.ot15Hours + f.ot2Hours || 0),
+            ot15Hours: round2(f.ot15Hours || 0),
+            ot2Hours: round2(f.ot2Hours || 0),
+            regularWage: round2(f.regularWage || 0),
+            otWage: round2(f.otWage || 0),
+            employees: (f.employees || [])
+              .sort((a, b) => b.otWage - a.otWage)
+              .map((e) => ({ name: e.name, otHours: round2(e.otHours), otWage: round2(e.otWage) })),
+          }))
+          .sort((a, b) => b.otWage - a.otWage);
+
+        const totalWage = functions.reduce((s, f) => s + f.regularWage + f.otWage, 0);
+        const bakeryOtWage = functions.filter((f) => f.category === 'bakery').reduce((s, f) => s + f.otWage, 0);
+        const nonBakeryOtWage = functions.filter((f) => f.category === 'non-bakery').reduce((s, f) => s + f.otWage, 0);
+
+        return {
+          monthKey: w.weekStart, // Use weekStart as the key
+          totalWage: round2(totalWage),
+          bakeryOtWage: round2(bakeryOtWage),
+          nonBakeryOtWage: round2(nonBakeryOtWage),
+          baseWage: round2(Math.max(totalWage - bakeryOtWage - nonBakeryOtWage, 0)),
+          totalOtWage: round2(bakeryOtWage + nonBakeryOtWage),
+          functions,
+        };
+      });
+    }
+
     function buildMonthlyData(weeks) {
       const monthMap = new Map();
 
@@ -668,7 +702,7 @@
     // OT] so the OT segments visibly eat into the total instead of adding beyond it.
     // All months render on one screen (no chart pagination). Origin is 0 at the
     // bottom-left, values only increase upward/rightward (quadrant 1).
-    function MonthlyStackedBarChart({ months, selectedMonth, onSelectMonth }) {
+    function MonthlyStackedBarChart({ months, selectedMonth, onSelectMonth, yearlyTotals, year }) {
       const [hovered, setHovered] = useState(null);
       const maxTotal = niceMax(Math.max(...months.map((m) => m.totalWage), 0) * 1.08);
       const tickCount = 5;
@@ -706,13 +740,19 @@
                       <div className="seg seg-base" style={{ height: `${basePx}px` }} />
                       <div className="seg seg-bakery" style={{ height: `${bakeryPx}px` }} />
                       <div className="seg seg-nonbakery" style={{ height: `${nonBakeryPx}px` }} />
-                      {hovered === m.monthKey && (
+                      {hovered === m.monthKey && yearlyTotals && (
                         <div className="stack-tooltip">
-                          <strong>{fmtMonthLabel(m.monthKey)}</strong><br />
-                          Total labor: {fmtMoney(m.totalWage)}<br />
-                          Bakery OT: {fmtMoney(m.bakeryOtWage)} ({pct(m.bakeryOtWage, m.totalWage)} of total)<br />
-                          Non-bakery OT: {fmtMoney(m.nonBakeryOtWage)} ({pct(m.nonBakeryOtWage, m.totalWage)} of total)<br />
-                          <strong>Total OT: {fmtMoney(m.bakeryOtWage + m.nonBakeryOtWage)}</strong>
+                          <strong>{year} — Total Labor $</strong><br />
+                          {fmtMoney(yearlyTotals.totalLabor)}<br />
+                          <br />
+                          <strong>Total OT $</strong><br />
+                          {fmtMoney(yearlyTotals.totalOtWage)}<br />
+                          <br />
+                          <strong>Bakery OT $</strong><br />
+                          {fmtMoney(yearlyTotals.totalBakeryOt)} ({pct(yearlyTotals.totalBakeryOt, yearlyTotals.totalLabor)} of total)<br />
+                          <br />
+                          <strong>Non-Bakery OT $</strong><br />
+                          {fmtMoney(yearlyTotals.totalNonBakeryOt)} ({pct(yearlyTotals.totalNonBakeryOt, yearlyTotals.totalLabor)} of total)
                         </div>
                       )}
                     </div>
@@ -816,8 +856,10 @@
 
     function OvertimeContent() {
       const [months, setMonths] = useState([]);
+      const [weeks, setWeeks] = useState([]);
       const [employeeDetail, setEmployeeDetail] = useState(true);
       const [selectedMonth, setSelectedMonth] = useState(null);
+      const [timespan, setTimespan] = useState('month'); // 'month' or 'week'
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
 
@@ -836,11 +878,14 @@
             setStatus('error');
             return;
           }
-          const built = buildMonthlyData(result.weeks || []);
-          setMonths(built);
+          const rawWeeks = result.weeks || [];
+          const builtWeeks = buildWeeklyData(rawWeeks);
+          const builtMonths = buildMonthlyData(rawWeeks);
+          setWeeks(builtWeeks);
+          setMonths(builtMonths);
           setEmployeeDetail(result.employeeDetail !== false);
-          setSelectedMonth(built.length ? built[built.length - 1].monthKey : null);
-          setStatus(built.length ? 'ready' : 'empty');
+          setSelectedMonth(builtMonths.length ? builtMonths[builtMonths.length - 1].monthKey : null);
+          setStatus(builtMonths.length ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
@@ -857,51 +902,39 @@
       const totalNonBakeryOt = yearMonths.reduce((sum, m) => sum + m.nonBakeryOtWage, 0);
       const totalOtWage = totalBakeryOt + totalNonBakeryOt;
 
+      const displayData = timespan === 'week' ? weeks : months;
+      const displayItem = displayData[displayData.length - 1];
+
       return (
         <div className="container">
-          <header>
-            <h1>🍞 Bakery Overtime Report</h1>
-            <p className="subtitle">Monthly labor cost and overtime by function, from Square timecards</p>
+          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h1>🍞 Bakery Overtime Report</h1>
+              <p className="subtitle">Labor cost and overtime by function, from Square timecards (last 2 years)</p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              <button className={timespan === 'month' ? 'active' : ''} onClick={() => setTimespan('month')}>Monthly</button>
+              <button className={timespan === 'week' ? 'active' : ''} onClick={() => setTimespan('week')}>Weekly</button>
+            </div>
           </header>
 
           {status === 'loading' && <div className="loading">Loading timecards from Square&hellip;</div>}
           {status === 'error' && <div className="error">{error}</div>}
           {status === 'empty' && <div className="empty">No timecards found.</div>}
 
-          {status === 'ready' && month && (
+          {status === 'ready' && displayItem && (
             <React.Fragment>
               <div className="panel">
-                <div className="panel-title">Total Labor Cost by Month</div>
+                <div className="panel-title">Total Labor Cost by {timespan === 'week' ? 'Week' : 'Month'}</div>
                 <div className="panel-hint">Hover a bar for the exact split.</div>
                 <div className="legend">
                   <div className="legend-item"><span className="swatch swatch-base"></span>Regular &amp; other wages</div>
                   <div className="legend-item"><span className="swatch swatch-bakery"></span>Bakery overtime</div>
                   <div className="legend-item"><span className="swatch swatch-nonbakery"></span>Non-bakery overtime</div>
                 </div>
-                <MonthlyStackedBarChart months={months} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
+                <MonthlyStackedBarChart months={displayData} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} yearlyTotals={{ totalLabor, totalBakeryOt, totalNonBakeryOt, totalOtWage }} year={selectedYear} />
               </div>
 
-              <div className="metrics">
-                <div className="metric-card">
-                  <div className="metric-label">{selectedYear} — Total Labor $</div>
-                  <div className="metric-value">{fmtMoney(totalLabor)}</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Total Overtime $</div>
-                  <div className="metric-value">{fmtMoney(totalOtWage)}</div>
-                  <div className="metric-sub">{pct(totalOtWage, totalLabor)} of total labor</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Bakery Overtime $</div>
-                  <div className="metric-value">{fmtMoney(totalBakeryOt)}</div>
-                  <div className="metric-sub">{pct(totalBakeryOt, totalLabor)} of total labor</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Non-Bakery Overtime $</div>
-                  <div className="metric-value">{fmtMoney(totalNonBakeryOt)}</div>
-                  <div className="metric-sub">{pct(totalNonBakeryOt, totalLabor)} of total labor</div>
-                </div>
-              </div>
 
             </React.Fragment>
           )}
