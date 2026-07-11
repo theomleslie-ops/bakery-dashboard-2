@@ -698,16 +698,19 @@ app.get('/api/dashboard', async (req, res) => {
     const monthlyFinancial = loadData('data/monthly-financial.json') || {};
 
     // Build monthly data from uploaded files (handles year-month keys like "2026-Jun")
+    const monthToNum = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
     let monthlyData = Object.entries(monthlyFinancial)
       .map(([key, data]) => ({
         ...data,
-        sortKey: key, // for chronological sorting
+        sortKey: key,
       }))
       .sort((a, b) => {
-        // Sort by year-month key chronologically
-        const aKey = a.sortKey || `${a.year}-${a.month}`;
-        const bKey = b.sortKey || `${b.year}-${b.month}`;
-        return aKey.localeCompare(bKey);
+        const aYear = a.year;
+        const bYear = b.year;
+        if (aYear !== bYear) return aYear - bYear;
+        const aMonth = monthToNum[a.month] || 0;
+        const bMonth = monthToNum[b.month] || 0;
+        return aMonth - bMonth;
       })
       .filter(m => m.revenue > 0);
 
