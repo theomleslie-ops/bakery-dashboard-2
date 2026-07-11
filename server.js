@@ -21,6 +21,59 @@ const RECIPES_FILE = path.join(DATA_DIR, 'recipes.json');
 const INGREDIENTS_FILE = path.join(DATA_DIR, 'ingredients.json');
 const FINANCIAL_FILE = path.join(DATA_DIR, 'financial.json');
 
+// ============= CACHE MANAGER =============
+class CacheManager {
+  constructor() {
+    this.cache = new Map();
+    this.timers = new Map();
+  }
+
+  set(key, value, ttlMs) {
+    this.cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+    if (this.timers.has(key)) clearTimeout(this.timers.get(key));
+    if (ttlMs > 0) {
+      const timer = setTimeout(() => {
+        this.cache.delete(key);
+        this.timers.delete(key);
+      }, ttlMs);
+      this.timers.set(key, timer);
+    }
+  }
+
+  get(key) {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      this.timers.delete(key);
+      return null;
+    }
+    return entry.value;
+  }
+
+  invalidate(key) {
+    this.cache.delete(key);
+    if (this.timers.has(key)) {
+      clearTimeout(this.timers.get(key));
+      this.timers.delete(key);
+    }
+  }
+
+  status() {
+    const entries = [];
+    this.cache.forEach((entry, key) => {
+      entries.push({
+        key,
+        expiresAt: new Date(entry.expiresAt).toISOString(),
+        expiresIn: Math.ceil((entry.expiresAt - Date.now()) / 1000) + 's',
+      });
+    });
+    return entries;
+  }
+}
+
+const cacheManager = new CacheManager();
+
 // Helper: Load JSON file or return empty array
 const loadData = (filepath) => {
   try {
@@ -48,6 +101,7 @@ app.post('/api/upload/recipes', upload.single('file'), (req, res) => {
     .on('end', () => {
       saveData(RECIPES_FILE, recipes);
       fs.unlinkSync(req.file.path);
+      cacheManager.invalidate('recipes');
       res.json({ success: true, count: recipes.length, recipes });
     })
     .on('error', (err) => {
@@ -67,6 +121,7 @@ app.post('/api/upload/ingredients', upload.single('file'), (req, res) => {
     .on('end', () => {
       saveData(INGREDIENTS_FILE, ingredients);
       fs.unlinkSync(req.file.path);
+      cacheManager.invalidate('ingredients');
       res.json({ success: true, count: ingredients.length, ingredients });
     })
     .on('error', (err) => {
@@ -77,15 +132,23 @@ app.post('/api/upload/ingredients', upload.single('file'), (req, res) => {
 
 // ============= DATA ENDPOINTS =============
 
-// Get recipes
+// Get recipes (cached until new upload)
 app.get('/api/recipes', (req, res) => {
-  const recipes = loadData(RECIPES_FILE);
+  let recipes = cacheManager.get('recipes');
+  if (!recipes) {
+    recipes = loadData(RECIPES_FILE);
+    cacheManager.set('recipes', recipes, 365 * 24 * 60 * 60 * 1000); // Cache for 1 year (until invalidated)
+  }
   res.json(recipes);
 });
 
-// Get ingredients
+// Get ingredients (cached until new upload)
 app.get('/api/ingredients', (req, res) => {
-  const ingredients = loadData(INGREDIENTS_FILE);
+  let ingredients = cacheManager.get('ingredients');
+  if (!ingredients) {
+    ingredients = loadData(INGREDIENTS_FILE);
+    cacheManager.set('ingredients', ingredients, 365 * 24 * 60 * 60 * 1000); // Cache for 1 year (until invalidated)
+  }
   res.json(ingredients);
 });
 
@@ -363,12 +426,17 @@ const buildOvertimeReport = (timecards, teamNames, startDow) => {
 // GET /api/overtime?weeks=8&end=YYYY-MM-DD
 // `end` is the Monday (workweek start) of the most recent week to include; defaults to
 // the most recently completed workweek. `weeks` is how many workweeks back to include.
+// Cached for 24 hours per query.
 app.get('/api/overtime', async (req, res) => {
   const token = process.env.SQUARE_ACCESS_TOKEN;
   if (!token || token === 'your_square_token_here') {
-    const snapshot = loadOvertimeSnapshot();
-    if (snapshot && snapshot.weeks) return res.json({ ...snapshot, success: true, source: snapshot.source || 'snapshot' });
-    return res.json({ error: 'Square API credentials not configured', weeks: [] });
+    return res.status(400).json({ error: 'Square API credentials not configured', weeks: [] });
+  }
+
+  const cacheKey = `overtime_${req.query.weeks || '8'}_${req.query.end || 'default'}`;
+  let cached = cacheManager.get(cacheKey);
+  if (cached) {
+    return res.json({ ...cached, cached: true, cacheExpiresIn: '~24h' });
   }
 
   try {
@@ -391,12 +459,10 @@ app.get('/api/overtime', async (req, res) => {
     ]);
 
     const weeks = buildOvertimeReport(timecards, teamNames, startDow);
-    res.json({ success: true, weeks, rangeStart, rangeEnd: addDays(rangeEndExclusive, -1), employeeDetail: true });
+    const response = { success: true, weeks, rangeStart, rangeEnd: addDays(rangeEndExclusive, -1), employeeDetail: true };
+    cacheManager.set(cacheKey, response, 24 * 60 * 60 * 1000); // Cache for 24 hours
+    res.json(response);
   } catch (err) {
-    const snapshot = loadOvertimeSnapshot();
-    if (snapshot && snapshot.weeks) {
-      return res.json({ ...snapshot, success: true, source: 'snapshot (Square API unavailable)', weeks: snapshot.weeks || [] });
-    }
     res.status(500).json({
       error: 'Square API error',
       message: err.response?.data?.errors?.[0]?.detail || err.message,
@@ -702,6 +768,26 @@ app.get('/api/pl-by-channel', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ============= CACHE STATUS =============
+
+// View all cached items and their expiry times
+app.get('/api/cache/status', (req, res) => {
+  res.json({
+    status: 'ok',
+    cacheEntries: cacheManager.status(),
+    totalCached: cacheManager.status().length,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Clear all cache
+app.post('/api/cache/clear', (req, res) => {
+  cacheManager.cache.clear();
+  cacheManager.timers.forEach(timer => clearTimeout(timer));
+  cacheManager.timers.clear();
+  res.json({ success: true, message: 'Cache cleared', timestamp: new Date().toISOString() });
 });
 
 // ============= HEALTH CHECK =============
