@@ -28,8 +28,12 @@ curl -X POST -F "file=@ingredients.csv" http://localhost:3001/api/upload/ingredi
 ```bash
 curl -X POST -F "file=@arc-production.csv" -F "location=ARC" http://localhost:3001/api/upload/production
 ```
-`location` must be one of `ARC`, `LSK`, `State St`, `Catering`, `Delivery 506`. Each upload replaces
-that location's rows only; other locations are untouched.
+`location` must be one of the names in `WASTE_STORE_LOCATIONS`/`WASTE_MARKET_LOCATIONS` in `server.js`
+(see `GET /api/waste/locations` for the current list). Uploads merge by date: dates present in the
+uploaded file replace whatever was on file for those dates (so re-uploading a corrected day is
+clean), other dates already on file for that location are kept, and other locations are untouched -
+so weekly production sheets accumulate into a running log rather than each upload wiping out prior
+weeks.
 
 ### Get Data
 
