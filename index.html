@@ -436,6 +436,11 @@
 
       const currentGroup = sourceData.slice(groupStart, groupStart + rangeConfig.count);
       const selectedData = currentGroup.find((item) => item.monthKey === selectedMonth) || currentGroup[currentGroup.length - 1];
+      const groupTotals = currentGroup.reduce((acc, item) => ({
+        totalWage: acc.totalWage + item.totalWage,
+        bakeryOtWage: acc.bakeryOtWage + item.bakeryOtWage,
+        nonBakeryOtWage: acc.nonBakeryOtWage + item.nonBakeryOtWage,
+      }), { totalWage: 0, bakeryOtWage: 0, nonBakeryOtWage: 0 });
 
       return (
         <div className="container">
@@ -478,18 +483,18 @@
               </div>
               <div className="metrics">
                 <div className="metric-card">
-                  <div className="metric-label">{rangeConfig.unit === 'week' ? 'Week of ' : ''}{labelFormatter(selectedData.monthKey)} — Total Labor $</div>
-                  <div className="metric-value">{fmtMoney(selectedData.totalWage)}</div>
+                  <div className="metric-label">{rangeConfig.label} — Total Labor $</div>
+                  <div className="metric-value">{fmtMoney(groupTotals.totalWage)}</div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-label">Bakery Overtime $</div>
-                  <div className="metric-value">{fmtMoney(selectedData.bakeryOtWage)}</div>
-                  <div className="metric-sub">{pct(selectedData.bakeryOtWage, selectedData.totalWage)} of total labor</div>
+                  <div className="metric-value">{fmtMoney(groupTotals.bakeryOtWage)}</div>
+                  <div className="metric-sub">{pct(groupTotals.bakeryOtWage, groupTotals.totalWage)} of total labor</div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-label">Non-Bakery Overtime $</div>
-                  <div className="metric-value">{fmtMoney(selectedData.nonBakeryOtWage)}</div>
-                  <div className="metric-sub">{pct(selectedData.nonBakeryOtWage, selectedData.totalWage)} of total labor</div>
+                  <div className="metric-value">{fmtMoney(groupTotals.nonBakeryOtWage)}</div>
+                  <div className="metric-sub">{pct(groupTotals.nonBakeryOtWage, groupTotals.totalWage)} of total labor</div>
                 </div>
               </div>
             </React.Fragment>
