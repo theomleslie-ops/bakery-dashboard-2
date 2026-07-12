@@ -26,7 +26,7 @@ const PRODUCTION_FILE = path.join(DATA_DIR, 'production.json');
 // to Square location IDs, so uploaded production CSVs can be compared against Square's
 // "amount sold" per item/day for the Waste tab. Verify these against Square Dashboard >
 // Locations if a location's waste numbers look off.
-const WASTE_LOCATIONS = [
+const WASTE_STORE_LOCATIONS = [
   { name: 'ARC', squareLocationId: 'L41E1NSH9N1GC' },
   { name: 'LSK', squareLocationId: 'LVTS3K9QFN95F' },
   { name: 'State St', squareLocationId: 'L5J0D4FWK7FFY' },
@@ -34,6 +34,64 @@ const WASTE_LOCATIONS = [
   { name: 'Delivery 506', squareLocationId: 'LWSX9K7SC3V37' },
   { name: '506 Retail', squareLocationId: 'L91Q2PN8KATAB' },
 ];
+
+// Every other currently-ACTIVE Square location (farmers markets, pop-ups, corporate-campus
+// stands) - i.e. everything that isn't one of the storefronts above. Regenerate from Square's
+// Locations API (list, filter status === 'ACTIVE') if new markets are added or old ones retired.
+const WASTE_MARKET_LOCATIONS = [
+  { name: '25th AVE', squareLocationId: 'LGEFKKMZTYRJK' },
+  { name: 'Alum Rock Village (Sun)', squareLocationId: 'LHFCY22W62WXD' },
+  { name: 'Antioch SUN', squareLocationId: 'LZJJ8SPXW0J44' },
+  { name: 'BELMONT SUN', squareLocationId: 'L2MSATCSX8819' },
+  { name: 'BERRYESSA SAT', squareLocationId: 'LJ8NR5P1YJJWP' },
+  { name: 'BLG SUN', squareLocationId: 'LDGMZQVT9M1M9' },
+  { name: 'BLG-THURS', squareLocationId: 'L1NRS4WB4730D' },
+  { name: 'CSM LSK', squareLocationId: 'LPVPE87DHSHEQ' },
+  { name: 'CSM SAT', squareLocationId: 'L81H7NXQ9R8CN' },
+  { name: 'Commons Popup', squareLocationId: 'LRA4DDBM82571' },
+  { name: 'DALY CITY SAT', squareLocationId: 'LBZ9Y9CPYYMZ3' },
+  { name: 'DALY CITY THU', squareLocationId: 'L6QV57HE8RCXV' },
+  { name: 'DE ANZA SUN', squareLocationId: 'LKQE1MDV738GF' },
+  { name: 'DIVISADERO SUN', squareLocationId: 'LK29JHHDMWP2E' },
+  { name: 'EL CERRITO-TUES', squareLocationId: 'LCGCZZYTVWZM7' },
+  { name: 'Emeryville-THURS', squareLocationId: 'LM4A2T6JCJSZ4' },
+  { name: 'FILLMORE SAT', squareLocationId: 'LZG7H4XVCB8H4' },
+  { name: 'FM SF SUN', squareLocationId: 'L77PQJ8BX5HKD' },
+  { name: 'FOSTER CITY PJCC FRI', squareLocationId: 'L6401TR4NHAPH' },
+  { name: 'FOSTER CITY TUE', squareLocationId: 'L57SXYMF4B4BD' },
+  { name: 'INNER SUNSET SUN', squareLocationId: 'LVTMNASMHZZRS' },
+  { name: 'KAISER SJ TUE', squareLocationId: 'LFXW7H937EBYR' },
+  { name: 'Kaiser Pleasanton', squareLocationId: 'LYSJYK6EHRXJQ' },
+  { name: 'Kitchen', squareLocationId: 'LA0W40J074TNE' },
+  { name: 'LA Farmers THU', squareLocationId: 'L1MFVBMDMXE73' },
+  { name: 'LH-SAT', squareLocationId: 'LSNQQ4C28KDYP' },
+  { name: 'Livermore', squareLocationId: 'LGBG76BMZ52YT' },
+  { name: 'MILPITAS SUN', squareLocationId: 'LWDZ9T8S25MQR' },
+  { name: 'MP SUN', squareLocationId: 'LK43YN23G6RW7' },
+  { name: 'MV LSK', squareLocationId: 'L9J4MWTNF0AF3' },
+  { name: 'MV SUN', squareLocationId: 'L0MTGKJ88AZR1' },
+  { name: 'Main Homebase', squareLocationId: 'LRQ7KSG6GZG28' },
+  { name: 'Micron Popup', squareLocationId: 'LGDAFG4D5MB9X' },
+  { name: 'PA SAT', squareLocationId: 'L0270W2T6H8X7' },
+  { name: 'PV THU', squareLocationId: 'L59S2DFW8C8J1' },
+  { name: 'Princeton Plaza SUN', squareLocationId: 'LK26FV6D18NEP' },
+  { name: 'Princeton Plaza WED', squareLocationId: 'L78MSVC4MFJST' },
+  { name: 'RIVIAN POP UP', squareLocationId: 'L934EX29KM5TS' },
+  { name: 'Robinhood Popup', squareLocationId: 'LE8CK998J8CE0' },
+  { name: 'SA SAT', squareLocationId: 'LV3G1XNKREQKJ' },
+  { name: 'SA WED', squareLocationId: 'L9Y2PHNHMWJ0D' },
+  { name: 'SANTA CLARA MED WED', squareLocationId: 'LBN76CE4AFEWJ' },
+  { name: 'SANTANA WED', squareLocationId: 'L4PVF85BZGKCZ' },
+  { name: 'SMA FRI', squareLocationId: 'L8RDK77VB1R5T' },
+  { name: 'STANFORD FRI', squareLocationId: 'LTPRXKKB4QF8Z' },
+  { name: 'STANFORD TUE', squareLocationId: 'L04P7NWEC60FT' },
+  { name: 'UNION CITY SAT', squareLocationId: 'L23WK9D7PYR60' },
+  { name: 'VISA HQ', squareLocationId: 'L8YRHJD7NVF4Q' },
+  { name: 'WILLOW GLEN SAT', squareLocationId: 'LY2WJ3DKXHV97' },
+  { name: 'Workday Popup', squareLocationId: 'LS5GSMM35XAAV' },
+];
+
+const WASTE_LOCATIONS = [...WASTE_STORE_LOCATIONS, ...WASTE_MARKET_LOCATIONS];
 
 // ============= CACHE MANAGER =============
 class CacheManager {
@@ -874,6 +932,14 @@ const fetchSoldQuantities = async (locationId, startDate, endDateExclusive) => {
   } while (cursor && page < 50);
   return sold;
 };
+
+// Location names for the Waste tab's location/market toggle, split the same way as WASTE_LOCATIONS.
+app.get('/api/waste/locations', (req, res) => {
+  res.json({
+    stores: WASTE_STORE_LOCATIONS.map((l) => l.name),
+    markets: WASTE_MARKET_LOCATIONS.map((l) => l.name),
+  });
+});
 
 // Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
 app.get('/api/production', (req, res) => {

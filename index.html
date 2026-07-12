@@ -666,9 +666,6 @@
     }
 
     const LOCATION_CHANNELS = ['ARC', 'LSK', 'State St', 'Catering', 'Delivery 506'];
-    // Waste tab locations - must match server.js's WASTE_LOCATIONS names. Kept separate from
-    // LOCATION_CHANNELS (used by P&L by Channel) since it's driven by confirmed Square location IDs.
-    const WASTE_LOCATION_NAMES = ['ARC', 'LSK', 'State St', 'Catering', 'Delivery 506', '506 Retail'];
     const MARKETS_CHANNELS = ['Market 1', 'Market 2', 'Market 3', 'Market 4', 'Market 5'];
 
     const PLChannelChart = ({ data }) => {
@@ -961,13 +958,28 @@
     }
 
     function WasteDashboard() {
-      const [location, setLocation] = useState(WASTE_LOCATION_NAMES[0]);
+      const [locationOptions, setLocationOptions] = useState({ stores: [], markets: [] });
+      const [filterType, setFilterType] = useState('location');
+      const [location, setLocation] = useState('');
       const [granularity, setGranularity] = useState('week');
       const [wasteData, setWasteData] = useState(null);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
       const [uploading, setUploading] = useState(false);
       const [uploadMessage, setUploadMessage] = useState('');
+
+      useEffect(() => {
+        const baseUrl = window.location.origin;
+        fetch(`${baseUrl}/api/waste/locations`)
+          .then((r) => r.json())
+          .then((result) => {
+            const stores = result.stores || [];
+            const markets = result.markets || [];
+            setLocationOptions({ stores, markets });
+            setLocation(stores[0] || markets[0] || '');
+          })
+          .catch((err) => { setError('Failed to load locations: ' + err.message); setStatus('error'); });
+      }, []);
 
       const fetchData = async (loc) => {
         try {
@@ -985,7 +997,14 @@
         }
       };
 
-      useEffect(() => { fetchData(location); }, [location]);
+      useEffect(() => { if (location) fetchData(location); }, [location]);
+
+      const currentOptions = filterType === 'location' ? locationOptions.stores : locationOptions.markets;
+      const handleFilterTypeChange = (type) => {
+        setFilterType(type);
+        const opts = type === 'location' ? locationOptions.stores : locationOptions.markets;
+        setLocation(opts[0] || '');
+      };
 
       const handleUpload = async (e) => {
         const file = e.target.files[0];
@@ -1029,14 +1048,24 @@
             </div>
           </header>
           <div className="controls">
-            <div className="view-toggle">
-              {WASTE_LOCATION_NAMES.map((loc) => (
-                <button key={loc} className={location === loc ? 'active' : ''} onClick={() => setLocation(loc)}>{loc}</button>
-              ))}
+            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+              <div>
+                <label style={{ fontSize: '13px', color: '#666', marginRight: '8px', fontWeight: '600' }}>Filter:</label>
+                <select value={filterType} onChange={(e) => handleFilterTypeChange(e.target.value)} style={{ padding: '6px', marginRight: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
+                  <option value="location">By Location</option>
+                  <option value="market">By Market</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '13px', color: '#666', marginRight: '8px', fontWeight: '600' }}>Selection:</label>
+                <select value={location} onChange={(e) => setLocation(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
+                  {currentOptions.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
+                </select>
+              </div>
             </div>
             <label className="upload-btn" style={{ display: 'inline-block' }}>
               {uploading ? 'Uploading…' : `Upload production CSV for ${location}`}
-              <input type="file" accept=".csv" onChange={handleUpload} disabled={uploading} style={{ display: 'none' }} />
+              <input type="file" accept=".csv" onChange={handleUpload} disabled={uploading || !location} style={{ display: 'none' }} />
             </label>
           </div>
           {uploadMessage && <div className="empty">{uploadMessage}</div>}
