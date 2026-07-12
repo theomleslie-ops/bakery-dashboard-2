@@ -975,8 +975,6 @@
       const [wasteData, setWasteData] = useState(null);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
-      const [uploading, setUploading] = useState(false);
-      const [uploadMessage, setUploadMessage] = useState('');
 
       useEffect(() => {
         const baseUrl = window.location.origin;
@@ -1016,28 +1014,6 @@
         setLocation(opts[0] || '');
       };
 
-      const handleUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        setUploading(true);
-        setUploadMessage('');
-        try {
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('location', location);
-          const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/upload/production`, { method: 'POST', body: formData });
-          const result = await response.json();
-          if (result.error) { setUploadMessage('Error: ' + result.error); }
-          else { setUploadMessage(`Uploaded ${result.count} rows for ${location}.`); fetchData(location); }
-        } catch (err) {
-          setUploadMessage('Upload failed: ' + err.message);
-        } finally {
-          setUploading(false);
-          e.target.value = '';
-        }
-      };
-
       const rows = (wasteData && wasteData.rows) || [];
       const periods = buildWastePeriods(rows, granularity);
       const items = buildWasteByItem(rows);
@@ -1073,15 +1049,10 @@
                 </select>
               </div>
             </div>
-            <label className="upload-btn" style={{ display: 'inline-block' }}>
-              {uploading ? 'Uploading…' : `Upload production CSV for ${location}`}
-              <input type="file" accept=".csv" onChange={handleUpload} disabled={uploading || !location} style={{ display: 'none' }} />
-            </label>
           </div>
-          {uploadMessage && <div className="empty">{uploadMessage}</div>}
           {error && <div className="error">{error}</div>}
           {status === 'loading' && <div className="loading">Loading production &amp; Square sales data…</div>}
-          {status === 'empty' && <div className="empty">No production data uploaded yet for {location}. Upload a CSV (columns: Date, Item, Quantity Produced) to see waste.</div>}
+          {status === 'empty' && <div className="empty">No production data uploaded yet for {location}. Send the production CSV and I'll load it in.</div>}
           {status === 'ready' && totals && (
             <>
               <div className="metrics">
