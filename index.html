@@ -302,6 +302,23 @@
     const niceMax = (v) => { if (v <= 0) return 100; const magnitude = Math.pow(10, Math.floor(Math.log10(v))); const residual = v / magnitude; let niceResidual; if (residual <= 1) niceResidual = 1; else if (residual <= 2) niceResidual = 2; else if (residual <= 5) niceResidual = 5; else niceResidual = 10; return niceResidual * magnitude; };
     const BAKERY_FUNCTIONS = new Set(['Baker AM', 'Baker Night', 'Baker PM', 'LSK Cold Line', 'LSK Hot Line', 'LSK Prep Only', 'LSK-Arc BOH', 'Dishwasher/ Porter']);
     const classifyFunction = (name) => { if (BAKERY_FUNCTIONS.has(name)) return 'bakery'; if (/\bbaker\b|\bboh\b|\bprep\b|dishwash|porter|\bline\b|\bkitchen\b/i.test(name)) return 'bakery'; return 'non-bakery'; };
+    function buildWeeklyData(weeks) {
+      return weeks.map((w) => {
+        const functions = (w.functions || []).map((f) => ({
+          function: f.function, category: classifyFunction(f.function), regularHours: round2(f.regularHours || 0),
+          otHours: round2(f.ot15Hours + f.ot2Hours || 0), ot15Hours: round2(f.ot15Hours || 0), ot2Hours: round2(f.ot2Hours || 0),
+          regularWage: round2(f.regularWage || 0), otWage: round2(f.otWage || 0),
+          employees: (f.employees || []).sort((a, b) => b.otWage - a.otWage).map((e) => ({ name: e.name, otHours: round2(e.otHours), otWage: round2(e.otWage) }))
+        })).sort((a, b) => b.otWage - a.otWage);
+        const totalWage = functions.reduce((s, f) => s + f.regularWage + f.otWage, 0);
+        const bakeryOtWage = functions.filter((f) => f.category === 'bakery').reduce((s, f) => s + f.otWage, 0);
+        const nonBakeryOtWage = functions.filter((f) => f.category === 'non-bakery').reduce((s, f) => s + f.otWage, 0);
+        return { monthKey: w.weekStart, totalWage: round2(totalWage), bakeryOtWage: round2(bakeryOtWage), 
+          nonBakeryOtWage: round2(nonBakeryOtWage), baseWage: round2(Math.max(totalWage - bakeryOtWage - nonBakeryOtWage, 0)),
+          totalOtWage: round2(bakeryOtWage + nonBakeryOtWage), functions };
+      });
+    }
+
     function buildMonthlyData(weeks) {
       const monthMap = new Map();
       weeks.forEach((w) => {
