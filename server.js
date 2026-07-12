@@ -214,7 +214,10 @@ app.post('/api/upload/ingredients', upload.single('file'), (req, res) => {
 });
 
 // Upload production CSV for one location (columns: Date, Item, Quantity Produced).
-// Replaces only that location's rows in data/production.json; other locations are untouched.
+// Merges into that location's existing rows in data/production.json by date: dates present in
+// this upload replace whatever was on file for those dates (so re-uploading a corrected day is
+// clean); other dates and other locations are left untouched. This lets weekly production sheets
+// accumulate into a running log instead of each upload wiping out prior weeks.
 app.post('/api/upload/production', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -237,11 +240,13 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
     })
     .on('end', () => {
       const production = loadProduction();
-      production[location] = rows;
+      const existing = production[location] || [];
+      const newDates = new Set(rows.map((r) => r.date));
+      production[location] = existing.filter((r) => !newDates.has(r.date)).concat(rows);
       saveData(PRODUCTION_FILE, production);
       fs.unlinkSync(req.file.path);
       cacheManager.invalidate(`waste_${location}`);
-      res.json({ success: true, location, count: rows.length });
+      res.json({ success: true, location, count: rows.length, totalRows: production[location].length });
     })
     .on('error', (err) => {
       fs.unlinkSync(req.file.path);
