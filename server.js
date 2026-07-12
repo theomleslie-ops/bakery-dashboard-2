@@ -32,6 +32,7 @@ const WASTE_LOCATIONS = [
   { name: 'State St', squareLocationId: 'L5J0D4FWK7FFY' },
   { name: 'Catering', squareLocationId: 'L2326PJNQ7KS9' },
   { name: 'Delivery 506', squareLocationId: 'LWSX9K7SC3V37' },
+  { name: '506 Retail', squareLocationId: 'L91Q2PN8KATAB' },
 ];
 
 // ============= CACHE MANAGER =============

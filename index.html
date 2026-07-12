@@ -666,6 +666,9 @@
     }
 
     const LOCATION_CHANNELS = ['ARC', 'LSK', 'State St', 'Catering', 'Delivery 506'];
+    // Waste tab locations - must match server.js's WASTE_LOCATIONS names. Kept separate from
+    // LOCATION_CHANNELS (used by P&L by Channel) since it's driven by confirmed Square location IDs.
+    const WASTE_LOCATION_NAMES = ['ARC', 'LSK', 'State St', 'Catering', 'Delivery 506', '506 Retail'];
     const MARKETS_CHANNELS = ['Market 1', 'Market 2', 'Market 3', 'Market 4', 'Market 5'];
 
     const PLChannelChart = ({ data }) => {
@@ -958,7 +961,7 @@
     }
 
     function WasteDashboard() {
-      const [location, setLocation] = useState(LOCATION_CHANNELS[0]);
+      const [location, setLocation] = useState(WASTE_LOCATION_NAMES[0]);
       const [granularity, setGranularity] = useState('week');
       const [wasteData, setWasteData] = useState(null);
       const [status, setStatus] = useState('loading');
@@ -1027,7 +1030,7 @@
           </header>
           <div className="controls">
             <div className="view-toggle">
-              {LOCATION_CHANNELS.map((loc) => (
+              {WASTE_LOCATION_NAMES.map((loc) => (
                 <button key={loc} className={location === loc ? 'active' : ''} onClick={() => setLocation(loc)}>{loc}</button>
               ))}
             </div>
