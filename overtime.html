@@ -904,6 +904,8 @@
 
       const displayData = timespan === 'week' ? weeks : months;
       const displayItem = displayData[displayData.length - 1];
+      const selectedItemKey = timespan === 'week' ? (selectedMonth || displayData[displayData.length - 1]?.monthKey) : selectedMonth;
+      const selectedData = displayData.find(item => item.monthKey === selectedItemKey) || displayItem;
 
       return (
         <div className="container">
@@ -924,15 +926,53 @@
 
           {status === 'ready' && displayItem && (
             <React.Fragment>
+              {timespan === 'week' && (
+                <div className="panel" style={{ marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
+                    <button onClick={() => {
+                      const idx = displayData.findIndex(w => w.monthKey === selectedItemKey);
+                      if (idx > 0) setSelectedMonth(displayData[idx - 1].monthKey);
+                    }} style={{ flex: 1 }}>← Previous Week</button>
+                    <div style={{ textAlign: 'center', flex: 2 }}>
+                      <div style={{ fontSize: '16px', fontWeight: '600', color: '#6b4423' }}>
+                        {selectedData?.monthKey} ({selectedData?.monthKey.slice(0, 4)})
+                      </div>
+                    </div>
+                    <button onClick={() => {
+                      const idx = displayData.findIndex(w => w.monthKey === selectedItemKey);
+                      if (idx < displayData.length - 1) setSelectedMonth(displayData[idx + 1].monthKey);
+                    }} style={{ flex: 1 }}>Next Week →</button>
+                  </div>
+                </div>
+              )}
               <div className="panel">
-                <div className="panel-title">Total Labor Cost by {timespan === 'week' ? 'Week' : 'Month'}</div>
-                <div className="panel-hint">Hover a bar for the exact split.</div>
+                <div className="panel-title">{timespan === 'week' ? 'Week of ' + selectedData?.monthKey : 'Total Labor Cost by Month'}</div>
+                <div className="panel-hint">{timespan === 'week' ? 'Click Previous/Next to browse weeks' : 'Click a bar to view details'}</div>
                 <div className="legend">
                   <div className="legend-item"><span className="swatch swatch-base"></span>Regular &amp; other wages</div>
                   <div className="legend-item"><span className="swatch swatch-bakery"></span>Bakery overtime</div>
                   <div className="legend-item"><span className="swatch swatch-nonbakery"></span>Non-bakery overtime</div>
                 </div>
-                <MonthlyStackedBarChart months={displayData} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} yearlyTotals={{ totalLabor, totalBakeryOt, totalNonBakeryOt, totalOtWage }} year={selectedYear} />
+                {timespan === 'week' ? (
+                  <div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '20px', marginBottom: '20px' }}>
+                      <div style={{ color: '#8b6c57', fontSize: '12px', textTransform: 'uppercase' }}>Metric</div>
+                      <div style={{ color: '#8b6c57', fontSize: '12px', textTransform: 'uppercase' }}>Value</div>
+                      <div>Total Labor $</div>
+                      <div style={{ fontWeight: '600', color: '#6b4423' }}>{fmtMoney(selectedData?.totalWage || 0)}</div>
+                      <div>Bakery OT $</div>
+                      <div style={{ fontWeight: '600', color: '#6b4423' }}>{fmtMoney(selectedData?.bakeryOtWage || 0)}</div>
+                      <div>Non-Bakery OT $</div>
+                      <div style={{ fontWeight: '600', color: '#6b4423' }}>{fmtMoney(selectedData?.nonBakeryOtWage || 0)}</div>
+                      <div>Base Wage $</div>
+                      <div style={{ fontWeight: '600', color: '#6b4423' }}>{fmtMoney(selectedData?.baseWage || 0)}</div>
+                    </div>
+                    {selectedData?.functions && <OvertimeBarChart functions={selectedData.functions} />}
+                    {selectedData?.functions && <FunctionTable functions={selectedData.functions} employeeDetail={employeeDetail} />}
+                  </div>
+                ) : (
+                  <MonthlyStackedBarChart months={displayData} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} yearlyTotals={{ totalLabor, totalBakeryOt, totalNonBakeryOt, totalOtWage }} year={selectedYear} />
+                )}
               </div>
 
 
