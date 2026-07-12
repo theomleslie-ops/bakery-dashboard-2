@@ -859,7 +859,7 @@
       const [weeks, setWeeks] = useState([]);
       const [employeeDetail, setEmployeeDetail] = useState(true);
       const [selectedMonth, setSelectedMonth] = useState(null);
-      const [timespan, setTimespan] = useState('month'); // 'month' or 'week'
+      const [timespan, setTimespan] = useState('week'); // 'month' or 'week'
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
 
@@ -871,7 +871,7 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/overtime?weeks=104`);
+          const response = await fetch(`${baseUrl}/api/overtime?weeks=156`);
           const result = await response.json();
           if (result.error) {
             setError(result.error);
@@ -903,6 +903,8 @@
       const totalOtWage = totalBakeryOt + totalNonBakeryOt;
 
       const displayData = timespan === 'week' ? weeks : months;
+      const weekIdx = timespan === 'week' ? weeks.findIndex(w => w.monthKey === selectedMonth) : -1;
+      const currentWeek = timespan === 'week' ? weeks.find(w => w.monthKey === selectedMonth) || weeks[weeks.length - 1] : null;
       const displayItem = displayData[displayData.length - 1];
 
       return (
@@ -910,7 +912,7 @@
           <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <h1>🍞 Bakery Overtime Report</h1>
-              <p className="subtitle">Labor cost and overtime by function, from Square timecards (last 2 years)</p>
+              <p className="subtitle">Labor cost and overtime by function, from Square timecards (July 2024 onward)</p>
             </div>
             <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
               <button className={timespan === 'month' ? 'active' : ''} onClick={() => setTimespan('month')}>Monthly</button>
@@ -926,12 +928,13 @@
             <React.Fragment>
               <div className="panel">
                 <div className="panel-title">Total Labor Cost by {timespan === 'week' ? 'Week' : 'Month'}</div>
-                <div className="panel-hint">Hover a bar for the exact split.</div>
+                <div className="panel-hint">Use Previous/Next to browse weeks.</div>
                 <div className="legend">
                   <div className="legend-item"><span className="swatch swatch-base"></span>Regular &amp; other wages</div>
                   <div className="legend-item"><span className="swatch swatch-bakery"></span>Bakery overtime</div>
                   <div className="legend-item"><span className="swatch swatch-nonbakery"></span>Non-bakery overtime</div>
                 </div>
+                {timespan === 'week' && currentWeek && (                  <>                    <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>                      <button onClick={() => weekIdx > 0 && setSelectedMonth(weeks[weekIdx - 1].monthKey)} disabled={weekIdx === 0}>← Previous Week</button>                      <div style={{ flex: 1, textAlign: 'center', fontWeight: '600', color: '#6b4423' }}>Week of {currentWeek.monthKey}</div>                      <button onClick={() => weekIdx < weeks.length - 1 && setSelectedMonth(weeks[weekIdx + 1].monthKey)} disabled={weekIdx === weeks.length - 1}>Next Week →</button>                    </div>                    {currentWeek.functions && <OvertimeBarChart functions={currentWeek.functions} />}                    {currentWeek.functions && <FunctionTable functions={currentWeek.functions} employeeDetail={employeeDetail} />}                  </>                )}                {timespan === 'month' && (
                 <MonthlyStackedBarChart months={displayData} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} yearlyTotals={{ totalLabor, totalBakeryOt, totalNonBakeryOt, totalOtWage }} year={selectedYear} />
               </div>
 
