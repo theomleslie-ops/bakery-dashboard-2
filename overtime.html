@@ -859,7 +859,7 @@
       const [weeks, setWeeks] = useState([]);
       const [employeeDetail, setEmployeeDetail] = useState(true);
       const [selectedMonth, setSelectedMonth] = useState(null);
-      const [timespan, setTimespan] = useState('month'); // 'month' or 'week'
+      const [timespan, setTimespan] = useState('week'); // 'month' or 'week'
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
 
@@ -871,7 +871,7 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/overtime?weeks=104`);
+          const response = await fetch(`${baseUrl}/api/overtime?weeks=156`);
           const result = await response.json();
           if (result.error) {
             setError(result.error);
@@ -910,7 +910,7 @@
           <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <h1>🍞 Bakery Overtime Report</h1>
-              <p className="subtitle">Labor cost and overtime by function, from Square timecards (last 2 years)</p>
+              <p className="subtitle">Labor cost and overtime by function, from Square timecards (July 2024 onward)</p>
             </div>
             <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
               <button className={timespan === 'month' ? 'active' : ''} onClick={() => setTimespan('month')}>Monthly</button>
