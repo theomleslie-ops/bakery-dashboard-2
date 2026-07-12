@@ -299,6 +299,7 @@
     const fmtMoneyShort = (v) => { if (v >= 1000) return `$${Math.round(v / 1000).toLocaleString()}k`; return `$${Math.round(v)}`; };
     const pct = (part, whole) => (whole > 0 ? `${((part / whole) * 100).toFixed(1)}%` : '0%');
     const fmtMonthLabel = (monthKey) => { const [y, m] = monthKey.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }); };
+    const fmtWeekLabel = (dateStr) => { const [y, m, d] = dateStr.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
     const niceMax = (v) => { if (v <= 0) return 100; const magnitude = Math.pow(10, Math.floor(Math.log10(v))); const residual = v / magnitude; let niceResidual; if (residual <= 1) niceResidual = 1; else if (residual <= 2) niceResidual = 2; else if (residual <= 5) niceResidual = 5; else niceResidual = 10; return niceResidual * magnitude; };
     const BAKERY_FUNCTIONS = new Set(['Baker AM', 'Baker Night', 'Baker PM', 'LSK Cold Line', 'LSK Hot Line', 'LSK Prep Only', 'LSK-Arc BOH', 'Dishwasher/ Porter']);
     const classifyFunction = (name) => { if (BAKERY_FUNCTIONS.has(name)) return 'bakery'; if (/\bbaker\b|\bboh\b|\bprep\b|dishwash|porter|\bline\b|\bkitchen\b/i.test(name)) return 'bakery'; return 'non-bakery'; };
@@ -352,11 +353,12 @@
       });
     }
     const CHART_HEIGHT = 320;
-    function MonthlyStackedBarChart({ months, selectedMonth, onSelectMonth }) {
+    function MonthlyStackedBarChart({ months, selectedMonth, onSelectMonth, labelFormatter = fmtMonthLabel, fillWidth = false }) {
       const [hovered, setHovered] = useState(null);
       const maxTotal = niceMax(Math.max(...months.map((m) => m.totalWage), 0) * 1.08);
       const tickCount = 5;
       const ticks = Array.from({ length: tickCount }, (_, i) => (maxTotal / (tickCount - 1)) * i);
+      const barsStyle = fillWidth ? { minWidth: '100%', width: '100%', justifyContent: 'space-evenly', gap: 0 } : undefined;
       return (
         <div className="stacked-chart">
           <div className="chart-y-axis" style={{ height: CHART_HEIGHT }}>
@@ -364,7 +366,7 @@
           </div>
           <div className="chart-plot" style={{ height: CHART_HEIGHT }}>
             {ticks.map((t) => (<div key={t} className="gridline" style={{ bottom: `${(t / maxTotal) * CHART_HEIGHT}px` }} />))}
-            <div className="chart-bars">
+            <div className="chart-bars" style={barsStyle}>
               {months.map((m) => {
                 const barPx = maxTotal > 0 ? (m.totalWage / maxTotal) * CHART_HEIGHT : 0;
                 const basePx = m.totalWage > 0 ? (m.baseWage / m.totalWage) * barPx : 0;
@@ -377,9 +379,9 @@
                       <div className="seg seg-base" style={{ height: `${basePx}px` }} />
                       <div className="seg seg-bakery" style={{ height: `${bakeryPx}px` }} />
                       <div className="seg seg-nonbakery" style={{ height: `${nonBakeryPx}px` }} />
-                      {hovered === m.monthKey && (<div className="stack-tooltip"><strong>{fmtMonthLabel(m.monthKey)}</strong><br />Total labor: {fmtMoney(m.totalWage)}<br />Bakery OT: {fmtMoney(m.bakeryOtWage)} ({pct(m.bakeryOtWage, m.totalWage)} of total)<br />Non-bakery OT: {fmtMoney(m.nonBakeryOtWage)} ({pct(m.nonBakeryOtWage, m.totalWage)} of total)</div>)}
+                      {hovered === m.monthKey && (<div className="stack-tooltip"><strong>{labelFormatter(m.monthKey)}</strong><br />Total labor: {fmtMoney(m.totalWage)}<br />Bakery OT: {fmtMoney(m.bakeryOtWage)} ({pct(m.bakeryOtWage, m.totalWage)} of total)<br />Non-bakery OT: {fmtMoney(m.nonBakeryOtWage)} ({pct(m.nonBakeryOtWage, m.totalWage)} of total)</div>)}
                     </div>
-                    <div className="bar-x-label">{fmtMonthLabel(m.monthKey)}</div>
+                    <div className="bar-x-label">{labelFormatter(m.monthKey)}</div>
                   </div>
                 );
               })}
@@ -412,12 +414,21 @@
         </table>
       );
     }
+    const RANGE_OPTIONS = [
+      { key: '4w', label: '4 Weeks', unit: 'week', count: 4 },
+      { key: '2m', label: '2 Months', unit: 'week', count: 9 },
+      { key: '6m', label: '6 Months', unit: 'month', count: 6 },
+      { key: '1y', label: '1 Year', unit: 'month', count: 12 },
+      { key: '2y', label: '2 Years', unit: 'month', count: 24 },
+    ];
+
     function OvertimeContent() {
       const [months, setMonths] = useState([]);
       const [weeks, setWeeks] = useState([]);
       const [employeeDetail, setEmployeeDetail] = useState(true);
       const [selectedMonth, setSelectedMonth] = useState(null);
-      const [timespan, setTimespan] = useState('week');
+      const [range, setRange] = useState('4w');
+      const [groupStart, setGroupStart] = useState(0);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
       useEffect(() => { fetchData(); }, []);
@@ -434,28 +445,37 @@
           setWeeks(builtWeeks);
           setMonths(builtMonths);
           setEmployeeDetail(result.employeeDetail !== false);
-          setSelectedMonth(builtWeeks.length ? builtWeeks[builtWeeks.length - 1].monthKey : null);
           setStatus(builtWeeks.length ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
         }
       };
-      const [weekGroupStart, setWeekGroupStart] = useState(0);
-      const displayData = timespan === 'week' ? weeks : months;
-      const currentWeekGroup = timespan === 'week' ? weeks.slice(weekGroupStart, weekGroupStart + 4) : null;
-      const selectedData = displayData.find((item) => item.monthKey === selectedMonth) || displayData[displayData.length - 1];
-      const idx = displayData.findIndex((item) => item.monthKey === selectedMonth);
+
+      const rangeConfig = RANGE_OPTIONS.find((r) => r.key === range);
+      const sourceData = rangeConfig.unit === 'week' ? weeks : months;
+      const labelFormatter = rangeConfig.unit === 'week' ? fmtWeekLabel : fmtMonthLabel;
+
+      useEffect(() => {
+        if (!sourceData.length) return;
+        setGroupStart(Math.max(0, sourceData.length - rangeConfig.count));
+        setSelectedMonth(sourceData[sourceData.length - 1].monthKey);
+      }, [range, sourceData.length]);
+
+      const currentGroup = sourceData.slice(groupStart, groupStart + rangeConfig.count);
+      const selectedData = currentGroup.find((item) => item.monthKey === selectedMonth) || currentGroup[currentGroup.length - 1];
+
       return (
         <div className="container">
-          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
             <div>
               <h1>⏰ Overtime Report</h1>
-              <p className="subtitle">{timespan === 'week' ? 'Weekly (4-week view)' : 'Monthly'} labor cost and overtime by function, from Square timecards (July 2024 onward)</p>
+              <p className="subtitle">{rangeConfig.label} view — labor cost and overtime by function, from Square timecards (July 2024 onward)</p>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button className={timespan === 'month' ? 'active' : ''} onClick={() => setTimespan('month')}>Monthly</button>
-              <button className={timespan === 'week' ? 'active' : ''} onClick={() => setTimespan('week')}>Weekly</button>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {RANGE_OPTIONS.map((r) => (
+                <button key={r.key} className={range === r.key ? 'active' : ''} onClick={() => setRange(r.key)}>{r.label}</button>
+              ))}
             </div>
           </header>
           {status === 'loading' && <div className="loading">Loading timecards from Square…</div>}
@@ -464,28 +484,29 @@
           {status === 'ready' && selectedData && (
             <React.Fragment>
               <div className="panel">
-                <div className="panel-title">Total Labor Cost by {timespan === 'week' ? '4 Weeks' : 'Month'}</div>
-                <div className="panel-hint">{timespan === 'week' ? 'Shows 4 weeks at a time. Click bars to select individual weeks.' : 'Hover a bar for the exact split.'}</div>
+                <div className="panel-title">Total Labor Cost by {rangeConfig.unit === 'week' ? 'Week' : 'Month'}</div>
+                <div className="panel-hint">Shows {currentGroup.length} {rangeConfig.unit === 'week' ? 'weeks' : 'months'} at a time. Click a bar to select it.</div>
                 <div className="legend">
                   <div className="legend-item"><span className="swatch swatch-base"></span>Regular &amp; other wages</div>
                   <div className="legend-item"><span className="swatch swatch-bakery"></span>Bakery overtime</div>
                   <div className="legend-item"><span className="swatch swatch-nonbakery"></span>Non-bakery overtime</div>
                 </div>
-                {timespan === 'week' && currentWeekGroup && (
-                  <>
-                    <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', alignItems: 'center' }}>
-                      <button onClick={() => setWeekGroupStart(Math.max(0, weekGroupStart - 4))} disabled={weekGroupStart === 0}>← Previous 4 Weeks</button>
-                      <div style={{ flex: 1, textAlign: 'center', fontWeight: '600', color: '#6b4423' }}>{currentWeekGroup.length} weeks showing</div>
-                      <button onClick={() => setWeekGroupStart(Math.min(weeks.length - 4, weekGroupStart + 4))} disabled={weekGroupStart + 4 >= weeks.length}>Next 4 Weeks →</button>
-                    </div>
-                    <MonthlyStackedBarChart months={currentWeekGroup} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
-                  </>
-                )}
-                {timespan === 'month' && <MonthlyStackedBarChart months={displayData} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />}
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', alignItems: 'center' }}>
+                  <button onClick={() => setGroupStart(Math.max(0, groupStart - rangeConfig.count))} disabled={groupStart === 0}>← Previous {rangeConfig.label}</button>
+                  <div style={{ flex: 1, textAlign: 'center', fontWeight: '600', color: '#6b4423' }}>{currentGroup.length} {rangeConfig.unit === 'week' ? 'weeks' : 'months'} showing</div>
+                  <button onClick={() => setGroupStart(Math.min(Math.max(0, sourceData.length - rangeConfig.count), groupStart + rangeConfig.count))} disabled={groupStart + rangeConfig.count >= sourceData.length}>Next {rangeConfig.label} →</button>
+                </div>
+                <MonthlyStackedBarChart
+                  months={currentGroup}
+                  selectedMonth={selectedMonth}
+                  onSelectMonth={setSelectedMonth}
+                  labelFormatter={labelFormatter}
+                  fillWidth={rangeConfig.unit === 'week'}
+                />
               </div>
               <div className="metrics">
                 <div className="metric-card">
-                  <div className="metric-label">{timespan === 'week' ? 'Week of ' : ''}{fmtMonthLabel(selectedData.monthKey)} — Total Labor $</div>
+                  <div className="metric-label">{rangeConfig.unit === 'week' ? 'Week of ' : ''}{labelFormatter(selectedData.monthKey)} — Total Labor $</div>
                   <div className="metric-value">{fmtMoney(selectedData.totalWage)}</div>
                 </div>
                 <div className="metric-card">
