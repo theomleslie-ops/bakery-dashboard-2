@@ -15,13 +15,6 @@
       --chart-surface: #ffffff; --chart-ink: #0b0b0b; --chart-ink-secondary: #52514e; --chart-muted: #898781;
       --chart-grid: #e1e0d9; --chart-axis: #000000;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --series-cogs: #ffb84d; --series-opex: #a78bfa; --series-pl-good: #10b981; --series-pl-bad: #ef4444;
-        --chart-surface: #2c2416; --chart-ink: #ffffff; --chart-ink-secondary: #c3c2b7; --chart-muted: #898781;
-        --chart-grid: #3a3228; --chart-axis: #000000;
-      }
-    }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f1ed; color: #2c2416; }
     .container { max-width: 1400px; margin: 0 auto; padding: 40px 20px; }
     header { margin-bottom: 40px; } h1 { font-size: 32px; color: #6b4423; margin-bottom: 10px; }
@@ -92,27 +85,6 @@
     .employee-detail { background: #faf6f2; }
     .employee-detail td { padding: 8px 12px 8px 40px; font-size: 12px; color: #5a4a3a; border-bottom: 1px solid #f0e8e0; }
     .empty { background: white; color: #8b6c57; padding: 24px; border-radius: 8px; margin: 20px 0; font-size: 14px; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #1a1614; color: #e8ddd5; }
-      button { background: #2c2416; color: #e8b9a0; border-color: #5a3a1e; }
-      button:hover { background: #3a3228; }
-      .tab-button { color: #e8b9a0; border-bottom-color: #e8b9a0; }
-      .tab-button:hover { background: #3a3228; border-bottom-color: #e8b9a0; }
-      .tab-button.active { border-bottom-color: #5a3a1e; color: #b09a86; font-weight: 600; }
-      .chart-container, .metric-card, .panel, .empty, .loading { background: #2c2416; color: #e8ddd5; }
-      h1, .metric-value, .panel-title, .bar-row-value { color: #e8b9a0; }
-      .metric-sub, .panel-hint, .legend-item, .y-tick { color: #b09a86; }
-      .chart-plot { border-color: #5a3a1e; }
-      .gridline { border-top-color: #3a3228; }
-      .bar-x-label, .bar-col.selected { color: #e8b9a0; }
-      .bar-track { background: #3a3228; }
-      .bar-fill { background: #e8b9a0; }
-      th, td { border-bottom-color: #3a3228; color: #e8ddd5; }
-      tr.fn-row:hover { background: #3a3228; }
-      .employee-detail { background: #241d17; color: #cbb9a8; border-bottom-color: #3a3228; }
-      .category-tag.bakery { background: #1e3a54; color: #8fc0ec; }
-      .category-tag.non-bakery { background: #4a2c14; color: #f0b083; }
-    }
   </style>
 </head>
 <body>

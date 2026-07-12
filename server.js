@@ -237,7 +237,6 @@ const fetchAllTimecards = async (startDate, endDateExclusive) => {
       {
         query: {
           filter: {
-            location_id: process.env.SQUARE_LOCATION_ID,
             start: { start_at: `${startDate}T00:00:00Z`, end_at: `${endDateExclusive}T00:00:00Z` },
             status: 'CLOSED',
           },
