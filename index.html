@@ -63,6 +63,7 @@
     .seg { width: 100%; transition: filter 0.15s; }
     .bar-col:hover .seg { filter: brightness(1.1); }
     .seg-nonbakery { background: #c05621; } .seg-bakery { background: #2b6cb0; } .seg-base { background: #3f8361; }
+    .seg-waste { background: var(--series-pl-bad); }
     .bar-x-label { margin-top: 8px; font-size: 12px; color: #6b4423; font-weight: 500; text-align: center; }
     .stack-tooltip { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); background: #2c2416; color: white; font-size: 12px; line-height: 1.6; padding: 10px 12px; border-radius: 6px; white-space: nowrap; pointer-events: none; z-index: 10; }
     .bar-row { display: grid; grid-template-columns: 180px 1fr 130px; align-items: center; gap: 12px; padding: 6px 0; }
@@ -269,6 +270,7 @@
     const fmtHours = (h) => `${h.toFixed(1)}h`;
     const fmtMoney = (v) => `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const fmtMoneyShort = (v) => { if (v >= 1000) return `$${Math.round(v / 1000).toLocaleString()}k`; return `$${Math.round(v)}`; };
+    const fmtQty = (v) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
     const pct = (part, whole) => (whole > 0 ? `${((part / whole) * 100).toFixed(1)}%` : '0%');
     const fmtMonthLabel = (monthKey) => { const [y, m] = monthKey.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }); };
     const fmtWeekLabel = (dateStr) => { const [y, m, d] = dateStr.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
@@ -878,6 +880,224 @@
       );
     }
 
+    // Aggregate item+day waste rows into day/week(Monday-start)/month buckets for the bar chart.
+    function buildWastePeriods(rows, granularity) {
+      const keyFor = (date) => {
+        if (granularity === 'day') return date;
+        if (granularity === 'month') return date.slice(0, 7);
+        const d = new Date(`${date}T00:00:00Z`);
+        const isoDow = (d.getUTCDay() + 6) % 7; // 0 = Monday
+        d.setUTCDate(d.getUTCDate() - isoDow);
+        return d.toISOString().slice(0, 10);
+      };
+      const map = new Map();
+      rows.forEach((r) => {
+        const key = keyFor(r.date);
+        const entry = map.get(key) || { period: key, quantityProduced: 0, quantitySold: 0, waste: 0 };
+        entry.quantityProduced += r.quantityProduced;
+        entry.quantitySold += r.quantitySold;
+        entry.waste += r.waste;
+        map.set(key, entry);
+      });
+      return [...map.values()].sort((a, b) => a.period.localeCompare(b.period));
+    }
+
+    function buildWasteByItem(rows) {
+      const map = new Map();
+      rows.forEach((r) => {
+        const entry = map.get(r.item) || { item: r.item, quantityProduced: 0, quantitySold: 0, waste: 0 };
+        entry.quantityProduced += r.quantityProduced;
+        entry.quantitySold += r.quantitySold;
+        entry.waste += r.waste;
+        map.set(r.item, entry);
+      });
+      return [...map.values()].sort((a, b) => b.waste - a.waste);
+    }
+
+    const fmtPeriodLabel = (period, granularity) => {
+      if (granularity === 'month') { const [y, m] = period.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }); }
+      return new Date(`${period}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    };
+
+    function WasteBarChart({ periods, granularity }) {
+      const [hovered, setHovered] = useState(null);
+      const maxWaste = niceMax(Math.max(...periods.map((p) => p.waste), 0) * 1.15);
+      const tickCount = 5;
+      const ticks = Array.from({ length: tickCount }, (_, i) => (maxWaste / (tickCount - 1)) * i);
+      return (
+        <div className="stacked-chart">
+          <div className="chart-y-axis" style={{ height: CHART_HEIGHT }}>
+            {ticks.map((t) => (<div key={t} className="y-tick" style={{ bottom: `${(t / maxWaste) * CHART_HEIGHT}px` }}>{fmtQty(t)}</div>))}
+          </div>
+          <div className="chart-plot" style={{ height: CHART_HEIGHT }}>
+            {ticks.map((t) => (<div key={t} className="gridline" style={{ bottom: `${(t / maxWaste) * CHART_HEIGHT}px` }} />))}
+            <div className="chart-bars">
+              {periods.map((p) => {
+                const barPx = maxWaste > 0 ? (p.waste / maxWaste) * CHART_HEIGHT : 0;
+                return (
+                  <div className="bar-col-wrap" key={p.period}>
+                    <div className="bar-col" style={{ height: `${Math.max(barPx, 2)}px` }} onMouseEnter={() => setHovered(p.period)} onMouseLeave={() => setHovered(null)}>
+                      <div className="seg seg-waste" style={{ height: '100%' }} />
+                      {hovered === p.period && (
+                        <div className="stack-tooltip">
+                          <strong>{fmtPeriodLabel(p.period, granularity)}</strong><br />
+                          Produced: {fmtQty(p.quantityProduced)}<br />
+                          Sold: {fmtQty(p.quantitySold)}<br />
+                          Waste: {fmtQty(p.waste)} ({pct(p.waste, p.quantityProduced)})
+                        </div>
+                      )}
+                    </div>
+                    <div className="bar-x-label">{fmtPeriodLabel(p.period, granularity)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function WasteDashboard() {
+      const [location, setLocation] = useState(LOCATION_CHANNELS[0]);
+      const [granularity, setGranularity] = useState('week');
+      const [wasteData, setWasteData] = useState(null);
+      const [status, setStatus] = useState('loading');
+      const [error, setError] = useState('');
+      const [uploading, setUploading] = useState(false);
+      const [uploadMessage, setUploadMessage] = useState('');
+
+      const fetchData = async (loc) => {
+        try {
+          setStatus('loading');
+          setError('');
+          const baseUrl = window.location.origin;
+          const response = await fetch(`${baseUrl}/api/waste?location=${encodeURIComponent(loc)}`);
+          const result = await response.json();
+          if (result.error) { setError(result.error); setStatus('error'); return; }
+          setWasteData(result);
+          setStatus(result.status || (result.rows && result.rows.length ? 'ready' : 'empty'));
+        } catch (err) {
+          setError('Failed to load data: ' + err.message);
+          setStatus('error');
+        }
+      };
+
+      useEffect(() => { fetchData(location); }, [location]);
+
+      const handleUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploading(true);
+        setUploadMessage('');
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('location', location);
+          const baseUrl = window.location.origin;
+          const response = await fetch(`${baseUrl}/api/upload/production`, { method: 'POST', body: formData });
+          const result = await response.json();
+          if (result.error) { setUploadMessage('Error: ' + result.error); }
+          else { setUploadMessage(`Uploaded ${result.count} rows for ${location}.`); fetchData(location); }
+        } catch (err) {
+          setUploadMessage('Upload failed: ' + err.message);
+        } finally {
+          setUploading(false);
+          e.target.value = '';
+        }
+      };
+
+      const rows = (wasteData && wasteData.rows) || [];
+      const periods = buildWastePeriods(rows, granularity);
+      const items = buildWasteByItem(rows);
+      const totals = wasteData && wasteData.totals;
+      const unmatched = ((wasteData && wasteData.unmatchedSoldItems) || []).slice(0, 10);
+
+      return (
+        <div className="container">
+          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+            <div>
+              <h1>🗑️ Waste</h1>
+              <p className="subtitle">Produced (uploaded CSV) vs. sold (live from Square), by item and location</p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className={granularity === 'day' ? 'active' : ''} onClick={() => setGranularity('day')}>Daily</button>
+              <button className={granularity === 'week' ? 'active' : ''} onClick={() => setGranularity('week')}>Weekly</button>
+              <button className={granularity === 'month' ? 'active' : ''} onClick={() => setGranularity('month')}>Monthly</button>
+            </div>
+          </header>
+          <div className="controls">
+            <div className="view-toggle">
+              {LOCATION_CHANNELS.map((loc) => (
+                <button key={loc} className={location === loc ? 'active' : ''} onClick={() => setLocation(loc)}>{loc}</button>
+              ))}
+            </div>
+            <label className="upload-btn" style={{ display: 'inline-block' }}>
+              {uploading ? 'Uploading…' : `Upload production CSV for ${location}`}
+              <input type="file" accept=".csv" onChange={handleUpload} disabled={uploading} style={{ display: 'none' }} />
+            </label>
+          </div>
+          {uploadMessage && <div className="empty">{uploadMessage}</div>}
+          {error && <div className="error">{error}</div>}
+          {status === 'loading' && <div className="loading">Loading production &amp; Square sales data…</div>}
+          {status === 'empty' && <div className="empty">No production data uploaded yet for {location}. Upload a CSV (columns: Date, Item, Quantity Produced) to see waste.</div>}
+          {status === 'ready' && totals && (
+            <>
+              <div className="metrics">
+                <div className="metric-card">
+                  <div className="metric-label">Produced</div>
+                  <div className="metric-value">{fmtQty(totals.quantityProduced)}</div>
+                  <div className="metric-sub">{wasteData.start} to {wasteData.end}</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Sold</div>
+                  <div className="metric-value">{fmtQty(totals.quantitySold)}</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Waste</div>
+                  <div className="metric-value" style={{ color: '#d03b3b' }}>{fmtQty(totals.waste)}</div>
+                  <div className="metric-sub">{totals.wastePct}% of production</div>
+                </div>
+              </div>
+              <div className="chart-container">
+                <div className="chart-title">Waste by {granularity === 'day' ? 'Day' : granularity === 'week' ? 'Week' : 'Month'}</div>
+                <WasteBarChart periods={periods} granularity={granularity} />
+              </div>
+              <div className="panel">
+                <div className="panel-title">Waste by Item</div>
+                <div className="panel-hint">Sorted by total waste over the selected range.</div>
+                <table>
+                  <thead><tr><th>Item</th><th className="num">Produced</th><th className="num">Sold</th><th className="num">Waste</th><th className="num">Waste %</th></tr></thead>
+                  <tbody>
+                    {items.map((it) => (
+                      <tr key={it.item}>
+                        <td>{it.item}</td>
+                        <td className="num">{fmtQty(it.quantityProduced)}</td>
+                        <td className="num">{fmtQty(it.quantitySold)}</td>
+                        <td className="num">{fmtQty(it.waste)}</td>
+                        <td className="num">{pct(it.waste, it.quantityProduced)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {unmatched.length > 0 && (
+                <div className="panel">
+                  <div className="panel-title">Possible naming mismatches</div>
+                  <div className="panel-hint">These sold at {location} in this range but don't match any uploaded production item by name — often a Square point-of-sale name vs. CSV name difference. Rename the CSV item to match if it should be tracked.</div>
+                  <table>
+                    <thead><tr><th>Square item name</th><th className="num">Sold</th></tr></thead>
+                    <tbody>
+                      {unmatched.map((u) => (<tr key={u.item}><td>{u.item}</td><td className="num">{fmtQty(u.quantitySold)}</td></tr>))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      );
+    }
+
     function MainApp() {
       const [activeTab, setActiveTab] = useState('dashboard');
       return (
@@ -889,6 +1109,7 @@
                 <button className={`tab-button ${activeTab === 'overtime' ? 'active' : ''}`} onClick={() => setActiveTab('overtime')}>Overtime Report</button>
                 <button className={`tab-button ${activeTab === 'prime-cost' ? 'active' : ''}`} onClick={() => setActiveTab('prime-cost')}>Prime Cost</button>
                 <button className={`tab-button ${activeTab === 'pl-channel' ? 'active' : ''}`} onClick={() => setActiveTab('pl-channel')}>P&L by Channel</button>
+                <button className={`tab-button ${activeTab === 'waste' ? 'active' : ''}`} onClick={() => setActiveTab('waste')}>Waste</button>
               </div>
             </div>
           </div>
@@ -896,6 +1117,7 @@
           <div className={`tab-content ${activeTab === 'overtime' ? 'active' : ''}`}><OvertimeContent /></div>
           <div className={`tab-content ${activeTab === 'prime-cost' ? 'active' : ''}`}><PrimeCostDashboard /></div>
           <div className={`tab-content ${activeTab === 'pl-channel' ? 'active' : ''}`}><PLByChannelDashboard /></div>
+          <div className={`tab-content ${activeTab === 'waste' ? 'active' : ''}`}><WasteDashboard /></div>
         </div>
       );
     }

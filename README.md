@@ -24,6 +24,13 @@ curl -X POST -F "file=@recipes.csv" http://localhost:3001/api/upload/recipes
 curl -X POST -F "file=@ingredients.csv" http://localhost:3001/api/upload/ingredients
 ```
 
+**Upload production (for the Waste tab), one location per upload:**
+```bash
+curl -X POST -F "file=@arc-production.csv" -F "location=ARC" http://localhost:3001/api/upload/production
+```
+`location` must be one of `ARC`, `LSK`, `State St`, `Catering`, `Delivery 506`. Each upload replaces
+that location's rows only; other locations are untouched.
+
 ### Get Data
 
 **Get recipes:**
@@ -49,6 +56,16 @@ Password-protected page at `/overtime`. Computes California overtime (1.5x over 
 2x over 12hrs/day, 7th-consecutive-workday rule) per employee, allocated across job/function by hours
 worked. Uses `SQUARE_ACCESS_TOKEN` if configured; otherwise falls back to `data/overtime-snapshot.json`.
 
+**Get waste report for a location (Waste tab):**
+```bash
+curl "http://localhost:3001/api/waste?location=ARC"
+```
+Compares uploaded production CSVs against Square's actual sales (Orders API, matched by item name
+and day) to compute waste = produced − sold, per item per day. Defaults to the date range covered by
+that location's uploaded production data; override with `start`/`end` (`YYYY-MM-DD`). Cached 1 hour.
+Also returns `unmatchedSoldItems`: things Square sold in that window whose name never matched a
+production row — usually means the CSV item name and Square's point-of-sale name have drifted apart.
+
 ## CSV File Formats
 
 ### recipes.csv
@@ -65,6 +82,16 @@ All-Purpose Flour,lbs,0.75,400,Baking
 Butter,lbs,4.50,50,Baking
 Chocolate Chips,lbs,6.00,20,Baking
 ```
+
+### production CSV (one file per location)
+```
+Date,Item,Quantity Produced
+2026-07-05,Baguette,40
+2026-07-05,Country Round,20
+```
+`Item` should match the name Square's point-of-sale shows for that item on the receipt/line item —
+that's not always the same as the catalog's internal name (e.g. catalog "Country RND" may sell under
+the display name "Country Round"). Check `/api/waste`'s `unmatchedSoldItems` if waste looks inflated.
 
 ## Configuration
 

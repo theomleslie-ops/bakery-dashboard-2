@@ -20,6 +20,19 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 const RECIPES_FILE = path.join(DATA_DIR, 'recipes.json');
 const INGREDIENTS_FILE = path.join(DATA_DIR, 'ingredients.json');
 const FINANCIAL_FILE = path.join(DATA_DIR, 'financial.json');
+const PRODUCTION_FILE = path.join(DATA_DIR, 'production.json');
+
+// Maps the bakery's named channels (as used elsewhere in the dashboard, e.g. P&L by Channel)
+// to Square location IDs, so uploaded production CSVs can be compared against Square's
+// "amount sold" per item/day for the Waste tab. Verify these against Square Dashboard >
+// Locations if a location's waste numbers look off.
+const WASTE_LOCATIONS = [
+  { name: 'ARC', squareLocationId: 'L41E1NSH9N1GC' },
+  { name: 'LSK', squareLocationId: 'LVTS3K9QFN95F' },
+  { name: 'State St', squareLocationId: 'L5J0D4FWK7FFY' },
+  { name: 'Catering', squareLocationId: 'L2326PJNQ7KS9' },
+  { name: 'Delivery 506', squareLocationId: 'LWSX9K7SC3V37' },
+];
 
 // ============= CACHE MANAGER =============
 class CacheManager {
@@ -90,6 +103,15 @@ const saveData = (filepath, data) => {
   fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
 };
 
+// Helper: Load production.json, keyed by location name -> array of {date, item, quantityProduced}
+const loadProduction = () => {
+  try {
+    return JSON.parse(fs.readFileSync(PRODUCTION_FILE, 'utf-8'));
+  } catch {
+    return {};
+  }
+};
+
 // ============= UPLOAD ENDPOINTS =============
 
 // Upload recipes CSV
@@ -125,6 +147,42 @@ app.post('/api/upload/ingredients', upload.single('file'), (req, res) => {
       fs.unlinkSync(req.file.path);
       cacheManager.invalidate('ingredients');
       res.json({ success: true, count: ingredients.length, ingredients });
+    })
+    .on('error', (err) => {
+      fs.unlinkSync(req.file.path);
+      res.status(400).json({ error: err.message });
+    });
+});
+
+// Upload production CSV for one location (columns: Date, Item, Quantity Produced).
+// Replaces only that location's rows in data/production.json; other locations are untouched.
+app.post('/api/upload/production', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const location = req.body.location;
+  if (!WASTE_LOCATIONS.some((l) => l.name === location)) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: `Unknown location "${location}". Expected one of: ${WASTE_LOCATIONS.map((l) => l.name).join(', ')}` });
+  }
+
+  const rows = [];
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (row) => {
+      const date = (row['Date'] || '').trim();
+      const item = (row['Item'] || '').trim();
+      const quantityProduced = parseFloat(row['Quantity Produced']);
+      if (date && item && Number.isFinite(quantityProduced)) {
+        rows.push({ date, item, quantityProduced });
+      }
+    })
+    .on('end', () => {
+      const production = loadProduction();
+      production[location] = rows;
+      saveData(PRODUCTION_FILE, production);
+      fs.unlinkSync(req.file.path);
+      cacheManager.invalidate(`waste_${location}`);
+      res.json({ success: true, location, count: rows.length });
     })
     .on('error', (err) => {
       fs.unlinkSync(req.file.path);
@@ -767,6 +825,156 @@ app.get('/api/pl-by-channel', (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ============= WASTE DASHBOARD =============
+// Waste = produced (uploaded via CSV, per location) minus sold (pulled live from Square Orders,
+// matched by item name + day). "Sold" quantity comes straight off each order's line items
+// (line_items[].name / .quantity), not the catalog, since that's the name Square actually sold
+// under that day - no catalog lookup or ID mapping required.
+
+// Fetch every COMPLETED order at a location closed within [startDate, endDateExclusive), and
+// aggregate quantity sold per (day, lowercased item name).
+const fetchSoldQuantities = async (locationId, startDate, endDateExclusive) => {
+  const sold = {}; // sold[date][itemNameLower] = quantity
+  let cursor;
+  let page = 0;
+  do {
+    const response = await axios.post(
+      `${SQUARE_API_BASE}/orders/search`,
+      {
+        location_ids: [locationId],
+        query: {
+          filter: {
+            date_time_filter: { closed_at: { start_at: `${startDate}T00:00:00Z`, end_at: `${endDateExclusive}T00:00:00Z` } },
+            state_filter: { states: ['COMPLETED'] },
+          },
+          sort: { sort_field: 'CLOSED_AT' },
+        },
+        limit: 500,
+        cursor,
+      },
+      { headers: squareHeaders() }
+    );
+    (response.data.orders || []).forEach((order) => {
+      const date = (order.closed_at || '').slice(0, 10);
+      if (!date) return;
+      (order.line_items || []).forEach((li) => {
+        const name = (li.name || '').trim().toLowerCase();
+        const qty = parseFloat(li.quantity);
+        if (!name || !Number.isFinite(qty)) return;
+        sold[date] = sold[date] || {};
+        sold[date][name] = (sold[date][name] || 0) + qty;
+      });
+    });
+    cursor = response.data.cursor;
+    page += 1;
+  } while (cursor && page < 50);
+  return sold;
+};
+
+// Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
+app.get('/api/production', (req, res) => {
+  const production = loadProduction();
+  if (!req.query.location) return res.json(production);
+  res.json({ location: req.query.location, rows: production[req.query.location] || [] });
+});
+
+// GET /api/waste?location=ARC&start=YYYY-MM-DD&end=YYYY-MM-DD
+// start/end default to the min/max dates present in that location's uploaded production data.
+// Cached 1 hour per location+range (Square order data changes as sales come in through the day).
+app.get('/api/waste', async (req, res) => {
+  const location = req.query.location;
+  const locationConfig = WASTE_LOCATIONS.find((l) => l.name === location);
+  if (!locationConfig) {
+    return res.status(400).json({ error: `Unknown or missing location. Expected one of: ${WASTE_LOCATIONS.map((l) => l.name).join(', ')}`, rows: [] });
+  }
+
+  const production = loadProduction()[location] || [];
+  if (production.length === 0) {
+    return res.json({ location, rows: [], status: 'empty', message: 'No production data uploaded yet for this location.' });
+  }
+
+  const token = process.env.SQUARE_ACCESS_TOKEN;
+  if (!token || token === 'your_square_token_here') {
+    return res.status(400).json({ error: 'Square API credentials not configured', rows: [] });
+  }
+
+  const dates = production.map((r) => r.date).sort();
+  const start = req.query.start || dates[0];
+  const end = req.query.end || dates[dates.length - 1];
+
+  const cacheKey = `waste_${location}_${start}_${end}`;
+  const cached = cacheManager.get(cacheKey);
+  if (cached) return res.json({ ...cached, cached: true });
+
+  try {
+    const sold = await fetchSoldQuantities(locationConfig.squareLocationId, start, addDays(end, 1));
+
+    const rows = production
+      .filter((r) => r.date >= start && r.date <= end)
+      .map((r) => {
+        const quantitySold = (sold[r.date] && sold[r.date][r.item.toLowerCase()]) || 0;
+        return {
+          date: r.date,
+          item: r.item,
+          quantityProduced: round2(r.quantityProduced),
+          quantitySold: round2(quantitySold),
+          waste: round2(Math.max(r.quantityProduced - quantitySold, 0)),
+          oversold: quantitySold > r.quantityProduced,
+        };
+      })
+      .sort((a, b) => a.date.localeCompare(b.date) || a.item.localeCompare(b.item));
+
+    // Square sales whose item name never matches a production row for this location - usually
+    // means the CSV's item name and Square's point-of-sale name for that item have drifted apart
+    // (e.g. catalog "Country RND" sells under the display name "Country Round"). Surfaced so the
+    // waste numbers aren't silently inflated by an unmatched name.
+    const producedNames = new Set(production.map((r) => r.item.toLowerCase()));
+    const unmatchedTotals = {};
+    Object.entries(sold).forEach(([date, items]) => {
+      if (date < start || date > end) return;
+      Object.entries(items).forEach(([nameLower, qty]) => {
+        if (producedNames.has(nameLower)) return;
+        unmatchedTotals[nameLower] = (unmatchedTotals[nameLower] || 0) + qty;
+      });
+    });
+    const unmatchedSoldItems = Object.entries(unmatchedTotals)
+      .map(([item, quantitySold]) => ({ item, quantitySold: round2(quantitySold) }))
+      .sort((a, b) => b.quantitySold - a.quantitySold);
+
+    const totals = rows.reduce(
+      (acc, r) => ({
+        quantityProduced: acc.quantityProduced + r.quantityProduced,
+        quantitySold: acc.quantitySold + r.quantitySold,
+        waste: acc.waste + r.waste,
+      }),
+      { quantityProduced: 0, quantitySold: 0, waste: 0 }
+    );
+
+    const response = {
+      location,
+      start,
+      end,
+      rows,
+      totals: {
+        quantityProduced: round2(totals.quantityProduced),
+        quantitySold: round2(totals.quantitySold),
+        waste: round2(totals.waste),
+        wastePct: totals.quantityProduced > 0 ? round2((totals.waste / totals.quantityProduced) * 100) : 0,
+      },
+      unmatchedSoldItems,
+      status: 'ready',
+    };
+    cacheManager.set(cacheKey, response, 60 * 60 * 1000); // 1 hour
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({
+      error: 'Square API error',
+      message: err.response?.data?.errors?.[0]?.detail || err.message,
+      rows: [],
+    });
   }
 });
 
