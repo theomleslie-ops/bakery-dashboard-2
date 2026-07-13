@@ -1017,9 +1017,14 @@ app.get('/api/pl-by-channel', (req, res) => {
 // under that day - no catalog lookup or ID mapping required.
 
 // Fetch every COMPLETED order at a location closed within [startDate, endDateExclusive), and
-// aggregate quantity sold per (day, lowercased item name).
+// aggregate quantity sold per (day, lowercased item name), plus a per-item average unit price
+// (gross sales / quantity, across the whole range) - there's no separate price/cost tracking
+// anywhere in this app, so this is the only $ figure available, and it's used as a stand-in
+// price for produced/wasted units too (which were never actually sold, so have no real
+// transaction price of their own).
 const fetchSoldQuantities = async (locationId, startDate, endDateExclusive) => {
   const sold = {}; // sold[date][itemNameLower] = quantity
+  const priceTotals = {}; // priceTotals[itemNameLower] = { revenue, quantity }
   let cursor;
   let page = 0;
   do {
@@ -1048,12 +1053,24 @@ const fetchSoldQuantities = async (locationId, startDate, endDateExclusive) => {
         if (!name || !Number.isFinite(qty)) return;
         sold[date] = sold[date] || {};
         sold[date][name] = (sold[date][name] || 0) + qty;
+
+        const revenue = (li.gross_sales_money?.amount || 0) / 100;
+        const acc = priceTotals[name] || { revenue: 0, quantity: 0 };
+        acc.revenue += revenue;
+        acc.quantity += qty;
+        priceTotals[name] = acc;
       });
     });
     cursor = response.data.cursor;
     page += 1;
   } while (cursor && page < 50);
-  return sold;
+
+  const avgPrice = {};
+  Object.entries(priceTotals).forEach(([name, { revenue, quantity }]) => {
+    if (quantity > 0) avgPrice[name] = revenue / quantity;
+  });
+
+  return { sold, avgPrice };
 };
 
 // Location names for the Waste tab's location/market toggle, split the same way as WASTE_LOCATIONS.
@@ -1100,22 +1117,28 @@ app.get('/api/waste', async (req, res) => {
   if (cached) return res.json({ ...cached, cached: true });
 
   try {
-    const sold = await fetchSoldQuantities(locationConfig.squareLocationId, start, addDays(end, 1));
+    const { sold, avgPrice } = await fetchSoldQuantities(locationConfig.squareLocationId, start, addDays(end, 1));
 
     const rows = production
       .filter((r) => r.date >= start && r.date <= end)
       .map((r) => {
         const quantitySold = (sold[r.date] && sold[r.date][r.item.toLowerCase()]) || 0;
         const ordered = Number.isFinite(r.ordered) ? r.ordered : null;
+        const waste = Math.max(r.quantityProduced - quantitySold, 0);
+        const price = avgPrice[r.item.toLowerCase()] ?? null;
         return {
           date: r.date,
           item: r.item,
           ordered: ordered !== null ? round2(ordered) : null,
           quantityProduced: round2(r.quantityProduced),
           quantitySold: round2(quantitySold),
-          waste: round2(Math.max(r.quantityProduced - quantitySold, 0)),
+          waste: round2(waste),
           oversold: quantitySold > r.quantityProduced,
           fulfillmentPct: ordered && ordered > 0 ? round2((r.quantityProduced / ordered) * 100) : null,
+          price: price !== null ? round2(price) : null,
+          producedValue: price !== null ? round2(r.quantityProduced * price) : null,
+          soldValue: price !== null ? round2(quantitySold * price) : null,
+          wasteValue: price !== null ? round2(waste * price) : null,
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date) || a.item.localeCompare(b.item));
@@ -1142,8 +1165,11 @@ app.get('/api/waste', async (req, res) => {
         quantityProduced: acc.quantityProduced + r.quantityProduced,
         quantitySold: acc.quantitySold + r.quantitySold,
         waste: acc.waste + r.waste,
+        producedValue: acc.producedValue + (r.producedValue || 0),
+        soldValue: acc.soldValue + (r.soldValue || 0),
+        wasteValue: acc.wasteValue + (r.wasteValue || 0),
       }),
-      { quantityProduced: 0, quantitySold: 0, waste: 0 }
+      { quantityProduced: 0, quantitySold: 0, waste: 0, producedValue: 0, soldValue: 0, wasteValue: 0 }
     );
 
     const response = {
@@ -1156,6 +1182,9 @@ app.get('/api/waste', async (req, res) => {
         quantitySold: round2(totals.quantitySold),
         waste: round2(totals.waste),
         wastePct: totals.quantityProduced > 0 ? round2((totals.waste / totals.quantityProduced) * 100) : 0,
+        producedValue: round2(totals.producedValue),
+        soldValue: round2(totals.soldValue),
+        wasteValue: round2(totals.wasteValue),
       },
       unmatchedSoldItems,
       status: 'ready',
