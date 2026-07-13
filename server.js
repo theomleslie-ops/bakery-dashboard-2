@@ -17,6 +17,16 @@ app.use(express.json());
 const DATA_DIR = 'data';
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
+// If DATA_DIR is backed by a persistent volume (e.g. Railway), a fresh/empty volume shadows
+// whatever git-tracked files used to live at this path in the image (data/monthly-financial.json
+// is committed to git specifically so it survives redeploys, but a volume mount replaces the whole
+// directory's content on first attach). Restore it from the repo-tracked seed copy if missing.
+const MONTHLY_FINANCIAL_FILE = path.join(DATA_DIR, 'monthly-financial.json');
+const MONTHLY_FINANCIAL_SEED = 'seed-data/monthly-financial.json';
+if (!fs.existsSync(MONTHLY_FINANCIAL_FILE) && fs.existsSync(MONTHLY_FINANCIAL_SEED)) {
+  fs.copyFileSync(MONTHLY_FINANCIAL_SEED, MONTHLY_FINANCIAL_FILE);
+}
+
 const RECIPES_FILE = path.join(DATA_DIR, 'recipes.json');
 const INGREDIENTS_FILE = path.join(DATA_DIR, 'ingredients.json');
 const FINANCIAL_FILE = path.join(DATA_DIR, 'financial.json');
