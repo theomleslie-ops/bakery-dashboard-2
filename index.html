@@ -925,10 +925,13 @@
       const map = new Map();
       rows.forEach((r) => {
         const key = wastePeriodKey(r.date, granularity);
-        const entry = map.get(key) || { period: key, quantityProduced: 0, quantitySold: 0, waste: 0 };
+        const entry = map.get(key) || { period: key, quantityProduced: 0, quantitySold: 0, waste: 0, producedValue: 0, soldValue: 0, wasteValue: 0 };
         entry.quantityProduced += r.quantityProduced;
         entry.quantitySold += r.quantitySold;
         entry.waste += r.waste;
+        entry.producedValue += r.producedValue || 0;
+        entry.soldValue += r.soldValue || 0;
+        entry.wasteValue += r.wasteValue || 0;
         map.set(key, entry);
       });
       return [...map.values()].sort((a, b) => a.period.localeCompare(b.period));
@@ -954,19 +957,19 @@
 
     function WasteBarChart({ periods, granularity, selectedPeriod, onSelectPeriod }) {
       const [hovered, setHovered] = useState(null);
-      const maxWaste = niceMax(Math.max(...periods.map((p) => p.waste), 0) * 1.15);
+      const maxWasteValue = niceMax(Math.max(...periods.map((p) => p.wasteValue), 0) * 1.15);
       const tickCount = 5;
-      const ticks = Array.from({ length: tickCount }, (_, i) => (maxWaste / (tickCount - 1)) * i);
+      const ticks = Array.from({ length: tickCount }, (_, i) => (maxWasteValue / (tickCount - 1)) * i);
       return (
         <div className="stacked-chart">
           <div className="chart-y-axis" style={{ height: CHART_HEIGHT }}>
-            {ticks.map((t) => (<div key={t} className="y-tick" style={{ bottom: `${(t / maxWaste) * CHART_HEIGHT}px` }}>{fmtQty(t)}</div>))}
+            {ticks.map((t) => (<div key={t} className="y-tick" style={{ bottom: `${(t / maxWasteValue) * CHART_HEIGHT}px` }}>{fmtMoneyShort(t)}</div>))}
           </div>
           <div className="chart-plot" style={{ height: CHART_HEIGHT }}>
-            {ticks.map((t) => (<div key={t} className="gridline" style={{ bottom: `${(t / maxWaste) * CHART_HEIGHT}px` }} />))}
+            {ticks.map((t) => (<div key={t} className="gridline" style={{ bottom: `${(t / maxWasteValue) * CHART_HEIGHT}px` }} />))}
             <div className="chart-bars">
               {periods.map((p) => {
-                const barPx = maxWaste > 0 ? (p.waste / maxWaste) * CHART_HEIGHT : 0;
+                const barPx = maxWasteValue > 0 ? (p.wasteValue / maxWasteValue) * CHART_HEIGHT : 0;
                 const isSelected = p.period === selectedPeriod;
                 return (
                   <div className="bar-col-wrap" key={p.period}>
@@ -981,9 +984,9 @@
                       {hovered === p.period && (
                         <div className="stack-tooltip">
                           <strong>{fmtPeriodLabel(p.period, granularity)}</strong><br />
-                          Produced: {fmtQty(p.quantityProduced)}<br />
-                          Sold: {fmtQty(p.quantitySold)}<br />
-                          Waste: {fmtQty(p.waste)} ({pct(p.waste, p.quantityProduced)})
+                          Produced: {fmtMoney(p.producedValue)}<br />
+                          Sold: {fmtMoney(p.soldValue)}<br />
+                          Waste: {fmtMoney(p.wasteValue)} ({pct(p.waste, p.quantityProduced)})
                         </div>
                       )}
                     </div>
