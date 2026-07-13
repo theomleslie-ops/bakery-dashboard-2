@@ -935,10 +935,11 @@
     function buildWasteByItem(rows) {
       const map = new Map();
       rows.forEach((r) => {
-        const entry = map.get(r.item) || { item: r.item, quantityProduced: 0, quantitySold: 0, waste: 0 };
+        const entry = map.get(r.item) || { item: r.item, quantityProduced: 0, quantitySold: 0, waste: 0, ordered: null };
         entry.quantityProduced += r.quantityProduced;
         entry.quantitySold += r.quantitySold;
         entry.waste += r.waste;
+        if (r.ordered != null) entry.ordered = (entry.ordered || 0) + r.ordered;
         map.set(r.item, entry);
       });
       return [...map.values()].sort((a, b) => b.waste - a.waste);
@@ -1107,6 +1108,25 @@
                         <td className="num">{fmtQty(it.quantityProduced)}</td>
                         <td className="num">{fmtQty(it.quantitySold)}</td>
                         <td className="num">{fmtQty(it.waste)}</td>
+                        <td className="num">{pct(it.waste, it.quantityProduced)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="panel">
+                <div className="panel-title">Order Fulfillment by Item</div>
+                <div className="panel-hint">Ordered vs. received (produced) vs. left over, for items uploaded with an Ordered quantity. Shows N/A where no Ordered quantity was tracked for that item.</div>
+                <table>
+                  <thead><tr><th>Item</th><th className="num">Ordered</th><th className="num">Received</th><th className="num">Left Over</th><th className="num">Fulfillment %</th><th className="num">Waste %</th></tr></thead>
+                  <tbody>
+                    {items.map((it) => (
+                      <tr key={it.item}>
+                        <td>{it.item}</td>
+                        <td className="num">{it.ordered != null ? fmtQty(it.ordered) : 'N/A'}</td>
+                        <td className="num">{fmtQty(it.quantityProduced)}</td>
+                        <td className="num">{fmtQty(it.waste)}</td>
+                        <td className="num">{it.ordered != null ? pct(it.quantityProduced, it.ordered) : 'N/A'}</td>
                         <td className="num">{pct(it.waste, it.quantityProduced)}</td>
                       </tr>
                     ))}
