@@ -217,7 +217,9 @@ app.post('/api/upload/ingredients', upload.single('file'), (req, res) => {
     });
 });
 
-// Upload production CSV for one location (columns: Date, Item, Quantity Produced).
+// Upload production CSV for one location (columns: Date, Item, Quantity Produced, and an optional
+// Ordered column - how many of that item were ordered from the kitchen, when tracked separately
+// from what was actually produced/received).
 // Merges into that location's existing rows in data/production.json by date: dates present in
 // this upload replace whatever was on file for those dates (so re-uploading a corrected day is
 // clean); other dates and other locations are left untouched. This lets weekly production sheets
@@ -238,8 +240,9 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
       const date = (row['Date'] || '').trim();
       const item = (row['Item'] || '').trim();
       const quantityProduced = parseFloat(row['Quantity Produced']);
+      const ordered = parseFloat(row['Ordered']);
       if (date && item && Number.isFinite(quantityProduced)) {
-        rows.push({ date, item, quantityProduced });
+        rows.push({ date, item, quantityProduced, ordered: Number.isFinite(ordered) ? ordered : null });
       }
     })
     .on('end', () => {
@@ -1103,13 +1106,16 @@ app.get('/api/waste', async (req, res) => {
       .filter((r) => r.date >= start && r.date <= end)
       .map((r) => {
         const quantitySold = (sold[r.date] && sold[r.date][r.item.toLowerCase()]) || 0;
+        const ordered = Number.isFinite(r.ordered) ? r.ordered : null;
         return {
           date: r.date,
           item: r.item,
+          ordered: ordered !== null ? round2(ordered) : null,
           quantityProduced: round2(r.quantityProduced),
           quantitySold: round2(quantitySold),
           waste: round2(Math.max(r.quantityProduced - quantitySold, 0)),
           oversold: quantitySold > r.quantityProduced,
+          fulfillmentPct: ordered && ordered > 0 ? round2((r.quantityProduced / ordered) * 100) : null,
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date) || a.item.localeCompare(b.item));
