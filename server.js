@@ -348,8 +348,8 @@ const fetchWorkweekStartDow = async () => {
   return DOW_INDEX[config?.start_of_week] ?? 1; // default Monday
 };
 
-// Fetch every CLOSED timecard whose shift starts within [startDate, endDateExclusive), all locations
-const fetchAllTimecards = async (startDate, endDateExclusive) => {
+// Fetch every CLOSED timecard whose shift starts within [startDate, endDateExclusive) for one window
+const fetchTimecardsWindow = async (startDate, endDateExclusive) => {
   const timecards = [];
   let cursor;
   let page = 0;
@@ -373,6 +373,31 @@ const fetchAllTimecards = async (startDate, endDateExclusive) => {
     page += 1;
   } while (cursor && page < 50);
   return timecards;
+};
+
+// Fetch every CLOSED timecard whose shift starts within [startDate, endDateExclusive), all locations.
+// Square returns timecards newest-first, and each window's search is itself capped at 50 pages
+// (10,000 timecards) as a safety valve - with ~50 active locations, a multi-year range can exceed
+// that in one shot and silently truncate before reaching the oldest requested dates. Splitting the
+// range into 28-day windows (fetched with limited concurrency) keeps each window's own result set
+// far below that cap regardless of how many locations or how wide the requested range is.
+const fetchAllTimecards = async (startDate, endDateExclusive) => {
+  const windows = [];
+  let windowStart = startDate;
+  while (windowStart < endDateExclusive) {
+    const windowEnd = addDays(windowStart, 28) < endDateExclusive ? addDays(windowStart, 28) : endDateExclusive;
+    windows.push([windowStart, windowEnd]);
+    windowStart = windowEnd;
+  }
+
+  const CONCURRENCY = 5;
+  const results = [];
+  for (let i = 0; i < windows.length; i += CONCURRENCY) {
+    const batch = windows.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(batch.map(([s, e]) => fetchTimecardsWindow(s, e)));
+    results.push(...batchResults);
+  }
+  return results.flat();
 };
 
 // Fetch team member id -> display name map
