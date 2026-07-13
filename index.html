@@ -956,6 +956,11 @@
     };
 
     function WasteBarChart({ periods, granularity, selectedPeriod, onSelectPeriod }) {
+      // `hovered` carries the hovered bar's viewport rect so the tooltip can be portaled to
+      // document.body and positioned with `position: fixed` - it used to be an absolutely-positioned
+      // child of .chart-plot, which sets `overflow-x: auto`. Per the CSS spec, a non-visible
+      // overflow-x forces the paired overflow-y to compute as auto too (not visible, no matter what's
+      // written), so the tooltip could get silently clipped/hidden by that container's own edges.
       const [hovered, setHovered] = useState(null);
       const maxWasteValue = niceMax(Math.max(...periods.map((p) => p.wasteValue), 0) * 1.15);
       const tickCount = 5;
@@ -976,19 +981,11 @@
                     <div
                       className={`bar-col${isSelected ? ' period-selected' : ''}`}
                       style={{ height: `${Math.max(barPx, 2)}px` }}
-                      onMouseEnter={() => setHovered(p.period)}
+                      onMouseEnter={(e) => setHovered({ period: p, rect: e.currentTarget.getBoundingClientRect() })}
                       onMouseLeave={() => setHovered(null)}
                       onClick={() => onSelectPeriod(p.period)}
                     >
                       <div className="seg seg-waste" style={{ height: '100%' }} />
-                      {hovered === p.period && (
-                        <div className="stack-tooltip">
-                          <strong>{fmtPeriodLabel(p.period, granularity)}</strong><br />
-                          Produced: {fmtMoney(p.producedValue)}<br />
-                          Sold: {fmtMoney(p.soldValue)}<br />
-                          Waste: {fmtMoney(p.wasteValue)} ({pct(p.waste, p.quantityProduced)})
-                        </div>
-                      )}
                     </div>
                     <div className="bar-x-label">{fmtPeriodLabel(p.period, granularity)}</div>
                   </div>
@@ -996,6 +993,18 @@
               })}
             </div>
           </div>
+          {hovered && ReactDOM.createPortal(
+            <div
+              className="stack-tooltip"
+              style={{ position: 'fixed', top: `${hovered.rect.top - 10}px`, left: `${hovered.rect.left + hovered.rect.width / 2}px`, bottom: 'auto', transform: 'translate(-50%, -100%)' }}
+            >
+              <strong>{fmtPeriodLabel(hovered.period.period, granularity)}</strong><br />
+              Produced: {fmtMoney(hovered.period.producedValue)}<br />
+              Sold: {fmtMoney(hovered.period.soldValue)}<br />
+              Waste: {fmtMoney(hovered.period.wasteValue)} ({pct(hovered.period.waste, hovered.period.quantityProduced)})
+            </div>,
+            document.body
+          )}
         </div>
       );
     }
