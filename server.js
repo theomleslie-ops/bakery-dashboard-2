@@ -1026,17 +1026,30 @@ app.get('/api/pl-by-channel', (req, res) => {
 // (line_items[].name / .quantity), not the catalog, since that's the name Square actually sold
 // under that day - no catalog lookup or ID mapping required.
 
-// Fetch every COMPLETED order at a location closed within [startDate, endDateExclusive), and
-// aggregate quantity sold per (day, lowercased item name), plus a per-item average unit price
-// (gross sales / quantity, across the whole range) - there's no separate price/cost tracking
-// anywhere in this app, so this is the only $ figure available, and it's used as a stand-in
-// price for produced/wasted units too (which were never actually sold, so have no real
-// transaction price of their own).
+// Square's closed_at is UTC. Every one of these locations is in California, so a sale any time
+// after ~5pm Pacific has a UTC instant that falls on the *next* calendar day - naively slicing the
+// UTC string groups evening sales under the wrong business day, and for a market that runs into the
+// evening (as opposed to a bakery that closes mid-afternoon) that can misattribute most of a day's
+// sales. Convert to the location's actual local calendar date instead.
+const squareDateInPacific = (isoString) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(isoString));
+
+// Fetch every COMPLETED order at a location closed within [startDate, endDateExclusive) (Pacific
+// calendar dates), and aggregate quantity sold per (day, lowercased item name), plus a per-item
+// average unit price (gross sales / quantity, across the whole range) - there's no separate
+// price/cost tracking anywhere in this app, so this is the only $ figure available, and it's used
+// as a stand-in price for produced/wasted units too (which were never actually sold, so have no
+// real transaction price of their own).
 const fetchSoldQuantities = async (locationId, startDate, endDateExclusive) => {
   const sold = {}; // sold[date][itemNameLower] = quantity
   const priceTotals = {}; // priceTotals[itemNameLower] = { revenue, quantity }
   let cursor;
   let page = 0;
+  // Pacific midnight doesn't line up with UTC midnight (up to ~8h offset depending on DST), so query
+  // a UTC window padded a day on each side to guarantee full coverage, then filter back down to the
+  // intended Pacific range after bucketing each order by its actual local date.
+  const queryStart = addDays(startDate, -1);
+  const queryEnd = addDays(endDateExclusive, 1);
   do {
     const response = await axios.post(
       `${SQUARE_API_BASE}/orders/search`,
@@ -1044,7 +1057,7 @@ const fetchSoldQuantities = async (locationId, startDate, endDateExclusive) => {
         location_ids: [locationId],
         query: {
           filter: {
-            date_time_filter: { closed_at: { start_at: `${startDate}T00:00:00Z`, end_at: `${endDateExclusive}T00:00:00Z` } },
+            date_time_filter: { closed_at: { start_at: `${queryStart}T00:00:00Z`, end_at: `${queryEnd}T00:00:00Z` } },
             state_filter: { states: ['COMPLETED'] },
           },
           sort: { sort_field: 'CLOSED_AT' },
@@ -1055,8 +1068,9 @@ const fetchSoldQuantities = async (locationId, startDate, endDateExclusive) => {
       { headers: squareHeaders() }
     );
     (response.data.orders || []).forEach((order) => {
-      const date = (order.closed_at || '').slice(0, 10);
-      if (!date) return;
+      if (!order.closed_at) return;
+      const date = squareDateInPacific(order.closed_at);
+      if (date < startDate || date >= endDateExclusive) return;
       (order.line_items || []).forEach((li) => {
         const name = (li.name || '').trim().toLowerCase();
         const qty = parseFloat(li.quantity);
