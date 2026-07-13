@@ -131,6 +131,10 @@ class CacheManager {
     }
   }
 
+  invalidatePrefix(prefix) {
+    [...this.cache.keys()].filter((key) => key.startsWith(prefix)).forEach((key) => this.invalidate(key));
+  }
+
   status() {
     const entries = [];
     this.cache.forEach((entry, key) => {
@@ -339,8 +343,15 @@ const getWeekStart = (dateStr, startDow) => {
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
+// Square's Labor history for this account only goes back this far - don't ask it for more.
+const OVERTIME_HISTORY_START = '2024-07-01';
+
 const OVERTIME_SNAPSHOT_FILE = path.join(DATA_DIR, 'overtime-snapshot.json');
-const loadOvertimeSnapshot = () => loadData(OVERTIME_SNAPSHOT_FILE);
+const loadOvertimeSnapshot = () => {
+  const data = loadData(OVERTIME_SNAPSHOT_FILE);
+  return Array.isArray(data?.weeks) ? data : null;
+};
+const saveOvertimeSnapshot = (snapshot) => saveData(OVERTIME_SNAPSHOT_FILE, snapshot);
 
 const fetchWorkweekStartDow = async () => {
   const response = await axios.get(`${SQUARE_API_BASE}/labor/workweek-configs`, { headers: squareHeaders() });
@@ -348,8 +359,8 @@ const fetchWorkweekStartDow = async () => {
   return DOW_INDEX[config?.start_of_week] ?? 1; // default Monday
 };
 
-// Fetch every CLOSED timecard whose shift starts within [startDate, endDateExclusive), all locations
-const fetchAllTimecards = async (startDate, endDateExclusive) => {
+// Fetch every CLOSED timecard whose shift starts within [startDate, endDateExclusive) for one window
+const fetchTimecardsWindow = async (startDate, endDateExclusive) => {
   const timecards = [];
   let cursor;
   let page = 0;
@@ -373,6 +384,31 @@ const fetchAllTimecards = async (startDate, endDateExclusive) => {
     page += 1;
   } while (cursor && page < 50);
   return timecards;
+};
+
+// Fetch every CLOSED timecard whose shift starts within [startDate, endDateExclusive), all locations.
+// Square returns timecards newest-first, and each window's search is itself capped at 50 pages
+// (10,000 timecards) as a safety valve - with ~50 active locations, a multi-year range can exceed
+// that in one shot and silently truncate before reaching the oldest requested dates. Splitting the
+// range into 28-day windows (fetched with limited concurrency) keeps each window's own result set
+// far below that cap regardless of how many locations or how wide the requested range is.
+const fetchAllTimecards = async (startDate, endDateExclusive) => {
+  const windows = [];
+  let windowStart = startDate;
+  while (windowStart < endDateExclusive) {
+    const windowEnd = addDays(windowStart, 28) < endDateExclusive ? addDays(windowStart, 28) : endDateExclusive;
+    windows.push([windowStart, windowEnd]);
+    windowStart = windowEnd;
+  }
+
+  const CONCURRENCY = 5;
+  const results = [];
+  for (let i = 0; i < windows.length; i += CONCURRENCY) {
+    const batch = windows.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(batch.map(([s, e]) => fetchTimecardsWindow(s, e)));
+    results.push(...batchResults);
+  }
+  return results.flat();
 };
 
 // Fetch team member id -> display name map
@@ -546,10 +582,60 @@ const buildOvertimeReport = (timecards, teamNames, startDow) => {
   });
 };
 
+// Fetch + build one week-by-week overtime report straight from Square, no snapshot involved.
+// The result is written to disk (data/overtime-snapshot.json, git-tracked) and kept indefinitely, so
+// named per-employee wage detail is stripped here - unlike the live report, which keeps it so the
+// dashboard can still surface "who's accumulating OT this week" for the current, unsnapshotted range.
+const buildOvertimeSnapshot = async (startDate, endDateExclusive) => {
+  const [startDow, timecards, teamNames] = await Promise.all([
+    fetchWorkweekStartDow(),
+    fetchAllTimecards(startDate, endDateExclusive),
+    fetchTeamMemberNames(),
+  ]);
+  const weeks = buildOvertimeReport(timecards, teamNames, startDow).map((week) => ({
+    ...week,
+    functions: week.functions.map((fn) => ({ ...fn, employees: [] })),
+  }));
+  return {
+    success: true,
+    weeks,
+    rangeStart: startDate,
+    rangeEnd: endDateExclusive,
+    generatedAt: new Date().toISOString(),
+    employeeDetail: false,
+  };
+};
+
+// POST /api/overtime/snapshot/rebuild?start=YYYY-MM-DD&end=YYYY-MM-DD
+// Rebuilds the cached historical overtime snapshot (data/overtime-snapshot.json) from Square.
+// `end` defaults to the first of the current month, so the snapshot only ever covers fully-closed
+// months - /api/overtime layers the current, still-open month on top of it live at request time,
+// instead of re-fetching years of Square timecards on every request.
+app.post('/api/overtime/snapshot/rebuild', async (req, res) => {
+  const token = process.env.SQUARE_ACCESS_TOKEN;
+  if (!token || token === 'your_square_token_here') {
+    return res.status(400).json({ error: 'Square API credentials not configured' });
+  }
+
+  const startDate = req.query.start || OVERTIME_HISTORY_START;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const endDateExclusive = req.query.end || `${todayStr.slice(0, 7)}-01`;
+
+  try {
+    const snapshot = await buildOvertimeSnapshot(startDate, endDateExclusive);
+    saveOvertimeSnapshot(snapshot);
+    cacheManager.invalidatePrefix('overtime_');
+    res.json({ success: true, rangeStart: snapshot.rangeStart, rangeEnd: snapshot.rangeEnd, weekCount: snapshot.weeks.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message });
+  }
+});
+
 // GET /api/overtime?weeks=8&end=YYYY-MM-DD
 // `end` is the Monday (workweek start) of the most recent week to include; defaults to
 // the most recently completed workweek. `weeks` is how many workweeks back to include.
-// Cached for 24 hours per query.
+// Weeks covered by the cached snapshot (data/overtime-snapshot.json) are served from disk;
+// only the remaining, more recent slice is fetched live from Square. Cached for 24 hours per query.
 app.get('/api/overtime', async (req, res) => {
   const token = process.env.SQUARE_ACCESS_TOKEN;
   if (!token || token === 'your_square_token_here') {
@@ -573,15 +659,44 @@ app.get('/api/overtime', async (req, res) => {
     const defaultLastCompletedWeekStart = addDays(currentWeekStart, -7);
     const lastWeekStart = req.query.end || defaultLastCompletedWeekStart;
 
-    const rangeStart = addDays(lastWeekStart, -7 * (weekCount - 1));
+    let rangeStart = addDays(lastWeekStart, -7 * (weekCount - 1));
+    if (rangeStart < OVERTIME_HISTORY_START) rangeStart = OVERTIME_HISTORY_START;
     const rangeEndExclusive = addDays(lastWeekStart, 7);
 
-    const [timecards, teamNames] = await Promise.all([
-      fetchAllTimecards(rangeStart, rangeEndExclusive),
-      fetchTeamMemberNames(),
-    ]);
+    const snapshot = loadOvertimeSnapshot();
+    const weekByStart = new Map();
+    if (snapshot) {
+      snapshot.weeks.forEach((w) => {
+        if (w.weekStart >= rangeStart && w.weekStart < rangeEndExclusive) weekByStart.set(w.weekStart, w);
+      });
+    }
 
-    const weeks = buildOvertimeReport(timecards, teamNames, startDow);
+    // Re-fetch the last cached week (plus one extra week of buffer) live rather than trusting the
+    // snapshot's raw calendar-date boundary. Square's start_at filter matches on UTC instant, but
+    // weeks are grouped by each timecard's location-local calendar date, so a shift starting just
+    // after local midnight-Monday can still land on the "wrong" side of a same-instant UTC split -
+    // getting fetched (and counted) by both the snapshot and the live query. Re-fetching a full extra
+    // week and letting the live result overwrite the cached one for that key sidesteps that entirely.
+    let liveFetchStart = rangeStart;
+    if (snapshot?.rangeEnd && snapshot.rangeEnd > rangeStart) {
+      liveFetchStart = addDays(getWeekStart(snapshot.rangeEnd, startDow), -7);
+      if (liveFetchStart < rangeStart) liveFetchStart = rangeStart;
+    }
+
+    if (liveFetchStart < rangeEndExclusive) {
+      const [timecards, teamNames] = await Promise.all([
+        fetchAllTimecards(liveFetchStart, rangeEndExclusive),
+        fetchTeamMemberNames(),
+      ]);
+      // The same UTC/local mismatch can leak a stray pre-liveFetchStart shift into this fetch too,
+      // producing an incomplete entry for the week just before the intended live window. Only trust
+      // weeks that started at or after liveFetchStart itself - anything earlier stays on the cache.
+      buildOvertimeReport(timecards, teamNames, startDow)
+        .filter((w) => w.weekStart >= liveFetchStart)
+        .forEach((w) => weekByStart.set(w.weekStart, w));
+    }
+
+    const weeks = [...weekByStart.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
     const response = { success: true, weeks, rangeStart, rangeEnd: addDays(rangeEndExclusive, -1), employeeDetail: true };
     cacheManager.set(cacheKey, response, 24 * 60 * 60 * 1000); // Cache for 24 hours
     res.json(response);
