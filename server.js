@@ -1193,12 +1193,12 @@ app.get('/api/health', (req, res) => {
 
 // Serve dashboard
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile('index.html', { root: __dirname });
 });
 
 // Serve overtime report
 app.get('/overtime', (req, res) => {
-  res.sendFile(path.join(__dirname, 'overtime.html'));
+  res.sendFile('overtime.html', { root: __dirname });
 });
 
 // ============= LEGAL PAGES (required by Intuit's app settings) =============

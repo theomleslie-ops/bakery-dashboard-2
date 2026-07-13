@@ -328,6 +328,12 @@
     }
     const CHART_HEIGHT = 320;
     function MonthlyStackedBarChart({ months, selectedMonth, onSelectMonth, labelFormatter = fmtMonthLabel, fillWidth = false }) {
+      // `hovered` also carries the hovered bar's viewport rect, so the tooltip can be portaled to
+      // document.body and positioned with `position: fixed`. It used to be an absolutely-positioned
+      // child of .chart-plot, which sets `overflow-x: auto` - per the CSS spec, a non-`visible`
+      // overflow-x forces the paired overflow-y to compute as `auto` too (not `visible`, no matter
+      // what's written), so the tooltip could get silently clipped by that container's own top edge
+      // for taller bars. Escaping via a portal sidesteps that entirely.
       const [hovered, setHovered] = useState(null);
       const maxTotal = niceMax(Math.max(...months.map((m) => m.totalWage), 0) * 1.08);
       const tickCount = 5;
@@ -349,11 +355,16 @@
                 const isSelected = m.monthKey === selectedMonth;
                 return (
                   <div className="bar-col-wrap" key={m.monthKey}>
-                    <div className={`bar-col${isSelected ? ' selected' : ''}`} style={{ height: `${Math.max(barPx, 2)}px` }} onMouseEnter={() => setHovered(m.monthKey)} onMouseLeave={() => setHovered(null)} onClick={() => onSelectMonth(m.monthKey)}>
+                    <div
+                      className={`bar-col${isSelected ? ' selected' : ''}`}
+                      style={{ height: `${Math.max(barPx, 2)}px` }}
+                      onMouseEnter={(e) => setHovered({ month: m, rect: e.currentTarget.getBoundingClientRect() })}
+                      onMouseLeave={() => setHovered(null)}
+                      onClick={() => onSelectMonth(m.monthKey)}
+                    >
                       <div className="seg seg-base" style={{ height: `${basePx}px` }} />
                       <div className="seg seg-bakery" style={{ height: `${bakeryPx}px` }} />
                       <div className="seg seg-nonbakery" style={{ height: `${nonBakeryPx}px` }} />
-                      {hovered === m.monthKey && (<div className="stack-tooltip"><strong>{labelFormatter(m.monthKey)}</strong><br />Total labor: {fmtMoney(m.totalWage)}<br />Bakery OT: {fmtMoney(m.bakeryOtWage)} ({pct(m.bakeryOtWage, m.totalWage)} of total)<br />Non-bakery OT: {fmtMoney(m.nonBakeryOtWage)} ({pct(m.nonBakeryOtWage, m.totalWage)} of total)</div>)}
                     </div>
                     <div className="bar-x-label">{labelFormatter(m.monthKey)}</div>
                   </div>
@@ -361,6 +372,18 @@
               })}
             </div>
           </div>
+          {hovered && ReactDOM.createPortal(
+            <div
+              className="stack-tooltip"
+              style={{ position: 'fixed', top: `${hovered.rect.top - 10}px`, left: `${hovered.rect.left + hovered.rect.width / 2}px`, bottom: 'auto', transform: 'translate(-50%, -100%)' }}
+            >
+              <strong>{labelFormatter(hovered.month.monthKey)}</strong><br />
+              Total labor: {fmtMoney(hovered.month.totalWage)}<br />
+              Bakery OT: {fmtMoney(hovered.month.bakeryOtWage)} ({pct(hovered.month.bakeryOtWage, hovered.month.totalWage)} of total)<br />
+              Non-bakery OT: {fmtMoney(hovered.month.nonBakeryOtWage)} ({pct(hovered.month.nonBakeryOtWage, hovered.month.totalWage)} of total)
+            </div>,
+            document.body
+          )}
         </div>
       );
     }
