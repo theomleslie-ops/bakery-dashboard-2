@@ -343,8 +343,8 @@ const getWeekStart = (dateStr, startDow) => {
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
-// Square's Labor history for this account only goes back this far - don't ask it for more.
-const OVERTIME_HISTORY_START = '2024-07-01';
+// Earliest date the overtime report should show, per business preference.
+const OVERTIME_HISTORY_START = '2025-01-01';
 
 const OVERTIME_SNAPSHOT_FILE = path.join(DATA_DIR, 'overtime-snapshot.json');
 const loadOvertimeSnapshot = () => {
