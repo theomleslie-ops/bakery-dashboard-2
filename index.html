@@ -59,7 +59,6 @@
     .chart-bars { position: relative; display: flex; align-items: flex-end; gap: 28px; height: 100%; padding: 0 20px; min-width: max-content; }
     .bar-col-wrap { display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; }
     .bar-col { width: 56px; display: flex; flex-direction: column; border-radius: 4px 4px 0 0; overflow: hidden; cursor: pointer; position: relative; }
-    .bar-col.selected { outline: 2px solid #6b4423; outline-offset: 2px; }
     .seg { width: 100%; transition: filter 0.15s; }
     .bar-col:hover .seg { filter: brightness(1.1); }
     .seg-nonbakery { background: #c05621; } .seg-bakery { background: #2b6cb0; } .seg-base { background: #3f8361; }
@@ -352,11 +351,10 @@
                 const basePx = m.totalWage > 0 ? (m.baseWage / m.totalWage) * barPx : 0;
                 const bakeryPx = m.totalWage > 0 ? (m.bakeryOtWage / m.totalWage) * barPx : 0;
                 const nonBakeryPx = m.totalWage > 0 ? (m.nonBakeryOtWage / m.totalWage) * barPx : 0;
-                const isSelected = m.monthKey === selectedMonth;
                 return (
                   <div className="bar-col-wrap" key={m.monthKey}>
                     <div
-                      className={`bar-col${isSelected ? ' selected' : ''}`}
+                      className="bar-col"
                       style={{ height: `${Math.max(barPx, 2)}px` }}
                       onMouseEnter={(e) => setHovered({ month: m, rect: e.currentTarget.getBoundingClientRect() })}
                       onMouseLeave={() => setHovered(null)}
