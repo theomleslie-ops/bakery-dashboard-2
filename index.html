@@ -59,6 +59,7 @@
     .chart-bars { position: relative; display: flex; align-items: flex-end; gap: 28px; height: 100%; padding: 0 20px; min-width: max-content; }
     .bar-col-wrap { display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; }
     .bar-col { width: 56px; display: flex; flex-direction: column; border-radius: 4px 4px 0 0; overflow: hidden; cursor: pointer; position: relative; }
+    .bar-col.period-selected { outline: 2px solid #6b4423; outline-offset: 2px; }
     .seg { width: 100%; transition: filter 0.15s; }
     .bar-col:hover .seg { filter: brightness(1.1); }
     .seg-nonbakery { background: #c05621; } .seg-bakery { background: #2b6cb0; } .seg-base { background: #3f8361; }
@@ -911,18 +912,19 @@
     }
 
     // Aggregate item+day waste rows into day/week(Monday-start)/month buckets for the bar chart.
+    const wastePeriodKey = (date, granularity) => {
+      if (granularity === 'day') return date;
+      if (granularity === 'month') return date.slice(0, 7);
+      const d = new Date(`${date}T00:00:00Z`);
+      const isoDow = (d.getUTCDay() + 6) % 7; // 0 = Monday
+      d.setUTCDate(d.getUTCDate() - isoDow);
+      return d.toISOString().slice(0, 10);
+    };
+
     function buildWastePeriods(rows, granularity) {
-      const keyFor = (date) => {
-        if (granularity === 'day') return date;
-        if (granularity === 'month') return date.slice(0, 7);
-        const d = new Date(`${date}T00:00:00Z`);
-        const isoDow = (d.getUTCDay() + 6) % 7; // 0 = Monday
-        d.setUTCDate(d.getUTCDate() - isoDow);
-        return d.toISOString().slice(0, 10);
-      };
       const map = new Map();
       rows.forEach((r) => {
-        const key = keyFor(r.date);
+        const key = wastePeriodKey(r.date, granularity);
         const entry = map.get(key) || { period: key, quantityProduced: 0, quantitySold: 0, waste: 0 };
         entry.quantityProduced += r.quantityProduced;
         entry.quantitySold += r.quantitySold;
@@ -950,7 +952,7 @@
       return new Date(`${period}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
     };
 
-    function WasteBarChart({ periods, granularity }) {
+    function WasteBarChart({ periods, granularity, selectedPeriod, onSelectPeriod }) {
       const [hovered, setHovered] = useState(null);
       const maxWaste = niceMax(Math.max(...periods.map((p) => p.waste), 0) * 1.15);
       const tickCount = 5;
@@ -965,9 +967,16 @@
             <div className="chart-bars">
               {periods.map((p) => {
                 const barPx = maxWaste > 0 ? (p.waste / maxWaste) * CHART_HEIGHT : 0;
+                const isSelected = p.period === selectedPeriod;
                 return (
                   <div className="bar-col-wrap" key={p.period}>
-                    <div className="bar-col" style={{ height: `${Math.max(barPx, 2)}px` }} onMouseEnter={() => setHovered(p.period)} onMouseLeave={() => setHovered(null)}>
+                    <div
+                      className={`bar-col${isSelected ? ' period-selected' : ''}`}
+                      style={{ height: `${Math.max(barPx, 2)}px` }}
+                      onMouseEnter={() => setHovered(p.period)}
+                      onMouseLeave={() => setHovered(null)}
+                      onClick={() => onSelectPeriod(p.period)}
+                    >
                       <div className="seg seg-waste" style={{ height: '100%' }} />
                       {hovered === p.period && (
                         <div className="stack-tooltip">
@@ -993,9 +1002,12 @@
       const [filterType, setFilterType] = useState('location');
       const [location, setLocation] = useState('');
       const [granularity, setGranularity] = useState('week');
+      const [selectedPeriod, setSelectedPeriod] = useState(null);
       const [wasteData, setWasteData] = useState(null);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
+
+      useEffect(() => { setSelectedPeriod(null); }, [granularity, location]);
 
       useEffect(() => {
         const baseUrl = window.location.origin;
@@ -1037,7 +1049,9 @@
 
       const rows = (wasteData && wasteData.rows) || [];
       const periods = buildWastePeriods(rows, granularity);
-      const items = buildWasteByItem(rows);
+      const effectivePeriod = selectedPeriod || (periods.length ? periods[periods.length - 1].period : null);
+      const periodRows = effectivePeriod ? rows.filter((r) => wastePeriodKey(r.date, granularity) === effectivePeriod) : rows;
+      const items = buildWasteByItem(periodRows);
       const totals = wasteData && wasteData.totals;
       const unmatched = ((wasteData && wasteData.unmatchedSoldItems) || []).slice(0, 10);
 
@@ -1094,10 +1108,11 @@
               </div>
               <div className="chart-container">
                 <div className="chart-title">Waste by {granularity === 'day' ? 'Day' : granularity === 'week' ? 'Week' : 'Month'}</div>
-                <WasteBarChart periods={periods} granularity={granularity} />
+                <div className="panel-hint">Click a bar to see that {granularity}'s breakdown in the table below.</div>
+                <WasteBarChart periods={periods} granularity={granularity} selectedPeriod={effectivePeriod} onSelectPeriod={setSelectedPeriod} />
               </div>
               <div className="panel">
-                <div className="panel-title">Order Fulfillment by Item</div>
+                <div className="panel-title">Order Fulfillment by Item {effectivePeriod ? `— ${fmtPeriodLabel(effectivePeriod, granularity)}` : ''}</div>
                 <div className="panel-hint">Ordered vs. received (produced) vs. left over, for items uploaded with an Ordered quantity. Shows N/A where no Ordered quantity was tracked for that item.</div>
                 <table>
                   <thead><tr><th>Item</th><th className="num">Ordered</th><th className="num">Received</th><th className="num">Left Over</th><th className="num">Fulfillment %</th><th className="num">Waste %</th></tr></thead>
