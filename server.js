@@ -838,13 +838,13 @@ app.post('/api/quickbooks/disconnect', (req, res) => {
 
 // ============= QUICKBOOKS DATA ENDPOINTS =============
 
-// Fetch a Profit & Loss report summarized by month for a date range
-const fetchQBProfitAndLoss = async (startDate, endDate) => {
+// Fetch a Profit & Loss report from QuickBooks, broken into periods (Week or Month) for a date range
+const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Month') => {
   const tokens = await getValidQBAccessToken();
   const response = await axios.get(
     `${getQBBaseUrl()}/v3/company/${tokens.realmId}/reports/ProfitAndLoss`,
     {
-      params: { start_date: startDate, end_date: endDate, summarize_column_by: 'Month' },
+      params: { start_date: startDate, end_date: endDate, summarize_column_by: summarizeColumnBy },
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
     }
   );
@@ -868,25 +868,52 @@ const findQBSummaryRow = (rows, group) => {
   return null;
 };
 
-// Convert a QuickBooks ProfitAndLoss report (summarized by month) into our monthlyData shape
-const parseQBMonthlyPL = (report) => {
+// Walk a QuickBooks report's row tree looking for a row whose account name contains the given
+// text (e.g. 'LABOR/PAYROLL EXPENSES' lives as a line item nested inside the Expenses group,
+// not as its own top-level group, so it can't be found via findQBSummaryRow)
+const findQBRowByLabel = (rows, labelSubstring) => {
+  if (!rows) return null;
+  const needle = labelSubstring.toUpperCase();
+  for (const row of rows) {
+    const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+    if (label.toUpperCase().includes(needle)) return row;
+    if (row.Rows?.Row) {
+      const found = findQBRowByLabel(row.Rows.Row, labelSubstring);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
+const getQBRowVals = (row) => {
+  const cols = row?.Summary?.ColData || row?.Header?.ColData;
+  return cols?.map((c) => parseFloat(c.value) || 0) || [];
+};
+
+// Convert a QuickBooks ProfitAndLoss report (summarized by Week or Month) into per-period rows.
+// Real dollar figures straight from the ledger for each period - never averaged or estimated
+// from a different granularity.
+const parseQBPeriodPL = (report) => {
   const columns = report.Columns?.Column || [];
-  const monthCols = columns
+  const periodCols = columns
     .map((c, i) => ({ index: i, title: c.ColTitle }))
     .filter((c) => c.title && c.title !== 'Total');
 
-  const getVals = (row) => row?.Summary?.ColData?.map((c) => parseFloat(c.value) || 0) || [];
-  const revenueVals = getVals(findQBSummaryRow(report.Rows?.Row, 'Income'));
-  const cogsVals = getVals(findQBSummaryRow(report.Rows?.Row, 'COGS'));
-  const opexVals = getVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
-  const laborVals = getVals(findQBSummaryRow(report.Rows?.Row, 'Payroll'));
-  const netVals = getVals(report.Rows?.Row?.find((r) => r.group === 'NetIncome'));
+  const revenueVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Income'));
+  const cogsVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'COGS'));
+  const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
+  const laborVals = getQBRowVals(findQBRowByLabel(report.Rows?.Row, 'LABOR'));
+  const netVals = getQBRowVals(report.Rows?.Row?.find((r) => r.group === 'NetIncome'));
 
-  return monthCols.map((col) => {
+  return periodCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
+    // Monthly columns are titled with the bare month name (e.g. "January"); weekly columns are
+    // titled with a date range (e.g. "Jun 28 - Jul 4, 2026") - only rewrite the former.
+    const isBareMonth = monthIdx >= 0 && /^[A-Za-z]+$/.test(col.title.trim());
+    const shortLabelMatch = col.title.match(/^([A-Za-z]+ \d+)/);
     return {
-      month: monthIdx >= 0 ? MONTH_SHORTS[monthIdx] : col.title,
-      name: monthIdx >= 0 ? MONTH_NAMES[monthIdx] : col.title,
+      label: isBareMonth ? MONTH_SHORTS[monthIdx] : (shortLabelMatch ? shortLabelMatch[1] : col.title),
+      fullLabel: isBareMonth ? MONTH_NAMES[monthIdx] : col.title,
       revenue: revenueVals[col.index] || 0,
       cogs: cogsVals[col.index] || 0,
       opex: opexVals[col.index] || 0,
@@ -982,8 +1009,30 @@ app.get('/api/dashboard', async (req, res) => {
       source: 'Multi-month P/L Statements'
     } : { source: 'No financial data uploaded yet' };
 
+    // Weekly data comes live from QuickBooks (real per-week ledger totals, not an average of
+    // monthly figures) - only available once QuickBooks has been connected.
+    let weeklyData = [];
+    let weeklySource = 'QuickBooks not connected';
+    try {
+      const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 16, 52);
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - weeksBack * 7);
+      const isoDate = (d) => d.toISOString().slice(0, 10);
+      const report = await fetchQBProfitAndLoss(isoDate(start), isoDate(end), 'Week');
+      weeklyData = parseQBPeriodPL(report);
+      weeklySource = 'QuickBooks (live, weekly)';
+    } catch (err) {
+      if (err.code !== 'QB_NOT_CONNECTED') {
+        console.error('Weekly QuickBooks P&L fetch failed:', err.response?.data?.fault?.detail?.[0]?.message || err.message);
+        weeklySource = 'QuickBooks fetch failed';
+      }
+    }
+
     res.json({
       monthlyData,
+      weeklyData,
+      weeklySource,
       summary,
       recipes: { count: recipes.length },
       ingredients: { count: ingredients.length },
