@@ -86,6 +86,14 @@
     .employee-detail { background: #faf6f2; }
     .employee-detail td { padding: 8px 12px 8px 40px; font-size: 12px; color: #5a4a3a; border-bottom: 1px solid #f0e8e0; }
     .empty { background: white; color: #8b6c57; padding: 24px; border-radius: 8px; margin: 20px 0; font-size: 14px; }
+    .margin-bar-list { display: flex; flex-direction: column; gap: 8px; max-height: 640px; overflow-y: auto; padding-right: 4px; }
+    .margin-bar-row { display: grid; grid-template-columns: 200px 1fr 150px; align-items: center; gap: 14px; }
+    .margin-bar-label { font-size: 12px; color: var(--chart-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .margin-bar-track { position: relative; height: 14px; background: #f5f1ed; border: 1px solid #e8ddd5; border-radius: 4px; overflow: hidden; }
+    .margin-bar-fill { position: absolute; top: 0; left: 0; height: 100%; min-width: 3px; background: var(--series-cogs); border-radius: 4px; }
+    .margin-bar-refline { position: absolute; top: -1px; bottom: -1px; border-left: 1px dashed #a89a89; }
+    .margin-bar-value { font-size: 12px; font-weight: 600; color: var(--chart-ink); text-align: right; white-space: nowrap; }
+    .margin-bar-detail { display: block; font-size: 10px; font-weight: 400; color: var(--chart-muted); margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -1160,6 +1168,107 @@
       );
     }
 
+    function ItemMarginDashboard() {
+      const [data, setData] = useState(null);
+      const [status, setStatus] = useState('loading');
+      const [error, setError] = useState('');
+
+      useEffect(() => {
+        const baseUrl = window.location.origin;
+        fetch(`${baseUrl}/api/item-margins`)
+          .then((r) => r.json())
+          .then((result) => {
+            if (result.error) { setError(result.error); setStatus('error'); return; }
+            setData(result);
+            setStatus(result.status || 'ready');
+          })
+          .catch((err) => { setError('Failed to load data: ' + err.message); setStatus('error'); });
+      }, []);
+
+      const items = (data && data.items) || [];
+      const unmatched = (data && data.unmatchedRecipes) || [];
+      const avgPct = items.length ? items.reduce((s, it) => s + it.percent, 0) / items.length : 0;
+      const maxPct = items.length ? items[0].percent : 0;
+      const scaleMax = Math.max(100, Math.ceil((maxPct * 1.05) / 10) * 10);
+      const refLinePct = scaleMax > 100 ? (100 / scaleMax) * 100 : null;
+
+      return (
+        <div className="container">
+          <header>
+            <h1>🥐 Item Margins</h1>
+            <p className="subtitle">Ingredient cost as a share of listed price, per item — Square catalog price vs. recipe cost</p>
+          </header>
+          {error && <div className="error">{error}</div>}
+          {status === 'loading' && <div className="loading">Loading recipes &amp; Square catalog prices…</div>}
+          {status === 'empty' && <div className="empty">No recipes uploaded yet. Upload recipes.csv to populate this view.</div>}
+          {status === 'ready' && items.length === 0 && unmatched.length === 0 && (
+            <div className="empty">No recipes matched a Square catalog item by name.</div>
+          )}
+          {status === 'ready' && items.length > 0 && (
+            <>
+              <div className="metrics">
+                <div className="metric-card">
+                  <div className="metric-label">Items Tracked</div>
+                  <div className="metric-value">{items.length}</div>
+                  <div className="metric-sub">{unmatched.length} recipe{unmatched.length === 1 ? '' : 's'} unmatched</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Average Ingredient Cost</div>
+                  <div className="metric-value">{avgPct.toFixed(1)}%</div>
+                  <div className="metric-sub">of listed price</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Highest</div>
+                  <div className="metric-value" style={{ color: '#d03b3b' }}>{items[0].percent.toFixed(1)}%</div>
+                  <div className="metric-sub">{items[0].name}</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Lowest</div>
+                  <div className="metric-value" style={{ color: '#2f9e44' }}>{items[items.length - 1].percent.toFixed(1)}%</div>
+                  <div className="metric-sub">{items[items.length - 1].name}</div>
+                </div>
+              </div>
+              <div className="chart-container">
+                <div className="chart-title">Ingredient Cost as % of Listed Price</div>
+                <div className="panel-hint">
+                  Sorted highest to lowest — the top items are where ingredients eat the biggest share of the price.
+                  {refLinePct != null && ' The dashed line marks 100% (ingredient cost equals the listed price).'}
+                </div>
+                <div className="margin-bar-list">
+                  {items.map((it) => {
+                    const widthPct = Math.min(100, (it.percent / scaleMax) * 100);
+                    return (
+                      <div className="margin-bar-row" key={it.name}>
+                        <div className="margin-bar-label" title={it.name}>{it.name}</div>
+                        <div className="margin-bar-track">
+                          {refLinePct != null && <div className="margin-bar-refline" style={{ left: `${refLinePct}%` }} />}
+                          <div className="margin-bar-fill" style={{ width: `${widthPct}%` }} />
+                        </div>
+                        <div className="margin-bar-value">
+                          {it.percent.toFixed(1)}%
+                          <span className="margin-bar-detail">{fmtMoney(it.ingredientCost)} / {fmtMoney(it.listedPrice)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+          {unmatched.length > 0 && (
+            <div className="panel">
+              <div className="panel-title">Recipes without a matching Square item</div>
+              <div className="panel-hint">These are in recipes.csv but no active Square catalog item has this exact name — rename the recipe to match Square's item name, or it's not currently sold.</div>
+              <table>
+                <thead><tr><th>Recipe name</th></tr></thead>
+                <tbody>{unmatched.map((name) => (<tr key={name}><td>{name}</td></tr>))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function MainApp() {
       const [activeTab, setActiveTab] = useState('dashboard');
       return (
@@ -1172,6 +1281,7 @@
                 <button className={`tab-button ${activeTab === 'prime-cost' ? 'active' : ''}`} onClick={() => setActiveTab('prime-cost')}>Prime Cost</button>
                 <button className={`tab-button ${activeTab === 'pl-channel' ? 'active' : ''}`} onClick={() => setActiveTab('pl-channel')}>P&L by Channel</button>
                 <button className={`tab-button ${activeTab === 'waste' ? 'active' : ''}`} onClick={() => setActiveTab('waste')}>Waste</button>
+                <button className={`tab-button ${activeTab === 'item-margins' ? 'active' : ''}`} onClick={() => setActiveTab('item-margins')}>Item Margins</button>
               </div>
             </div>
           </div>
@@ -1180,6 +1290,7 @@
           <div className={`tab-content ${activeTab === 'prime-cost' ? 'active' : ''}`}><PrimeCostDashboard /></div>
           <div className={`tab-content ${activeTab === 'pl-channel' ? 'active' : ''}`}><PLByChannelDashboard /></div>
           <div className={`tab-content ${activeTab === 'waste' ? 'active' : ''}`}><WasteDashboard /></div>
+          <div className={`tab-content ${activeTab === 'item-margins' ? 'active' : ''}`}><ItemMarginDashboard /></div>
         </div>
       );
     }

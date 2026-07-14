@@ -70,6 +70,16 @@ that location's uploaded production data; override with `start`/`end` (`YYYY-MM-
 Also returns `unmatchedSoldItems`: things Square sold in that window whose name never matched a
 production row — usually means the CSV item name and Square's point-of-sale name have drifted apart.
 
+**Get item margins (Item Margins tab):**
+```bash
+curl http://localhost:3001/api/item-margins
+```
+For every uploaded recipe, compares its ingredient cost (`Cost / Yield` from recipes.csv) against
+the item's live listed price from the Square catalog, matched by exact name. Returns `items`
+(sorted highest ingredient-cost-% first) and `unmatchedRecipes`: recipe names with no matching
+active Square catalog item by name — rename the recipe to match Square's item name if it should be
+tracked. Cached 1 hour; the cache is cleared on every recipes.csv upload.
+
 ## CSV File Formats
 
 ### recipes.csv
