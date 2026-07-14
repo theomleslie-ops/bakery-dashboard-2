@@ -233,6 +233,7 @@
     function DashboardContent() {
       const [data, setData] = useState([]);
       const [error, setError] = useState('');
+      const [weeklySource, setWeeklySource] = useState('');
       const [viewMode, setViewMode] = useState('dollars');
       useEffect(() => { fetchData(); }, []);
       const fetchData = async () => {
@@ -240,7 +241,8 @@
           const baseUrl = window.location.origin;
           const response = await fetch(`${baseUrl}/api/dashboard`);
           const result = await response.json();
-          setData(result.monthlyData || []);
+          setData((result.weeklyData || []).map(w => ({ ...w, month: w.label })));
+          setWeeklySource(result.weeklySource || '');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
         }
@@ -249,19 +251,28 @@
         <div className="container">
           <header>
             <h1>📊 P/L Dashboard</h1>
-            <p className="subtitle">Monthly Profit, Cost of Goods, and Operating Expenses</p>
+            <p className="subtitle">Weekly Profit, Cost of Goods, and Operating Expenses</p>
           </header>
           {error && <div className="error">{error}</div>}
-          <div className="controls">
-            <div className="view-toggle">
-              <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
-              <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
+          {!error && data.length === 0 && (
+            <div className="empty">
+              No weekly P&amp;L data available ({weeklySource || 'loading…'}). Connect QuickBooks under Settings to populate this view - weekly figures come straight from your books, never averaged down from monthly totals.
             </div>
-          </div>
-          <div className="chart-container">
-            <div className="chart-title">COGS, Operating Expenses & Profit/Loss by Month ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
-            <StackedBarChart data={data} viewMode={viewMode} />
-          </div>
+          )}
+          {data.length > 0 && (
+            <>
+              <div className="controls">
+                <div className="view-toggle">
+                  <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
+                  <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
+                </div>
+              </div>
+              <div className="chart-container">
+                <div className="chart-title">COGS, Operating Expenses & Profit/Loss by Week ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
+                <StackedBarChart data={data} viewMode={viewMode} />
+              </div>
+            </>
+          )}
         </div>
       );
     }
@@ -531,12 +542,12 @@
       );
     }
 
-    const PrimeCostChart = ({ months }) => {
-      const [hoveredMonth, setHoveredMonth] = useState(null);
+    const PrimeCostChart = ({ weeks }) => {
+      const [hoveredWeek, setHoveredWeek] = useState(null);
       const chartHeight = 400;
       const benchmarkPercent = 60;
       const niceMax = (v) => { if (v <= 0) return 100; const magnitude = Math.pow(10, Math.floor(Math.log10(v))); const residual = v / magnitude; let niceResidual; if (residual <= 1) niceResidual = 1; else if (residual <= 2) niceResidual = 2; else if (residual <= 5) niceResidual = 5; else niceResidual = 10; return niceResidual * magnitude; };
-      const actualMax = Math.max(...months.map(m => m.totalPercent), benchmarkPercent);
+      const actualMax = Math.max(...weeks.map(w => w.totalPercent), benchmarkPercent);
       const chartMax = niceMax(actualMax * 1.1);
       const benchmarkY = chartHeight + 50 - (benchmarkPercent / chartMax) * chartHeight;
       const getScaledBarHeight = (percent) => (percent / chartMax) * chartHeight;
@@ -569,44 +580,44 @@
               );
             })}
             <line x1="60" y1={benchmarkY} x2="960" y2={benchmarkY} stroke="#d9534f" strokeWidth="2" strokeDasharray="5,5" />
-            {months.map((month, i) => {
-              const n = months.length || 1;
+            {weeks.map((week, i) => {
+              const n = weeks.length || 1;
               const slotWidth = 900 / n;
               const barWidth = Math.min(40, slotWidth * 0.6);
               const cx = 60 + slotWidth * i + slotWidth / 2;
-              const foodHeight = getScaledBarHeight(month.foodPercent);
-              const laborHeight = getScaledBarHeight(month.laborPercent);
+              const foodHeight = getScaledBarHeight(week.foodPercent);
+              const laborHeight = getScaledBarHeight(week.laborPercent);
               const baselineY = chartHeight + 50;
               const foodY = baselineY - foodHeight;
               const laborY = foodY - laborHeight;
               return (
                 <g key={`bar${i}`}>
-                  <rect x={cx - barWidth / 2} y={foodY} width={barWidth} height={foodHeight} fill="#2a78d6" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <rect x={cx - barWidth / 2} y={laborY} width={barWidth} height={laborHeight} fill="#1baf7a" rx="2" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <rect x={cx - slotWidth / 2} y="20" width={slotWidth} height={chartHeight + 30} fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} />
-                  <text x={cx} y={baselineY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{month.monthLabel.split(' ')[0]}</text>
+                  <rect x={cx - barWidth / 2} y={foodY} width={barWidth} height={foodHeight} fill="#2a78d6" rx="2" onMouseEnter={() => setHoveredWeek(i)} onMouseLeave={() => setHoveredWeek(null)} />
+                  <rect x={cx - barWidth / 2} y={laborY} width={barWidth} height={laborHeight} fill="#1baf7a" rx="2" onMouseEnter={() => setHoveredWeek(i)} onMouseLeave={() => setHoveredWeek(null)} />
+                  <rect x={cx - slotWidth / 2} y="20" width={slotWidth} height={chartHeight + 30} fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredWeek(i)} onMouseLeave={() => setHoveredWeek(null)} />
+                  <text x={cx} y={baselineY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{week.label}</text>
                 </g>
               );
             })}
-            {hoveredMonth !== null && (
+            {hoveredWeek !== null && (
               (() => {
-                const month = months[hoveredMonth];
-                const n = months.length || 1;
+                const week = weeks[hoveredWeek];
+                const n = weeks.length || 1;
                 const slotWidth = 900 / n;
-                const cx = 60 + slotWidth * hoveredMonth + slotWidth / 2;
+                const cx = 60 + slotWidth * hoveredWeek + slotWidth / 2;
                 const tooltipWidth = 200;
                 const tooltipHeight = 120;
                 const tooltipX = cx < 500 ? cx + 12 : cx - tooltipWidth - 12;
                 const tooltipY = 30;
                 return (
-                  <g key={`tooltip${hoveredMonth}`}>
+                  <g key={`tooltip${hoveredWeek}`}>
                     <line x1={cx} y1="20" x2={cx} y2={chartHeight + 50} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
                     <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
-                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{month.monthLabel}</text>
-                    <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">Food Cost: {month.foodPercent.toFixed(1)}%</text>
-                    <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">Labor: {month.laborPercent.toFixed(1)}%</text>
-                    <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fontWeight="600" fill="var(--chart-ink)">Prime Cost: {month.totalPercent.toFixed(1)}%</text>
-                    <text x={tooltipX + 10} y={tooltipY + 105} fontSize="10" fill="var(--chart-ink-secondary)">Revenue: ${(month.revenue / 1000).toFixed(0)}k</text>
+                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{week.fullLabel}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">Food Cost: {week.foodPercent.toFixed(1)}%</text>
+                    <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">Labor: {week.laborPercent.toFixed(1)}%</text>
+                    <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fontWeight="600" fill="var(--chart-ink)">Prime Cost: {week.totalPercent.toFixed(1)}%</text>
+                    <text x={tooltipX + 10} y={tooltipY + 105} fontSize="10" fill="var(--chart-ink-secondary)">Revenue: ${(week.revenue / 1000).toFixed(0)}k</text>
                   </g>
                 );
               })()
@@ -617,9 +628,10 @@
     };
 
     function PrimeCostDashboard() {
-      const [months, setMonths] = useState([]);
+      const [weeks, setWeeks] = useState([]);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
+      const [weeklySource, setWeeklySource] = useState('');
       useEffect(() => { fetchData(); }, []);
       const fetchData = async () => {
         try {
@@ -627,55 +639,53 @@
           const baseUrl = window.location.origin;
           const response = await fetch(`${baseUrl}/api/dashboard`);
           const dashData = await response.json();
-          if (!dashData.monthlyData) {
+          if (!dashData.weeklyData) {
             throw new Error('Missing financial data from server');
           }
-          const monthShorts = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          const combined = [];
-          dashData.monthlyData.forEach(m => {
-            if (m.revenue > 0) {
-              const labor = m.labor || 0;
-              const foodPercent = (m.cogs / m.revenue) * 100;
-              const laborPercent = (labor / m.revenue) * 100;
-              const totalPercent = foodPercent + laborPercent;
-              combined.push({
-                monthLabel: `${m.month} ${m.year}`,
-                year: m.year,
-                monthNum: monthShorts.indexOf(m.month) + 1,
-                revenue: m.revenue,
+          setWeeklySource(dashData.weeklySource || '');
+          const combined = dashData.weeklyData
+            .filter(w => w.revenue > 0)
+            .map(w => {
+              const foodPercent = (w.cogs / w.revenue) * 100;
+              const laborPercent = (w.labor / w.revenue) * 100;
+              return {
+                label: w.label,
+                fullLabel: w.fullLabel,
+                revenue: w.revenue,
                 foodPercent,
                 laborPercent,
-                totalPercent,
-              });
-            }
-          });
-          setMonths(combined.sort((a, b) => {
-            if (a.year !== b.year) return a.year - b.year;
-            return a.monthNum - b.monthNum;
-          }));
+                totalPercent: foodPercent + laborPercent,
+              };
+            });
+          setWeeks(combined);
           setStatus(combined.length > 0 ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
         }
       };
-      const goalMet = months.filter(m => m.totalPercent <= 60).length;
-      const avgPrimeCost = months.length > 0 ? months.reduce((s, m) => s + m.totalPercent, 0) / months.length : 0;
+      const goalMet = weeks.filter(w => w.totalPercent <= 60).length;
+      const latestWeek = weeks.length > 0 ? weeks[weeks.length - 1] : null;
       return (
         <div className="container">
           <header>
             <h1>🎯 Prime Cost Dashboard</h1>
-            <p className="subtitle">Food Cost + Labor as % of Revenue (Goal: ≤60%)</p>
+            <p className="subtitle">Food Cost + Labor as % of Revenue, by week (Goal: ≤60%)</p>
           </header>
           {status === 'loading' && <div className="loading">Loading financial and labor data…</div>}
           {status === 'error' && <div className="error">{error}</div>}
-          {status === 'ready' && months.length > 0 && (
+          {status === 'ready' && weeks.length > 0 && (
             <>
               <div className="metrics">
                 <div className="metric-card">
-                  <div className="metric-label">Average Prime Cost</div>
-                  <div className="metric-value">{avgPrimeCost.toFixed(1)}%</div>
-                  <div className="metric-sub">{goalMet} of {months.length} months at goal</div>
+                  <div className="metric-label">Latest Week Prime Cost</div>
+                  <div className="metric-value">{latestWeek.totalPercent.toFixed(1)}%</div>
+                  <div className="metric-sub">{latestWeek.fullLabel}</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Weeks At Goal</div>
+                  <div className="metric-value">{goalMet} / {weeks.length}</div>
+                  <div className="metric-sub">Weeks at or under 60%</div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-label">Goal</div>
@@ -684,13 +694,15 @@
                 </div>
               </div>
               <div className="chart-container">
-                <div className="chart-title">Prime Cost by Month (% of Revenue)</div>
-                <PrimeCostChart months={months} />
+                <div className="chart-title">Prime Cost by Week (% of Revenue)</div>
+                <PrimeCostChart weeks={weeks} />
               </div>
             </>
           )}
-          {status === 'ready' && months.length === 0 && (
-            <div className="empty">No financial data available. Please upload financial data.</div>
+          {status === 'ready' && weeks.length === 0 && (
+            <div className="empty">
+              No weekly financial data available ({weeklySource || 'loading…'}). Connect QuickBooks under Settings to populate this view - weekly figures come straight from your books, never averaged down from monthly totals.
+            </div>
           )}
         </div>
       );
