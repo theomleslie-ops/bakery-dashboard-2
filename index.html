@@ -1321,29 +1321,6 @@
         });
       };
       const visibleSeries = markets.filter(m => selected.has(m.name));
-    function ItemMarginDashboard() {
-      const [data, setData] = useState(null);
-      const [status, setStatus] = useState('loading');
-      const [error, setError] = useState('');
-
-      useEffect(() => {
-        const baseUrl = window.location.origin;
-        fetch(`${baseUrl}/api/item-margins`)
-          .then((r) => r.json())
-          .then((result) => {
-            if (result.error) { setError(result.error); setStatus('error'); return; }
-            setData(result);
-            setStatus(result.status || 'ready');
-          })
-          .catch((err) => { setError('Failed to load data: ' + err.message); setStatus('error'); });
-      }, []);
-
-      const items = (data && data.items) || [];
-      const unmatched = (data && data.unmatchedRecipes) || [];
-      const avgPct = items.length ? items.reduce((s, it) => s + it.percent, 0) / items.length : 0;
-      const maxPct = items.length ? items[0].percent : 0;
-      const scaleMax = Math.max(100, Math.ceil((maxPct * 1.05) / 10) * 10);
-      const refLinePct = scaleMax > 100 ? (100 / scaleMax) * 100 : null;
 
       return (
         <div className="container">
@@ -1378,6 +1355,41 @@
                       <span style={{ color: 'var(--chart-ink-secondary)' }}>{fmtMoneyShort(totalRevenue(m))}</span>
                     </label>
                   ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    function ItemMarginDashboard() {
+      const [data, setData] = useState(null);
+      const [status, setStatus] = useState('loading');
+      const [error, setError] = useState('');
+
+      useEffect(() => {
+        const baseUrl = window.location.origin;
+        fetch(`${baseUrl}/api/item-margins`)
+          .then((r) => r.json())
+          .then((result) => {
+            if (result.error) { setError(result.error); setStatus('error'); return; }
+            setData(result);
+            setStatus(result.status || 'ready');
+          })
+          .catch((err) => { setError('Failed to load data: ' + err.message); setStatus('error'); });
+      }, []);
+
+      const items = (data && data.items) || [];
+      const unmatched = (data && data.unmatchedRecipes) || [];
+      const avgPct = items.length ? items.reduce((s, it) => s + it.percent, 0) / items.length : 0;
+      const maxPct = items.length ? items[0].percent : 0;
+      const scaleMax = Math.max(100, Math.ceil((maxPct * 1.05) / 10) * 10);
+      const refLinePct = scaleMax > 100 ? (100 / scaleMax) * 100 : null;
+
+      return (
+        <div className="container">
+          <header>
             <h1>🥐 Item Margins</h1>
             <p className="subtitle">Ingredient cost as a share of listed price, per item — Square catalog price vs. recipe cost</p>
           </header>
