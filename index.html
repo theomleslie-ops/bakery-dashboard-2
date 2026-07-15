@@ -99,7 +99,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
     const DASHBOARD_PASSWORD = 'bakery123';
     function LoginScreen({ onLogin }) {
       const [password, setPassword] = useState('');
@@ -1284,6 +1284,58 @@
       );
     }
 
+    const MARKET_TOP_N_OPTIONS = [5, 8, 10, 15, 20, 25];
+
+    function MarketSelectMenu({ markets, selected, setSelected, colorOf, totalRevenue }) {
+      const [open, setOpen] = useState(false);
+      const [topN, setTopN] = useState(8);
+      const menuRef = useRef(null);
+
+      useEffect(() => {
+        const handleClickOutside = (e) => {
+          if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+      }, []);
+
+      const toggle = (name) => {
+        setSelected(prev => {
+          const next = new Set(prev);
+          if (next.has(name)) next.delete(name); else next.add(name);
+          return next;
+        });
+      };
+
+      return (
+        <div ref={menuRef} style={{ position: 'relative', display: 'inline-block' }}>
+          <button onClick={() => setOpen(o => !o)}>Select Markets ({selected.size}) {open ? '▴' : '▾'}</button>
+          {open && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', width: '340px', maxHeight: '440px', overflowY: 'auto', background: 'var(--chart-surface)', border: '1px solid var(--chart-grid)', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 20, padding: '10px' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--chart-grid)' }}>
+                <button onClick={() => setSelected(new Set(markets.map(m => m.name)))}>Select All</button>
+                <button onClick={() => setSelected(new Set())}>Select None</button>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: 'var(--chart-ink)', marginLeft: 'auto' }}>
+                  Top
+                  <select value={topN} onChange={(e) => { const n = parseInt(e.target.value, 10); setTopN(n); setSelected(new Set(markets.slice(0, n).map(m => m.name))); }}>
+                    {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+              </div>
+              {markets.map(m => (
+                <label key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer', fontSize: '13px' }}>
+                  <input type="checkbox" checked={selected.has(m.name)} onChange={() => toggle(m.name)} />
+                  <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: colorOf(m.name), flexShrink: 0 }}></span>
+                  <span style={{ flex: 1, color: 'var(--chart-ink)' }}>{m.name}</span>
+                  <span style={{ color: 'var(--chart-ink-secondary)' }}>{fmtMoneyShort(totalRevenue(m))}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function MarketPerformanceDashboard() {
       const [weekStarts, setWeekStarts] = useState([]);
       const [markets, setMarkets] = useState([]);
@@ -1313,13 +1365,6 @@
         return idx >= 0 && idx < 8 ? MARKET_PALETTE[idx] : MARKET_OVERFLOW_COLOR;
       };
       const totalRevenue = (m) => m.revenue.reduce((s, v) => s + v, 0);
-      const toggle = (name) => {
-        setSelected(prev => {
-          const next = new Set(prev);
-          if (next.has(name)) next.delete(name); else next.add(name);
-          return next;
-        });
-      };
       const visibleSeries = markets.filter(m => selected.has(m.name));
 
       return (
@@ -1334,28 +1379,11 @@
           {status === 'ready' && (
             <>
               <div className="controls">
-                <div className="view-toggle">
-                  <button onClick={() => setSelected(new Set(markets.map(m => m.name)))}>Select All</button>
-                  <button onClick={() => setSelected(new Set())}>Select None</button>
-                  <button onClick={() => setSelected(new Set(markets.slice(0, 8).map(m => m.name)))}>Top 8</button>
-                </div>
+                <MarketSelectMenu markets={markets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} />
               </div>
               <div className="chart-container">
                 <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
                 <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={colorOf} />
-              </div>
-              <div className="chart-container" style={{ marginTop: '16px' }}>
-                <div className="chart-title">Markets ({markets.length})</div>
-                <div style={{ maxHeight: '360px', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '4px 16px' }}>
-                  {markets.map(m => (
-                    <label key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer', fontSize: '13px' }}>
-                      <input type="checkbox" checked={selected.has(m.name)} onChange={() => toggle(m.name)} />
-                      <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: colorOf(m.name), flexShrink: 0 }}></span>
-                      <span style={{ flex: 1, color: 'var(--chart-ink)' }}>{m.name}</span>
-                      <span style={{ color: 'var(--chart-ink-secondary)' }}>{fmtMoneyShort(totalRevenue(m))}</span>
-                    </label>
-                  ))}
-                </div>
               </div>
             </>
           )}
