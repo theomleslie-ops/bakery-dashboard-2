@@ -953,6 +953,55 @@ const pairIntoBiweekly = (weeklyRows) => {
   return periods;
 };
 
+// ============= QUICKBOOKS WEEKLY P&L SNAPSHOT =============
+// Persists real per-week QuickBooks totals to disk (data/qb-weekly-pl-snapshot.json), keyed by
+// each week's Sunday start date, so a completed week is only ever fetched from QuickBooks once.
+// Only the most recent 2 weeks (which can still be settling - late-posted expenses, corrections)
+// are re-fetched live on every request; everything older is served straight from disk.
+
+const QB_WEEKLY_SNAPSHOT_FILE = path.join(DATA_DIR, 'qb-weekly-pl-snapshot.json');
+const loadQBWeeklySnapshot = () => {
+  const data = loadData(QB_WEEKLY_SNAPSHOT_FILE);
+  return data && data.weeks && typeof data.weeks === 'object' && !Array.isArray(data) ? data : { weeks: {} };
+};
+const saveQBWeeklySnapshot = (snapshot) => saveData(QB_WEEKLY_SNAPSHOT_FILE, snapshot);
+
+// Fetch one QuickBooks weekly report and key each column by its real Sunday start date.
+// `startDate` MUST be a Sunday and `endDateExclusive` MUST be `startDate` plus a whole number of
+// weeks - QuickBooks only returns clean, unpadded weekly columns from a Sunday-aligned start, so
+// the i-th column is reliably `startDate + 7*i` days without needing to parse its title text.
+const fetchQBWeeklyRows = async (startDate, endDateExclusive) => {
+  const report = await fetchQBProfitAndLoss(startDate, addDays(endDateExclusive, -1), 'Week');
+  const parsed = parseQBPeriodPL(report);
+  const rows = {};
+  parsed.forEach((row, i) => { rows[addDays(startDate, 7 * i)] = row; });
+  return rows;
+};
+
+// Get real per-week QuickBooks P&L totals for [rangeStart, rangeEndInclusive] (both Sundays),
+// backfilling from QuickBooks into the on-disk snapshot only for weeks not already cached, and
+// always refreshing the most recent 2 weeks live.
+const getQBWeeklyRows = async (rangeStart, rangeEndInclusive) => {
+  const snapshot = loadQBWeeklySnapshot();
+  const earliestCached = Object.keys(snapshot.weeks).sort()[0];
+
+  if (!earliestCached || rangeStart < earliestCached) {
+    const backfillEnd = earliestCached && earliestCached > rangeStart ? earliestCached : addDays(rangeEndInclusive, 7);
+    Object.assign(snapshot.weeks, await fetchQBWeeklyRows(rangeStart, backfillEnd));
+  }
+
+  const liveStart = addDays(rangeEndInclusive, -7);
+  Object.assign(snapshot.weeks, await fetchQBWeeklyRows(liveStart, addDays(rangeEndInclusive, 7)));
+
+  saveQBWeeklySnapshot(snapshot);
+
+  const rows = [];
+  for (let d = rangeStart; d <= rangeEndInclusive; d = addDays(d, 7)) {
+    if (snapshot.weeks[d]) rows.push(snapshot.weeks[d]);
+  }
+  return rows;
+};
+
 // Get raw P/L Statement from QuickBooks
 app.get('/api/quickbooks/pl', async (req, res) => {
   try {
@@ -1039,21 +1088,22 @@ app.get('/api/dashboard', async (req, res) => {
       source: 'Multi-month P/L Statements'
     } : { source: 'No financial data uploaded yet' };
 
-    // 2-week period data comes live from QuickBooks (real per-week ledger totals summed in pairs,
-    // never averaged or estimated) - only available once QuickBooks has been connected. Periods
-    // instead of raw weeks because labor/payroll posts roughly biweekly, so a single-week view is
-    // dominated by whichever week payroll happened to land in.
+    // 2-week period data comes from real per-week QuickBooks ledger totals summed in pairs, never
+    // averaged or estimated - only available once QuickBooks has been connected. Periods instead
+    // of raw weeks because labor/payroll posts roughly biweekly, so a single-week view is
+    // dominated by whichever week payroll happened to land in. Completed weeks are served from a
+    // disk-persisted snapshot (data/qb-weekly-pl-snapshot.json) instead of re-fetched every time -
+    // only the most recent 2 weeks are ever pulled live.
     let periodData = [];
     let periodSource = 'QuickBooks not connected';
     try {
       const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 16, 52);
-      const end = new Date();
-      const start = new Date();
-      start.setDate(start.getDate() - weeksBack * 7);
-      const isoDate = (d) => d.toISOString().slice(0, 10);
-      const report = await fetchQBProfitAndLoss(isoDate(start), isoDate(end), 'Week');
-      periodData = pairIntoBiweekly(parseQBPeriodPL(report));
-      periodSource = 'QuickBooks (live, every 2 weeks)';
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const currentWeekStart = getWeekStart(todayStr, 0);
+      const rangeStart = addDays(currentWeekStart, -7 * (weeksBack - 1));
+      const weeklyRows = await getQBWeeklyRows(rangeStart, currentWeekStart);
+      periodData = pairIntoBiweekly(weeklyRows);
+      periodSource = 'QuickBooks (cached + live, every 2 weeks)';
     } catch (err) {
       if (err.code !== 'QB_NOT_CONNECTED') {
         console.error('Weekly QuickBooks P&L fetch failed:', err.response?.data?.fault?.detail?.[0]?.message || err.message);
@@ -1243,10 +1293,54 @@ const mapWithConcurrency = async (items, limit, fn) => {
   return results;
 };
 
+// Persists weekly revenue per market to disk (data/market-performance-snapshot.json), so a
+// completed week is only ever fetched from Square once instead of re-fetched across all ~50
+// locations on every request. Only the current (still-accumulating) week is refreshed live.
+const MARKET_PERF_SNAPSHOT_FILE = path.join(DATA_DIR, 'market-performance-snapshot.json');
+const loadMarketPerfSnapshot = () => {
+  const data = loadData(MARKET_PERF_SNAPSHOT_FILE);
+  return data && data.revenueByMarket && typeof data.revenueByMarket === 'object' && !Array.isArray(data)
+    ? data
+    : { revenueByMarket: {}, backfilledFrom: null };
+};
+const saveMarketPerfSnapshot = (snapshot) => saveData(MARKET_PERF_SNAPSHOT_FILE, snapshot);
+
+// Get real per-week revenue for every market location across [rangeStart, rangeEndInclusive]
+// (both week-start dates), backfilling from Square into the on-disk snapshot only as far back as
+// hasn't already been fetched, and always refreshing the current week live.
+const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow) => {
+  const snapshot = loadMarketPerfSnapshot();
+  const rangeEndExclusive = addDays(rangeEndInclusive, 7);
+
+  if (!snapshot.backfilledFrom || rangeStart < snapshot.backfilledFrom) {
+    const backfillEnd = snapshot.backfilledFrom && snapshot.backfilledFrom > rangeStart ? snapshot.backfilledFrom : rangeEndExclusive;
+    const backfillResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => ({
+      name: loc.name,
+      revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, rangeStart, backfillEnd, startDow),
+    }));
+    backfillResults.forEach(({ name, revenueByWeek }) => {
+      snapshot.revenueByMarket[name] = { ...(snapshot.revenueByMarket[name] || {}), ...revenueByWeek };
+    });
+    snapshot.backfilledFrom = rangeStart;
+  }
+
+  const liveResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => ({
+    name: loc.name,
+    revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, rangeEndInclusive, rangeEndExclusive, startDow),
+  }));
+  liveResults.forEach(({ name, revenueByWeek }) => {
+    snapshot.revenueByMarket[name] = { ...(snapshot.revenueByMarket[name] || {}), ...revenueByWeek };
+  });
+
+  saveMarketPerfSnapshot(snapshot);
+  return snapshot.revenueByMarket;
+};
+
 // GET /api/market-performance?weeks=52
 // Weekly gross sales revenue per farmers-market/pop-up location, straight from Square orders -
-// real per-week totals, not estimated or averaged. Cached 24 hours (this fans out to every market
-// location, so it's expensive to rebuild).
+// real per-week totals, not estimated or averaged. Completed weeks come from the on-disk
+// snapshot; only the current week is ever re-fetched live. A short in-memory cache on top smooths
+// out rapid repeat page loads.
 app.get('/api/market-performance', async (req, res) => {
   const token = process.env.SQUARE_ACCESS_TOKEN;
   if (!token || token === 'your_square_token_here') {
@@ -1262,23 +1356,20 @@ app.get('/api/market-performance', async (req, res) => {
     const startDow = await fetchWorkweekStartDow();
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
-    const rangeEndExclusive = addDays(currentWeekStart, 7);
     const rangeStart = addDays(currentWeekStart, -7 * (weekCount - 1));
 
     const weekStarts = [];
-    for (let d = rangeStart; d < rangeEndExclusive; d = addDays(d, 7)) weekStarts.push(d);
+    for (let d = rangeStart; d <= currentWeekStart; d = addDays(d, 7)) weekStarts.push(d);
 
-    const marketResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => {
-      const revenueByWeek = await fetchWeeklyRevenueForLocation(loc.squareLocationId, rangeStart, rangeEndExclusive, startDow);
-      return { name: loc.name, revenue: weekStarts.map((ws) => round2(revenueByWeek[ws] || 0)) };
-    });
+    const revenueByMarket = await getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow);
 
-    const markets = marketResults
+    const markets = WASTE_MARKET_LOCATIONS
+      .map((loc) => ({ name: loc.name, revenue: weekStarts.map((ws) => round2((revenueByMarket[loc.name] || {})[ws] || 0)) }))
       .filter((m) => m.revenue.some((v) => v > 0))
       .sort((a, b) => b.revenue.reduce((s, v) => s + v, 0) - a.revenue.reduce((s, v) => s + v, 0));
 
-    const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: addDays(rangeEndExclusive, -1) };
-    cacheManager.set(cacheKey, response, 24 * 60 * 60 * 1000);
+    const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: currentWeekStart };
+    cacheManager.set(cacheKey, response, 60 * 60 * 1000);
     res.json(response);
   } catch (err) {
     res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, weekStarts: [], markets: [] });
