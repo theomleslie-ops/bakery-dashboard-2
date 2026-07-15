@@ -1311,7 +1311,7 @@
         <div ref={menuRef} style={{ position: 'relative', display: 'inline-block' }}>
           <button onClick={() => setOpen(o => !o)}>Select Markets ({selected.size}) {open ? '▴' : '▾'}</button>
           {open && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', width: '340px', maxHeight: '440px', overflowY: 'auto', background: 'var(--chart-surface)', border: '1px solid var(--chart-grid)', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 20, padding: '10px' }}>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', width: '340px', maxWidth: '90vw', maxHeight: '440px', overflowY: 'auto', background: 'var(--chart-surface)', border: '1px solid var(--chart-grid)', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 20, padding: '10px' }}>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--chart-grid)' }}>
                 <button onClick={() => setSelected(new Set(markets.map(m => m.name)))}>Select All</button>
                 <button onClick={() => setSelected(new Set())}>Select None</button>
