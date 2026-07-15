@@ -926,6 +926,33 @@ const parseQBPeriodPL = (report) => {
   });
 };
 
+// Pair consecutive real weekly periods into 2-week totals - summed, never averaged. Any odd
+// leftover week is kept as its own lone period at the oldest end of the range, so the most
+// recent period is always a full, comparable 2-week pair.
+const pairIntoBiweekly = (weeklyRows) => {
+  const periods = [];
+  let start = 0;
+  if (weeklyRows.length % 2 === 1) {
+    periods.push(weeklyRows[0]);
+    start = 1;
+  }
+  for (let i = start; i < weeklyRows.length; i += 2) {
+    const a = weeklyRows[i];
+    const b = weeklyRows[i + 1];
+    if (!b) { periods.push(a); break; }
+    periods.push({
+      label: a.label,
+      fullLabel: `${a.fullLabel} + ${b.fullLabel}`,
+      revenue: round2(a.revenue + b.revenue),
+      cogs: round2(a.cogs + b.cogs),
+      opex: round2(a.opex + b.opex),
+      labor: round2(a.labor + b.labor),
+      pl: round2(a.pl + b.pl),
+    });
+  }
+  return periods;
+};
+
 // Get raw P/L Statement from QuickBooks
 app.get('/api/quickbooks/pl', async (req, res) => {
   try {
@@ -1012,10 +1039,12 @@ app.get('/api/dashboard', async (req, res) => {
       source: 'Multi-month P/L Statements'
     } : { source: 'No financial data uploaded yet' };
 
-    // Weekly data comes live from QuickBooks (real per-week ledger totals, not an average of
-    // monthly figures) - only available once QuickBooks has been connected.
-    let weeklyData = [];
-    let weeklySource = 'QuickBooks not connected';
+    // 2-week period data comes live from QuickBooks (real per-week ledger totals summed in pairs,
+    // never averaged or estimated) - only available once QuickBooks has been connected. Periods
+    // instead of raw weeks because labor/payroll posts roughly biweekly, so a single-week view is
+    // dominated by whichever week payroll happened to land in.
+    let periodData = [];
+    let periodSource = 'QuickBooks not connected';
     try {
       const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 16, 52);
       const end = new Date();
@@ -1023,19 +1052,19 @@ app.get('/api/dashboard', async (req, res) => {
       start.setDate(start.getDate() - weeksBack * 7);
       const isoDate = (d) => d.toISOString().slice(0, 10);
       const report = await fetchQBProfitAndLoss(isoDate(start), isoDate(end), 'Week');
-      weeklyData = parseQBPeriodPL(report);
-      weeklySource = 'QuickBooks (live, weekly)';
+      periodData = pairIntoBiweekly(parseQBPeriodPL(report));
+      periodSource = 'QuickBooks (live, every 2 weeks)';
     } catch (err) {
       if (err.code !== 'QB_NOT_CONNECTED') {
         console.error('Weekly QuickBooks P&L fetch failed:', err.response?.data?.fault?.detail?.[0]?.message || err.message);
-        weeklySource = 'QuickBooks fetch failed';
+        periodSource = 'QuickBooks fetch failed';
       }
     }
 
     res.json({
       monthlyData,
-      weeklyData,
-      weeklySource,
+      periodData,
+      periodSource,
       summary,
       recipes: { count: recipes.length },
       ingredients: { count: ingredients.length },
@@ -1156,6 +1185,104 @@ app.get('/api/waste/locations', (req, res) => {
     stores: WASTE_STORE_LOCATIONS.map((l) => l.name),
     markets: WASTE_MARKET_LOCATIONS.map((l) => l.name),
   });
+});
+
+// ============= MARKET PERFORMANCE DASHBOARD =============
+
+// Fetch gross sales revenue for one location, bucketed by workweek. Same pagination/date-window
+// pattern as fetchSoldQuantities, but summing whole-order revenue instead of per-item quantity.
+const fetchWeeklyRevenueForLocation = async (locationId, startDate, endDateExclusive, startDow) => {
+  const revenueByWeek = {};
+  let cursor;
+  let page = 0;
+  const queryStart = addDays(startDate, -1);
+  const queryEnd = addDays(endDateExclusive, 1);
+  do {
+    const response = await axios.post(
+      `${SQUARE_API_BASE}/orders/search`,
+      {
+        location_ids: [locationId],
+        query: {
+          filter: {
+            date_time_filter: { closed_at: { start_at: `${queryStart}T00:00:00Z`, end_at: `${queryEnd}T00:00:00Z` } },
+            state_filter: { states: ['COMPLETED'] },
+          },
+          sort: { sort_field: 'CLOSED_AT' },
+        },
+        limit: 500,
+        cursor,
+      },
+      { headers: squareHeaders() }
+    );
+    (response.data.orders || []).forEach((order) => {
+      if (!order.closed_at) return;
+      const date = squareDateInPacific(order.closed_at);
+      if (date < startDate || date >= endDateExclusive) return;
+      const weekStart = getWeekStart(date, startDow);
+      const orderRevenue = (order.line_items || []).reduce((sum, li) => sum + (li.gross_sales_money?.amount || 0), 0) / 100;
+      revenueByWeek[weekStart] = (revenueByWeek[weekStart] || 0) + orderRevenue;
+    });
+    cursor = response.data.cursor;
+    page += 1;
+  } while (cursor && page < 50);
+  return revenueByWeek;
+};
+
+// Run async tasks with bounded concurrency, so a ~50-location fetch doesn't fire 50 simultaneous
+// requests at Square at once.
+const mapWithConcurrency = async (items, limit, fn) => {
+  const results = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+};
+
+// GET /api/market-performance?weeks=52
+// Weekly gross sales revenue per farmers-market/pop-up location, straight from Square orders -
+// real per-week totals, not estimated or averaged. Cached 24 hours (this fans out to every market
+// location, so it's expensive to rebuild).
+app.get('/api/market-performance', async (req, res) => {
+  const token = process.env.SQUARE_ACCESS_TOKEN;
+  if (!token || token === 'your_square_token_here') {
+    return res.status(400).json({ error: 'Square API credentials not configured', weekStarts: [], markets: [] });
+  }
+
+  const weekCount = Math.min(Math.max(parseInt(req.query.weeks, 10) || 52, 1), 52);
+  const cacheKey = `market_perf_${weekCount}`;
+  const cached = cacheManager.get(cacheKey);
+  if (cached) return res.json({ ...cached, cached: true });
+
+  try {
+    const startDow = await fetchWorkweekStartDow();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentWeekStart = getWeekStart(todayStr, startDow);
+    const rangeEndExclusive = addDays(currentWeekStart, 7);
+    const rangeStart = addDays(currentWeekStart, -7 * (weekCount - 1));
+
+    const weekStarts = [];
+    for (let d = rangeStart; d < rangeEndExclusive; d = addDays(d, 7)) weekStarts.push(d);
+
+    const marketResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => {
+      const revenueByWeek = await fetchWeeklyRevenueForLocation(loc.squareLocationId, rangeStart, rangeEndExclusive, startDow);
+      return { name: loc.name, revenue: weekStarts.map((ws) => round2(revenueByWeek[ws] || 0)) };
+    });
+
+    const markets = marketResults
+      .filter((m) => m.revenue.some((v) => v > 0))
+      .sort((a, b) => b.revenue.reduce((s, v) => s + v, 0) - a.revenue.reduce((s, v) => s + v, 0));
+
+    const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: addDays(rangeEndExclusive, -1) };
+    cacheManager.set(cacheKey, response, 24 * 60 * 60 * 1000);
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, weekStarts: [], markets: [] });
+  }
 });
 
 // Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
