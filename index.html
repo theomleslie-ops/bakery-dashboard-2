@@ -241,7 +241,7 @@
     function DashboardContent() {
       const [data, setData] = useState([]);
       const [error, setError] = useState('');
-      const [weeklySource, setWeeklySource] = useState('');
+      const [periodSource, setPeriodSource] = useState('');
       const [viewMode, setViewMode] = useState('dollars');
       const [weeksRange, setWeeksRange] = useState(16);
       useEffect(() => { fetchData(); }, [weeksRange]);
@@ -250,8 +250,8 @@
           const baseUrl = window.location.origin;
           const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}`);
           const result = await response.json();
-          setData((result.weeklyData || []).map(w => ({ ...w, month: w.label })));
-          setWeeklySource(result.weeklySource || '');
+          setData((result.periodData || []).map(w => ({ ...w, month: w.label })));
+          setPeriodSource(result.periodSource || '');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
         }
@@ -260,7 +260,7 @@
         <div className="container">
           <header>
             <h1>📊 P/L Dashboard</h1>
-            <p className="subtitle">Weekly Profit, Cost of Goods, and Operating Expenses</p>
+            <p className="subtitle">Profit, Cost of Goods, and Operating Expenses, every 2 weeks</p>
           </header>
           {error && <div className="error">{error}</div>}
           <div className="controls">
@@ -278,12 +278,12 @@
           </div>
           {!error && data.length === 0 && (
             <div className="empty">
-              No weekly P&amp;L data available ({weeklySource || 'loading…'}). <a href="/api/quickbooks/connect">Connect QuickBooks</a> to populate this view - weekly figures come straight from your books, never averaged down from monthly totals.
+              No P&amp;L data available ({periodSource || 'loading…'}). <a href="/api/quickbooks/connect">Connect QuickBooks</a> to populate this view - each period is two real weeks summed together, never averaged down from monthly totals.
             </div>
           )}
           {data.length > 0 && (
             <div className="chart-container">
-              <div className="chart-title">COGS, Operating Expenses & Profit/Loss by Week ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
+              <div className="chart-title">COGS, Operating Expenses & Profit/Loss, every 2 weeks ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
               <StackedBarChart data={data} viewMode={viewMode} />
             </div>
           )}
@@ -648,7 +648,7 @@
       const [weeks, setWeeks] = useState([]);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
-      const [weeklySource, setWeeklySource] = useState('');
+      const [periodSource, setPeriodSource] = useState('');
       const [weeksRange, setWeeksRange] = useState(16);
       useEffect(() => { fetchData(); }, [weeksRange]);
       const fetchData = async () => {
@@ -657,11 +657,11 @@
           const baseUrl = window.location.origin;
           const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}`);
           const dashData = await response.json();
-          if (!dashData.weeklyData) {
+          if (!dashData.periodData) {
             throw new Error('Missing financial data from server');
           }
-          setWeeklySource(dashData.weeklySource || '');
-          const combined = dashData.weeklyData
+          setPeriodSource(dashData.periodSource || '');
+          const combined = dashData.periodData
             .filter(w => w.revenue > 0)
             .map(w => {
               const foodPercent = (w.cogs / w.revenue) * 100;
@@ -688,7 +688,7 @@
         <div className="container">
           <header>
             <h1>🎯 Prime Cost Dashboard</h1>
-            <p className="subtitle">Food Cost + Labor as % of Revenue, by week (Goal: ≤60%)</p>
+            <p className="subtitle">Food Cost + Labor as % of Revenue, every 2 weeks (Goal: ≤60%)</p>
           </header>
           <div className="controls">
             <div className="view-toggle">
@@ -703,14 +703,14 @@
             <>
               <div className="metrics">
                 <div className="metric-card">
-                  <div className="metric-label">Latest Week Prime Cost</div>
+                  <div className="metric-label">Latest Period Prime Cost</div>
                   <div className="metric-value">{latestWeek.totalPercent.toFixed(1)}%</div>
                   <div className="metric-sub">{latestWeek.fullLabel}</div>
                 </div>
                 <div className="metric-card">
-                  <div className="metric-label">Weeks At Goal</div>
+                  <div className="metric-label">Periods At Goal</div>
                   <div className="metric-value">{goalMet} / {weeks.length}</div>
-                  <div className="metric-sub">Weeks at or under 60%</div>
+                  <div className="metric-sub">2-week periods at or under 60%</div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-label">Goal</div>
@@ -719,14 +719,14 @@
                 </div>
               </div>
               <div className="chart-container">
-                <div className="chart-title">Prime Cost by Week (% of Revenue)</div>
+                <div className="chart-title">Prime Cost, every 2 weeks (% of Revenue)</div>
                 <PrimeCostChart weeks={weeks} />
               </div>
             </>
           )}
           {status === 'ready' && weeks.length === 0 && (
             <div className="empty">
-              No weekly financial data available ({weeklySource || 'loading…'}). <a href="/api/quickbooks/connect">Connect QuickBooks</a> to populate this view - weekly figures come straight from your books, never averaged down from monthly totals.
+              No financial data available ({periodSource || 'loading…'}). <a href="/api/quickbooks/connect">Connect QuickBooks</a> to populate this view - each period is two real weeks summed together, never averaged down from monthly totals.
             </div>
           )}
         </div>
@@ -1197,6 +1197,164 @@
       );
     }
 
+    // Fixed 8-hue categorical palette, in order - never generate a 9th hue for an extra series.
+    // The top 8 markets by revenue get real identity colors; every other selected market shares
+    // one muted neutral stroke so the chart stays legible with "select all" toggled on.
+    const MARKET_PALETTE = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#4a3aa7', '#e34948', '#e87ba4', '#eb6834'];
+    const MARKET_OVERFLOW_COLOR = '#b9b8b0';
+
+    function MarketLineChart({ weekStarts, series, colorOf }) {
+      const [hoverIndex, setHoverIndex] = useState(null);
+      const chartHeight = 400;
+      const plotLeft = 60, plotRight = 960, plotTop = 20, plotBottom = chartHeight + 20;
+      const n = weekStarts.length || 1;
+      const xPos = (i) => plotLeft + ((plotRight - plotLeft) * i) / Math.max(n - 1, 1);
+      const maxVal = Math.max(1, ...series.flatMap(s => s.revenue));
+      const niceMax = (v) => { const magnitude = Math.pow(10, Math.floor(Math.log10(v))); const residual = v / magnitude; let niceResidual; if (residual <= 1) niceResidual = 1; else if (residual <= 2) niceResidual = 2; else if (residual <= 5) niceResidual = 5; else niceResidual = 10; return niceResidual * magnitude; };
+      const chartMax = niceMax(maxVal * 1.1);
+      const getY = (val) => plotBottom - (val / chartMax) * (plotBottom - plotTop);
+      const labelStride = Math.max(1, Math.ceil(n / 16));
+
+      const handleMove = (e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const scale = 1000 / rect.width;
+        const svgX = (e.clientX - rect.left) * scale;
+        const idx = Math.round(((svgX - plotLeft) / (plotRight - plotLeft)) * (n - 1));
+        setHoverIndex(Math.min(Math.max(idx, 0), n - 1));
+      };
+
+      return (
+        <svg width="100%" height="500" viewBox="0 0 1000 500" style={{ overflow: 'visible' }} onMouseMove={handleMove} onMouseLeave={() => setHoverIndex(null)}>
+          <line x1={plotLeft} y1={plotBottom} x2={plotRight} y2={plotBottom} stroke="var(--chart-axis)" strokeWidth="2" />
+          <line x1={plotLeft} y1={plotTop} x2={plotLeft} y2={plotBottom} stroke="var(--chart-axis)" strokeWidth="2" />
+          {[0, 1, 2, 3, 4, 5].map(i => {
+            const val = (i * chartMax) / 5;
+            const y = plotBottom - (i * (plotBottom - plotTop)) / 5;
+            return (
+              <g key={`grid${i}`}>
+                <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--chart-grid)" strokeWidth="1" />
+                <text x={plotLeft - 10} y={y + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">${(val / 1000).toFixed(0)}k</text>
+              </g>
+            );
+          })}
+          {weekStarts.map((ws, i) => (i % labelStride === 0) && (
+            <text key={`xlabel${i}`} x={xPos(i)} y={plotBottom + 20} textAnchor="middle" fontSize="11" fill="var(--chart-ink)" fontWeight="600">{fmtWeekLabel(ws)}</text>
+          ))}
+          {series.map(s => (
+            <polyline key={s.name} points={s.revenue.map((v, i) => `${xPos(i)},${getY(v)}`).join(' ')}
+              fill="none" stroke={colorOf(s.name)} strokeWidth={colorOf(s.name) === MARKET_OVERFLOW_COLOR ? 1.5 : 2.5}
+              opacity={colorOf(s.name) === MARKET_OVERFLOW_COLOR ? 0.6 : 1} vectorEffect="non-scaling-stroke" />
+          ))}
+          {hoverIndex !== null && (
+            <line x1={xPos(hoverIndex)} y1={plotTop} x2={xPos(hoverIndex)} y2={plotBottom} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
+          )}
+          {hoverIndex !== null && (() => {
+            const rows = series.map(s => ({ name: s.name, value: s.revenue[hoverIndex], color: colorOf(s.name) })).sort((a, b) => b.value - a.value);
+            const shown = rows.slice(0, 12);
+            const cx = xPos(hoverIndex);
+            const tooltipWidth = 220;
+            const tooltipHeight = 30 + shown.length * 18 + (rows.length > 12 ? 18 : 0);
+            const tooltipX = cx < 500 ? cx + 12 : cx - tooltipWidth - 12;
+            const tooltipY = 30;
+            return (
+              <g>
+                <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
+                <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{fmtWeekLabel(weekStarts[hoverIndex])}</text>
+                {shown.map((r, i) => (
+                  <g key={r.name}>
+                    <line x1={tooltipX + 10} y1={tooltipY + 34 + i * 18} x2={tooltipX + 24} y2={tooltipY + 34 + i * 18} stroke={r.color} strokeWidth="3" />
+                    <text x={tooltipX + 30} y={tooltipY + 38 + i * 18} fontSize="11" fill="var(--chart-ink-secondary)">{r.name}: <tspan fontWeight="700" fill="var(--chart-ink)">${r.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</tspan></text>
+                  </g>
+                ))}
+                {rows.length > 12 && (
+                  <text x={tooltipX + 10} y={tooltipY + 34 + shown.length * 18} fontSize="10" fill="var(--chart-muted)">+{rows.length - 12} more selected</text>
+                )}
+              </g>
+            );
+          })()}
+        </svg>
+      );
+    }
+
+    function MarketPerformanceDashboard() {
+      const [weekStarts, setWeekStarts] = useState([]);
+      const [markets, setMarkets] = useState([]);
+      const [selected, setSelected] = useState(new Set());
+      const [status, setStatus] = useState('loading');
+      const [error, setError] = useState('');
+      useEffect(() => { fetchData(); }, []);
+      const fetchData = async () => {
+        try {
+          setStatus('loading');
+          const baseUrl = window.location.origin;
+          const response = await fetch(`${baseUrl}/api/market-performance?weeks=52`);
+          const result = await response.json();
+          if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
+          setWeekStarts(result.weekStarts || []);
+          setMarkets(result.markets || []);
+          setSelected(new Set((result.markets || []).slice(0, 8).map(m => m.name)));
+          setStatus((result.markets || []).length > 0 ? 'ready' : 'empty');
+        } catch (err) {
+          setError('Failed to load data: ' + err.message);
+          setStatus('error');
+        }
+      };
+
+      const colorOf = (name) => {
+        const idx = markets.findIndex(m => m.name === name);
+        return idx >= 0 && idx < 8 ? MARKET_PALETTE[idx] : MARKET_OVERFLOW_COLOR;
+      };
+      const totalRevenue = (m) => m.revenue.reduce((s, v) => s + v, 0);
+      const toggle = (name) => {
+        setSelected(prev => {
+          const next = new Set(prev);
+          if (next.has(name)) next.delete(name); else next.add(name);
+          return next;
+        });
+      };
+      const visibleSeries = markets.filter(m => selected.has(m.name));
+
+      return (
+        <div className="container">
+          <header>
+            <h1>🏪 Performance by Market</h1>
+            <p className="subtitle">Weekly revenue by farmers market / pop-up location, past 52 weeks</p>
+          </header>
+          {status === 'loading' && <div className="loading">Loading market sales data from Square… this can take a minute the first time.</div>}
+          {status === 'error' && <div className="error">{error}</div>}
+          {status === 'empty' && <div className="empty">No market sales data available for this range.</div>}
+          {status === 'ready' && (
+            <>
+              <div className="controls">
+                <div className="view-toggle">
+                  <button onClick={() => setSelected(new Set(markets.map(m => m.name)))}>Select All</button>
+                  <button onClick={() => setSelected(new Set())}>Select None</button>
+                  <button onClick={() => setSelected(new Set(markets.slice(0, 8).map(m => m.name)))}>Top 8</button>
+                </div>
+              </div>
+              <div className="chart-container">
+                <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
+                <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={colorOf} />
+              </div>
+              <div className="chart-container" style={{ marginTop: '16px' }}>
+                <div className="chart-title">Markets ({markets.length})</div>
+                <div style={{ maxHeight: '360px', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '4px 16px' }}>
+                  {markets.map(m => (
+                    <label key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer', fontSize: '13px' }}>
+                      <input type="checkbox" checked={selected.has(m.name)} onChange={() => toggle(m.name)} />
+                      <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: colorOf(m.name), flexShrink: 0 }}></span>
+                      <span style={{ flex: 1, color: 'var(--chart-ink)' }}>{m.name}</span>
+                      <span style={{ color: 'var(--chart-ink-secondary)' }}>{fmtMoneyShort(totalRevenue(m))}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
     function MainApp() {
       const [activeTab, setActiveTab] = useState('dashboard');
       return (
@@ -1209,6 +1367,7 @@
                 <button className={`tab-button ${activeTab === 'prime-cost' ? 'active' : ''}`} onClick={() => setActiveTab('prime-cost')}>Prime Cost</button>
                 <button className={`tab-button ${activeTab === 'pl-channel' ? 'active' : ''}`} onClick={() => setActiveTab('pl-channel')}>P&L by Channel</button>
                 <button className={`tab-button ${activeTab === 'waste' ? 'active' : ''}`} onClick={() => setActiveTab('waste')}>Waste</button>
+                <button className={`tab-button ${activeTab === 'market-performance' ? 'active' : ''}`} onClick={() => setActiveTab('market-performance')}>Performance by Market</button>
               </div>
             </div>
           </div>
@@ -1217,6 +1376,7 @@
           <div className={`tab-content ${activeTab === 'prime-cost' ? 'active' : ''}`}><PrimeCostDashboard /></div>
           <div className={`tab-content ${activeTab === 'pl-channel' ? 'active' : ''}`}><PLByChannelDashboard /></div>
           <div className={`tab-content ${activeTab === 'waste' ? 'active' : ''}`}><WasteDashboard /></div>
+          <div className={`tab-content ${activeTab === 'market-performance' ? 'active' : ''}`}><MarketPerformanceDashboard /></div>
         </div>
       );
     }
