@@ -159,6 +159,7 @@
       const range = maxVal - minVal || 1;
       const n = data.length || 1;
       const slotWidth = 700 / n;
+      const labelStride = Math.max(1, Math.ceil(n / 16));
       const xPos = (i) => 50 + slotWidth * i + slotWidth / 2;
       const getY = (val) => {
         const safeVal = isNaN(val) ? 0 : val;
@@ -210,7 +211,7 @@
             {points.map((p, i) => (<circle key={`cogs${i}`} cx={xPos(i)} cy={getY(p.cogs)} r="3" fill="#ff9500" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
             {points.map((p, i) => (<circle key={`opex${i}`} cx={xPos(i)} cy={getY(p.opex)} r="3" fill="#8b5cf6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
             {points.map((p, i) => (<circle key={`pl${i}`} cx={xPos(i)} cy={getY(p.pl)} r="3" fill="#10b981" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => (<text key={`label${i}`} x={xPos(i)} y={50 + chartHeight + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{p.month}</text>))}
+            {points.map((p, i) => (i % labelStride === 0) && (<text key={`label${i}`} x={xPos(i)} y={50 + chartHeight + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{p.month}</text>))}
             {hoveredMonth !== null && (
               (() => {
                 const p = points[hoveredMonth];
@@ -238,16 +239,24 @@
       );
     };
 
+    const WEEK_COUNT_OPTIONS = [
+      { weeks: 8, label: '8 Weeks' },
+      { weeks: 16, label: '16 Weeks' },
+      { weeks: 26, label: '26 Weeks' },
+      { weeks: 52, label: '52 Weeks' },
+    ];
+
     function DashboardContent() {
       const [data, setData] = useState([]);
       const [error, setError] = useState('');
       const [weeklySource, setWeeklySource] = useState('');
       const [viewMode, setViewMode] = useState('dollars');
-      useEffect(() => { fetchData(); }, []);
+      const [weeksRange, setWeeksRange] = useState(16);
+      useEffect(() => { fetchData(); }, [weeksRange]);
       const fetchData = async () => {
         try {
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/dashboard`);
+          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}`);
           const result = await response.json();
           setData((result.weeklyData || []).map(w => ({ ...w, month: w.label })));
           setWeeklySource(result.weeklySource || '');
@@ -262,24 +271,29 @@
             <p className="subtitle">Weekly Profit, Cost of Goods, and Operating Expenses</p>
           </header>
           {error && <div className="error">{error}</div>}
+          <div className="controls">
+            <div className="view-toggle">
+              {WEEK_COUNT_OPTIONS.map(opt => (
+                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
+              ))}
+            </div>
+            {data.length > 0 && (
+              <div className="view-toggle">
+                <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
+                <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
+              </div>
+            )}
+          </div>
           {!error && data.length === 0 && (
             <div className="empty">
-              No weekly P&amp;L data available ({weeklySource || 'loading…'}). Connect QuickBooks under Settings to populate this view - weekly figures come straight from your books, never averaged down from monthly totals.
+              No weekly P&amp;L data available ({weeklySource || 'loading…'}). <a href="/api/quickbooks/connect">Connect QuickBooks</a> to populate this view - weekly figures come straight from your books, never averaged down from monthly totals.
             </div>
           )}
           {data.length > 0 && (
-            <>
-              <div className="controls">
-                <div className="view-toggle">
-                  <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
-                  <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
-                </div>
-              </div>
-              <div className="chart-container">
-                <div className="chart-title">COGS, Operating Expenses & Profit/Loss by Week ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
-                <StackedBarChart data={data} viewMode={viewMode} />
-              </div>
-            </>
+            <div className="chart-container">
+              <div className="chart-title">COGS, Operating Expenses & Profit/Loss by Week ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
+              <StackedBarChart data={data} viewMode={viewMode} />
+            </div>
           )}
         </div>
       );
@@ -558,7 +572,9 @@
       const actualMax = Math.max(...weeks.map(w => w.totalPercent), benchmarkPercent);
       const chartMax = niceMax(actualMax * 1.1);
       const benchmarkY = chartHeight + 50 - (benchmarkPercent / chartMax) * chartHeight;
-      const getScaledBarHeight = (percent) => (percent / chartMax) * chartHeight;
+      // A week can post a small negative labor/COGS credit (e.g. a payroll correction);
+      // clamp so that never renders as a negative (invalid) SVG height.
+      const getScaledBarHeight = (percent) => Math.max(percent, 0) / chartMax * chartHeight;
       const legendItems = [
         { label: 'Food Cost', color: '#2a78d6' },
         { label: 'Labor', color: '#1baf7a' },
@@ -598,12 +614,13 @@
               const baselineY = chartHeight + 50;
               const foodY = baselineY - foodHeight;
               const laborY = foodY - laborHeight;
+              const labelStride = Math.max(1, Math.ceil(n / 16));
               return (
                 <g key={`bar${i}`}>
                   <rect x={cx - barWidth / 2} y={foodY} width={barWidth} height={foodHeight} fill="#2a78d6" rx="2" onMouseEnter={() => setHoveredWeek(i)} onMouseLeave={() => setHoveredWeek(null)} />
                   <rect x={cx - barWidth / 2} y={laborY} width={barWidth} height={laborHeight} fill="#1baf7a" rx="2" onMouseEnter={() => setHoveredWeek(i)} onMouseLeave={() => setHoveredWeek(null)} />
                   <rect x={cx - slotWidth / 2} y="20" width={slotWidth} height={chartHeight + 30} fill="transparent" style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredWeek(i)} onMouseLeave={() => setHoveredWeek(null)} />
-                  <text x={cx} y={baselineY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{week.label}</text>
+                  {i % labelStride === 0 && (<text x={cx} y={baselineY + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{week.label}</text>)}
                 </g>
               );
             })}
@@ -640,12 +657,13 @@
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
       const [weeklySource, setWeeklySource] = useState('');
-      useEffect(() => { fetchData(); }, []);
+      const [weeksRange, setWeeksRange] = useState(16);
+      useEffect(() => { fetchData(); }, [weeksRange]);
       const fetchData = async () => {
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/dashboard`);
+          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}`);
           const dashData = await response.json();
           if (!dashData.weeklyData) {
             throw new Error('Missing financial data from server');
@@ -680,6 +698,13 @@
             <h1>🎯 Prime Cost Dashboard</h1>
             <p className="subtitle">Food Cost + Labor as % of Revenue, by week (Goal: ≤60%)</p>
           </header>
+          <div className="controls">
+            <div className="view-toggle">
+              {WEEK_COUNT_OPTIONS.map(opt => (
+                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
+              ))}
+            </div>
+          </div>
           {status === 'loading' && <div className="loading">Loading financial and labor data…</div>}
           {status === 'error' && <div className="error">{error}</div>}
           {status === 'ready' && weeks.length > 0 && (
@@ -709,7 +734,7 @@
           )}
           {status === 'ready' && weeks.length === 0 && (
             <div className="empty">
-              No weekly financial data available ({weeklySource || 'loading…'}). Connect QuickBooks under Settings to populate this view - weekly figures come straight from your books, never averaged down from monthly totals.
+              No weekly financial data available ({weeklySource || 'loading…'}). <a href="/api/quickbooks/connect">Connect QuickBooks</a> to populate this view - weekly figures come straight from your books, never averaged down from monthly totals.
             </div>
           )}
         </div>
