@@ -1342,12 +1342,13 @@
       const [selected, setSelected] = useState(new Set());
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
-      useEffect(() => { fetchData(); }, []);
+      const [weeksRange, setWeeksRange] = useState(52);
+      useEffect(() => { fetchData(); }, [weeksRange]);
       const fetchData = async () => {
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/market-performance?weeks=52`);
+          const response = await fetch(`${baseUrl}/api/market-performance?weeks=${weeksRange}`);
           const result = await response.json();
           if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
           setWeekStarts(result.weekStarts || []);
@@ -1371,21 +1372,26 @@
         <div className="container">
           <header>
             <h1>🏪 Performance by Market</h1>
-            <p className="subtitle">Weekly revenue by farmers market / pop-up location, past 52 weeks</p>
+            <p className="subtitle">Weekly revenue by farmers market / pop-up location, past {weeksRange} week{weeksRange === 1 ? '' : 's'}</p>
           </header>
-          {status === 'loading' && <div className="loading">Loading market sales data from Square… this can take a minute the first time.</div>}
+          <div className="controls">
+            <div className="view-toggle">
+              {WEEK_COUNT_OPTIONS.map(opt => (
+                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
+              ))}
+            </div>
+            {status === 'ready' && (
+              <MarketSelectMenu markets={markets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} />
+            )}
+          </div>
+          {status === 'loading' && <div className="loading">Loading market sales data from Square… this can take a minute the first time for a given range.</div>}
           {status === 'error' && <div className="error">{error}</div>}
           {status === 'empty' && <div className="empty">No market sales data available for this range.</div>}
           {status === 'ready' && (
-            <>
-              <div className="controls">
-                <MarketSelectMenu markets={markets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} />
-              </div>
-              <div className="chart-container">
-                <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
-                <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={colorOf} />
-              </div>
-            </>
+            <div className="chart-container">
+              <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
+              <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={colorOf} />
+            </div>
           )}
         </div>
       );
