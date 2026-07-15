@@ -199,6 +199,7 @@ app.post('/api/upload/recipes', upload.single('file'), (req, res) => {
       saveData(RECIPES_FILE, recipes);
       fs.unlinkSync(req.file.path);
       cacheManager.invalidate('recipes');
+      cacheManager.invalidate('item_margins');
       res.json({ success: true, count: recipes.length, recipes });
     })
     .on('error', (err) => {
@@ -1399,6 +1400,99 @@ app.get('/api/waste', async (req, res) => {
       error: 'Square API error',
       message: err.response?.data?.errors?.[0]?.detail || err.message,
       rows: [],
+    });
+  }
+});
+
+// ============= ITEM MARGIN DASHBOARD =============
+// For every recipe, compares Square's live listed price against the recipe's ingredient cost
+// (Cost / Yield, both already tracked per-batch in the uploaded recipes CSV) to show what share
+// of the price the ingredients eat up. Matched to the Square catalog by exact item name (same
+// name-matching approach as the Waste tab), since there's no shared ID between recipes.csv and
+// the catalog.
+
+// Paginates GET /v2/catalog/list for ITEM objects and returns { lowercased name: { name, price } }
+// using each item's first priced variation. Catalog rarely changes within a session, so callers
+// cache the result.
+const fetchCatalogItemPrices = async () => {
+  const prices = {};
+  let cursor;
+  let page = 0;
+  do {
+    const response = await axios.get(`${SQUARE_API_BASE}/catalog/list`, {
+      headers: squareHeaders(),
+      params: { types: 'ITEM', cursor },
+    });
+    (response.data.objects || []).forEach((obj) => {
+      if (obj.type !== 'ITEM' || obj.is_deleted) return;
+      const itemData = obj.item_data || {};
+      const name = (itemData.name || '').trim();
+      if (!name) return;
+      const variation = (itemData.variations || []).find((v) => v.item_variation_data?.price_money?.amount != null);
+      const amount = variation?.item_variation_data?.price_money?.amount;
+      if (amount == null) return;
+      const key = name.toLowerCase();
+      if (!prices[key]) prices[key] = { name, price: amount / 100 };
+    });
+    cursor = response.data.cursor;
+    page += 1;
+  } while (cursor && page < 50);
+  return prices;
+};
+
+// GET /api/item-margins - ingredient cost as % of listed price, per item. Cached 1 hour.
+app.get('/api/item-margins', async (req, res) => {
+  const token = process.env.SQUARE_ACCESS_TOKEN;
+  if (!token || token === 'your_square_token_here') {
+    return res.status(400).json({ error: 'Square API credentials not configured', items: [] });
+  }
+
+  const recipes = loadData(RECIPES_FILE);
+  if (recipes.length === 0) {
+    return res.json({ items: [], unmatchedRecipes: [], status: 'empty', message: 'No recipes uploaded yet.' });
+  }
+
+  const cacheKey = 'item_margins';
+  const cached = cacheManager.get(cacheKey);
+  if (cached) return res.json({ ...cached, cached: true });
+
+  try {
+    const catalogPrices = await fetchCatalogItemPrices();
+
+    const items = [];
+    const unmatchedRecipes = [];
+    recipes.forEach((r) => {
+      const name = (r['Recipe Name'] || '').trim();
+      const cost = parseFloat(r['Cost']);
+      const yieldQty = parseFloat(r['Yield']);
+      if (!name || !Number.isFinite(cost) || !Number.isFinite(yieldQty) || yieldQty <= 0) return;
+
+      const match = catalogPrices[name.toLowerCase()];
+      if (!match || !(match.price > 0)) {
+        unmatchedRecipes.push(name);
+        return;
+      }
+
+      const ingredientCost = cost / yieldQty;
+      items.push({
+        name,
+        category: r['Category'] || '',
+        listedPrice: match.price,
+        ingredientCost,
+        percent: (ingredientCost / match.price) * 100,
+      });
+    });
+
+    items.sort((a, b) => b.percent - a.percent);
+
+    const result = { items, unmatchedRecipes, lastUpdated: new Date().toISOString() };
+    cacheManager.set(cacheKey, result, 60 * 60 * 1000); // 1 hour
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({
+      error: 'Square API error',
+      message: err.response?.data?.errors?.[0]?.detail || err.message,
+      items: [],
     });
   }
 });
