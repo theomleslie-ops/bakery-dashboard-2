@@ -1205,11 +1205,18 @@
       );
     }
 
-    // Fixed 8-hue categorical palette, in order - never generate a 9th hue for an extra series.
-    // The top 8 markets by revenue get real identity colors; every other selected market shares
-    // one muted neutral stroke so the chart stays legible with "select all" toggled on.
-    const MARKET_PALETTE = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#4a3aa7', '#e34948', '#e87ba4', '#eb6834'];
-    const MARKET_OVERFLOW_COLOR = '#b9b8b0';
+    // A fixed 8-hue categorical palette (see color-formula guidance) tops out around 8
+    // reliably-distinguishable series - past that, any generated hue starts landing close to an
+    // existing one under colorblind simulation. With up to ~50 markets there's no way around that
+    // math, so this generates one color per market anyway (by explicit request) using golden-angle
+    // hue rotation for maximum spread, but the checklist (name + swatch + revenue) and the hover
+    // tooltip (exact name + value) stay the real way to tell markets apart - never color alone.
+    const marketColor = (index) => {
+      const hue = (index * 137.508) % 360;
+      const sat = 62 + (index % 3) * 10;
+      const light = 38 + ((index * 2 + 1) % 3) * 6;
+      return `hsl(${hue.toFixed(1)}, ${sat}%, ${light}%)`;
+    };
 
     function MarketLineChart({ weekStarts, series, colorOf }) {
       const [hoverIndex, setHoverIndex] = useState(null);
@@ -1250,8 +1257,7 @@
           ))}
           {series.map(s => (
             <polyline key={s.name} points={s.revenue.map((v, i) => `${xPos(i)},${getY(v)}`).join(' ')}
-              fill="none" stroke={colorOf(s.name)} strokeWidth={colorOf(s.name) === MARKET_OVERFLOW_COLOR ? 1.5 : 2.5}
-              opacity={colorOf(s.name) === MARKET_OVERFLOW_COLOR ? 0.6 : 1} vectorEffect="non-scaling-stroke" />
+              fill="none" stroke={colorOf(s.name)} strokeWidth="2" vectorEffect="non-scaling-stroke" />
           ))}
           {hoverIndex !== null && (
             <line x1={xPos(hoverIndex)} y1={plotTop} x2={xPos(hoverIndex)} y2={plotBottom} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
@@ -1363,7 +1369,7 @@
 
       const colorOf = (name) => {
         const idx = markets.findIndex(m => m.name === name);
-        return idx >= 0 && idx < 8 ? MARKET_PALETTE[idx] : MARKET_OVERFLOW_COLOR;
+        return marketColor(idx >= 0 ? idx : 0);
       };
       const totalRevenue = (m) => m.revenue.reduce((s, v) => s + v, 0);
       const visibleSeries = markets.filter(m => selected.has(m.name));
