@@ -71,8 +71,26 @@ const pullSheets = async (entries = config.googleSheets) => {
     return { skipped: 'no sheets configured' };
   }
   const { sheets, drive } = await sheetsClient.getClients();
-  const spreadsheets = {};
+
+  // Expand any { folder: '...' } entries into the sheets they contain.
+  const expanded = [];
   for (const s of entries) {
+    if (s.folder) {
+      try {
+        const folder = await sheetsClient.resolveFolderByName(drive, s.folder);
+        const inFolder = await sheetsClient.listSheetsInFolder(drive, folder.id);
+        console.log(`  Folder "${folder.name}" → ${inFolder.length} sheet${inFolder.length === 1 ? '' : 's'}`);
+        inFolder.forEach((f) => expanded.push({ id: f.id, name: f.name }));
+      } catch (e) {
+        console.log(`  Folder "${s.folder}" → FAILED — ${e.errors?.[0]?.message || e.message}`);
+      }
+    } else {
+      expanded.push(s);
+    }
+  }
+
+  const spreadsheets = {};
+  for (const s of expanded) {
     const ref = s.name || s.label || s.id;
     process.stdout.write(`  Sheets → ${ref}… `);
     try {
@@ -151,6 +169,12 @@ if (require.main === module) {
     if (sheetName) {
       console.log(`Pulling sheet "${sheetName}"…`);
       return summarize(await refresh({ sheetsOnly: true, sheetsOverride: [{ name: sheetName }] }));
+    }
+
+    const folderName = valueOf('--folder');
+    if (folderName) {
+      console.log(`Pulling every sheet in folder "${folderName}"…`);
+      return summarize(await refresh({ sheetsOnly: true, sheetsOverride: [{ folder: folderName }] }));
     }
 
     console.log('Refreshing data pipeline…');

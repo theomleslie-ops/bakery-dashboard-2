@@ -67,6 +67,53 @@ const resolveByName = async (drive, name) => {
   throw err;
 };
 
+// Resolve a Drive folder by (fuzzy) name → { id, name }. The folder itself must be shared with
+// the service account (sharing individual sheets does not make their folder visible).
+const resolveFolderByName = async (drive, name) => {
+  const all = [];
+  let pageToken;
+  do {
+    const res = await drive.files.list({
+      q: "mimeType='application/vnd.google-apps.folder' and trashed=false",
+      fields: 'nextPageToken, files(id, name)',
+      pageSize: 200, includeItemsFromAllDrives: true, supportsAllDrives: true, pageToken,
+    });
+    all.push(...(res.data.files || []));
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
+
+  const q = String(name).trim().toLowerCase();
+  const exact = all.filter((f) => f.name.toLowerCase() === q);
+  const partial = all.filter((f) => f.name.toLowerCase().includes(q));
+  const matches = exact.length ? exact : partial;
+  if (matches.length === 1) return matches[0];
+  if (matches.length === 0) {
+    const visible = all.map((f) => f.name).join(', ') || '(none — share the folder itself with the service account)';
+    const err = new Error(`No folder named like "${name}". Folders I can see: ${visible}`);
+    err.code = 'FOLDER_NOT_FOUND';
+    throw err;
+  }
+  const err = new Error(`Folder "${name}" is ambiguous — matches: ${matches.map((f) => f.name).join(', ')}.`);
+  err.code = 'FOLDER_AMBIGUOUS';
+  throw err;
+};
+
+// Every spreadsheet directly inside a folder → [{ id, name }].
+const listSheetsInFolder = async (drive, folderId) => {
+  const files = [];
+  let pageToken;
+  do {
+    const res = await drive.files.list({
+      q: `mimeType='application/vnd.google-apps.spreadsheet' and '${folderId}' in parents and trashed=false`,
+      fields: 'nextPageToken, files(id, name)',
+      orderBy: 'name', pageSize: 200, includeItemsFromAllDrives: true, supportsAllDrives: true, pageToken,
+    });
+    files.push(...(res.data.files || []));
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
+  return files;
+};
+
 // A1 range for a whole tab; single-quote and escape the title so tabs with spaces/quotes work.
 const tabRange = (name) => `'${String(name).replace(/'/g, "''")}'`;
 
@@ -96,4 +143,4 @@ const pullSpreadsheet = async (sheets, spreadsheetId) => {
   return { id: spreadsheetId, title, tabs };
 };
 
-module.exports = { hasCredentials, getClients, listSpreadsheets, resolveByName, pullSpreadsheet, CREDS_FILE };
+module.exports = { hasCredentials, getClients, listSpreadsheets, resolveByName, resolveFolderByName, listSheetsInFolder, pullSpreadsheet, CREDS_FILE };

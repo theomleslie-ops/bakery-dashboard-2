@@ -11,12 +11,15 @@ npm run pipeline                       # both sources
 node pipeline/refresh.js --qb-only
 node pipeline/refresh.js --sheets-only
 node pipeline/refresh.js --list        # every sheet name the service account can pull
-node pipeline/refresh.js --sheet "Weekly Ops"   # pull one sheet ad hoc, by name
+node pipeline/refresh.js --sheet "Weekly Ops"    # pull one sheet ad hoc, by name
+node pipeline/refresh.js --folder "Recipe LSB"   # pull every sheet in a folder, by folder name
 ```
 
 Sheets are referenced **by name** — the Drive API resolves the name to an ID, so you never handle
-URLs. A sheet just has to be shared with the service account (share one Drive folder with it and
-every sheet inside becomes pullable by name).
+URLs. A sheet (or a whole folder) just has to be shared with the service account. Share a **folder**
+and you can pull it by name with `--folder` (or `{ folder: 'Name' }` in config) — every sheet inside,
+including ones added later, comes through automatically. Note: sharing an individual sheet does *not*
+make its folder visible; share the folder itself to use folder mode.
 
 Programmatic:
 

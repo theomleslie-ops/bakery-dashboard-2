@@ -10,9 +10,9 @@ module.exports = {
   // (The sheet just has to be shared with the service account, e.g. via a shared folder.)
   // Run `node pipeline/refresh.js --list` to see every name the service account can pull.
   googleSheets: [
-    // { name: 'Weekly Ops Tracker' },
-    // { name: 'Market Schedule' },
-    // { id: '1AbCdEf...' },   // an explicit ID also works if you ever want one
+    // { name: 'Weekly Ops Tracker' },       // one sheet by name
+    // { folder: 'Recipe LSB' },             // OR a whole folder — every sheet inside
+    // { id: '1AbCdEf...' },                 // OR an explicit ID
   ],
 
   // QuickBooks reports to pull. `report` is the Intuit Reports API name; `params` are passed
