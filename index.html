@@ -741,8 +741,7 @@
       );
     }
 
-    const LOCATION_CHANNELS = ['ARC', 'LSK', 'State St', 'Catering', 'Delivery 506'];
-    const MARKETS_CHANNELS = ['Market 1', 'Market 2', 'Market 3', 'Market 4', 'Market 5'];
+    const LOCATION_CHANNELS = ['ARC', 'LSK', 'State St', 'Catering', 'Delivery 506', '506 Retail'];
 
     const PLChannelChart = ({ data }) => {
       const [hoveredIndex, setHoveredIndex] = useState(null);
@@ -851,16 +850,12 @@
     };
 
     function PLByChannelDashboard() {
-      const [data, setData] = useState([]);
+      const [plData, setPlData] = useState({ channels: [], markets: [], revenueAllocation: null });
       const [filterType, setFilterType] = useState('location');
       const [selectedFilter, setSelectedFilter] = useState('all');
-      const [selectedWeek, setSelectedWeek] = useState(0);
+      const [expandedLsk, setExpandedLsk] = useState(true);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
-
-      const locations = ['All Locations', ...LOCATION_CHANNELS, 'All Markets'];
-      const markets = ['All Markets', ...MARKETS_CHANNELS];
-      const filterOptions = filterType === 'location' ? locations : markets;
 
       useEffect(() => { fetchData(); }, []);
 
@@ -877,79 +872,201 @@
             return;
           }
 
-          setData(result.channels || []);
-          setStatus(result.channels && result.channels.length > 0 ? 'ready' : 'empty');
+          setPlData(result);
+          setStatus((result.channels || []).length || (result.markets || []).length ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
         }
       };
 
-      const chartData = data.map(channel => ({
-        label: channel.name,
-        revenue: channel.revenue || 0,
-        variableCosts: channel.variableCosts || 0,
-        bakeryAllocation: channel.bakeryAllocation || 0,
-        pl: (channel.revenue || 0) - (channel.variableCosts || 0) - (channel.bakeryAllocation || 0),
+      const channels = plData.channels || [];
+      const markets = [...(plData.markets || [])].sort((a, b) => (b.avgWeeklyRevenue || 0) - (a.avgWeeklyRevenue || 0));
+      const revenueAllocation = plData.revenueAllocation;
+
+      const locationOptions = ['All Locations', ...channels.map((c) => c.name)];
+      const marketOptions = ['All Markets', ...markets.map((m) => m.name)];
+      const filterOptions = filterType === 'location' ? locationOptions : marketOptions;
+
+      const visibleChannels = selectedFilter === 'all' ? channels : channels.filter((c) => c.name === selectedFilter);
+      const visibleMarkets = selectedFilter === 'all' ? markets : markets.filter((m) => m.name === selectedFilter);
+
+      const money = (v) => (v == null ? '—' : fmtMoney(v));
+      const pctCell = (v) => (v == null ? '—' : `${v.toFixed(1)}%`);
+      const plColor = (v) => (v == null ? 'inherit' : v >= 0 ? '#0ca30c' : '#d03b3b');
+
+      const chartData = channels.map((c) => ({
+        label: c.name,
+        revenue: c.avgWeeklyRevenue || 0,
+        variableCosts: (c.costs && c.costs.total) || 0,
+        bakeryAllocation: c.boLaborAllocated || 0,
+        pl: c.adjustedContribution || 0,
       }));
+
+      const totalWeeklyRevenue = channels.reduce((s, c) => s + (c.avgWeeklyRevenue || 0), 0)
+        + markets.reduce((s, m) => s + (m.avgWeeklyRevenue || 0), 0);
+      const totalAdjustedContribution = channels.reduce((s, c) => s + (c.adjustedContribution || 0), 0)
+        + markets.reduce((s, m) => s + (m.adjustedContribution || 0), 0);
+
+      const channelRow = (c, indent) => (
+        <tr key={c.name}>
+          <td style={indent ? { paddingLeft: '28px', color: '#8b6c57' } : {}}>
+            {!indent && c.name === 'LSK' && (c.subChannels || []).length > 0 ? (
+              <span style={{ cursor: 'pointer' }} onClick={() => setExpandedLsk(!expandedLsk)}>{expandedLsk ? '▾' : '▸'} {c.name}</span>
+            ) : c.name}
+          </td>
+          <td className="num">{money(c.avgWeeklyRevenue)}</td>
+          <td className="num">{money(c.avgTicket)}</td>
+          <td className="num">{money(c.costs && c.costs.total)}</td>
+          <td className="num">{money(c.contribution)}</td>
+          <td className="num">{pctCell(c.contributionPct)}</td>
+          <td className="num">{money(c.boLaborAllocated)}</td>
+          <td className="num" style={{ color: plColor(c.adjustedContribution), fontWeight: 600 }}>{money(c.adjustedContribution)}</td>
+          <td className="num">{pctCell(c.adjustedContributionPct)}</td>
+          <td className="num">{money(c.annualized)}</td>
+        </tr>
+      );
 
       return (
         <div className="container">
           <header>
             <h1>💰 P&L by Channel</h1>
-            <p className="subtitle">Revenue, Variable Costs, Bakery Allocation, and Profit/Loss by location or market</p>
+            <p className="subtitle">Revenue, costs, and contribution margin by sales channel, from the uploaded Market Performance sheets</p>
           </header>
           {error && <div className="error">{error}</div>}
-          <div className="controls">
-            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-              <div>
-                <label style={{ fontSize: '13px', color: '#666', marginRight: '8px', fontWeight: '600' }}>Filter:</label>
-                <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setSelectedFilter('all'); }} style={{ padding: '6px', marginRight: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
-                  <option value="location">By Location</option>
-                  <option value="market">By Market</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: '13px', color: '#666', marginRight: '8px', fontWeight: '600' }}>Selection:</label>
-                <select value={selectedFilter} onChange={(e) => setSelectedFilter(e.target.value)} style={{ padding: '6px', marginRight: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
-                  {filterOptions.map((opt, idx) => (
-                    <option key={idx} value={idx === 0 ? 'all' : opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: '13px', color: '#666', marginRight: '8px', fontWeight: '600' }}>Week:</label>
-                <select value={selectedWeek} onChange={(e) => setSelectedWeek(parseInt(e.target.value))} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
-                  {Array.from({ length: 52 }, (_, i) => (
-                    <option key={i} value={i}>Week {i + 1}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
           {status === 'loading' && <div className="loading">Loading P&L data…</div>}
-          {status === 'error' && <div className="error">{error}</div>}
-          {status === 'empty' && <div className="empty">No P&L data available. Please ensure bakery allocation data has been provided.</div>}
+          {status === 'empty' && <div className="empty">No P&L data uploaded yet. Send the Market Analysis, Non Market Channels, and Revenue Allocation sheets and I'll load them in.</div>}
           {status === 'ready' && (
             <>
+              {revenueAllocation && (
+                <div className="panel">
+                  <div className="panel-title">Revenue Allocation — {revenueAllocation.periodLabel}</div>
+                  <div className="panel-hint">Trailing revenue and share of total by channel ("Markets" is every farmers market/pop-up combined — see the by-market breakdown below).</div>
+                  <table>
+                    <thead><tr><th>Channel</th><th className="num">Revenue</th><th className="num">% of Total</th><th className="num">Avg Weekly</th></tr></thead>
+                    <tbody>
+                      {revenueAllocation.byChannel.map((c) => (
+                        <tr key={c.name}>
+                          <td>{c.name}</td>
+                          <td className="num">{money(c.revenue)}</td>
+                          <td className="num">{pctCell(c.pctShare)}</td>
+                          <td className="num">{money(c.avgWeeklyRevenue)}</td>
+                        </tr>
+                      ))}
+                      <tr style={{ fontWeight: 700, borderTop: '2px solid #d4b5a0' }}>
+                        <td>Total</td>
+                        <td className="num">{money(revenueAllocation.totalRevenue)}</td>
+                        <td className="num">—</td>
+                        <td className="num">—</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               <div className="metrics">
                 <div className="metric-card">
-                  <div className="metric-label">Total Revenue</div>
-                  <div className="metric-value">{fmtMoneyShort(chartData.reduce((s, c) => s + c.revenue, 0))}</div>
+                  <div className="metric-label">Total Weekly Revenue</div>
+                  <div className="metric-value">{fmtMoneyShort(totalWeeklyRevenue)}</div>
+                  <div className="metric-sub">Channels + all markets</div>
                 </div>
                 <div className="metric-card">
-                  <div className="metric-label">Total Variable Costs</div>
-                  <div className="metric-value">{fmtMoneyShort(chartData.reduce((s, c) => s + c.variableCosts, 0))}</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Total P&L</div>
-                  <div className="metric-value" style={{ color: chartData.reduce((s, c) => s + c.pl, 0) >= 0 ? '#0ca30c' : '#d03b3b' }}>{fmtMoneyShort(chartData.reduce((s, c) => s + c.pl, 0))}</div>
+                  <div className="metric-label">Total Weekly Adj. Contribution</div>
+                  <div className="metric-value" style={{ color: plColor(totalAdjustedContribution) }}>{fmtMoneyShort(totalAdjustedContribution)}</div>
+                  <div className="metric-sub">After BoH labor allocation</div>
                 </div>
               </div>
-              <div className="chart-container">
-                <div className="chart-title">P&L by Channel</div>
-                <PLChannelChart data={chartData} />
+
+              <div className="controls">
+                <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                  <div>
+                    <label style={{ fontSize: '13px', color: '#666', marginRight: '8px', fontWeight: '600' }}>View:</label>
+                    <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setSelectedFilter('all'); }} style={{ padding: '6px', marginRight: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
+                      <option value="location">By Location</option>
+                      <option value="market">By Market</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '13px', color: '#666', marginRight: '8px', fontWeight: '600' }}>Selection:</label>
+                    <select value={selectedFilter} onChange={(e) => setSelectedFilter(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
+                      {filterOptions.map((opt, idx) => (
+                        <option key={idx} value={idx === 0 ? 'all' : opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
+
+              {filterType === 'location' ? (
+                <>
+                  {channels.length > 0 && (
+                    <div className="chart-container">
+                      <div className="chart-title">P&L by Channel</div>
+                      <PLChannelChart data={chartData} />
+                    </div>
+                  )}
+                  <div className="panel">
+                    <div className="panel-title">Channels</div>
+                    <div className="panel-hint">Click "LSK" to expand its Bakery / Other split.</div>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Channel</th><th className="num">Avg Weekly Rev.</th><th className="num">Avg Ticket</th>
+                            <th className="num">Total Costs</th><th className="num">Contribution</th><th className="num">Contrib. %</th>
+                            <th className="num">BoH Labor</th><th className="num">Adj. Contribution</th><th className="num">Adj. %</th><th className="num">Annualized</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleChannels.map((c) => (
+                            <React.Fragment key={c.name}>
+                              {channelRow(c, false)}
+                              {c.name === 'LSK' && expandedLsk && (c.subChannels || []).map((sc) => channelRow(sc, true))}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="panel">
+                  <div className="panel-title">Markets</div>
+                  <div className="panel-hint">Each farmers market/pop-up kept separate rather than rolled up into one "Markets" total.</div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Market</th><th className="num">Avg Weekly Rev.</th><th className="num">Avg Ticket</th>
+                          <th className="num">Total Costs</th><th className="num">Contribution</th><th className="num">Contrib. %</th>
+                          <th className="num">Share</th><th className="num">BoH Labor</th><th className="num">Adj. Contribution</th>
+                          <th className="num">Adj. %</th><th className="num">Annualized</th><th className="num">Aspiration</th><th className="num">Wkly Target Incr.</th><th className="num">Upside/Downside</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleMarkets.map((m) => (
+                          <tr key={m.name}>
+                            <td>{m.name}</td>
+                            <td className="num">{money(m.avgWeeklyRevenue)}</td>
+                            <td className="num">{money(m.avgTicket)}</td>
+                            <td className="num">{money(m.costs && m.costs.total)}</td>
+                            <td className="num">{money(m.contribution)}</td>
+                            <td className="num">{pctCell(m.contributionPct)}</td>
+                            <td className="num">{pctCell(m.share)}</td>
+                            <td className="num">{money(m.boLaborAllocated)}</td>
+                            <td className="num" style={{ color: plColor(m.adjustedContribution), fontWeight: 600 }}>{money(m.adjustedContribution)}</td>
+                            <td className="num">{pctCell(m.adjustedContributionPct)}</td>
+                            <td className="num">{money(m.annualized)}</td>
+                            <td className="num">{money(m.aspiration)}</td>
+                            <td className="num">{money(m.weeklyIncreaseTarget)}</td>
+                            <td className="num">{money(m.upsideDownside)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

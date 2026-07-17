@@ -32,6 +32,14 @@ const INGREDIENTS_FILE = path.join(DATA_DIR, 'ingredients.json');
 const FINANCIAL_FILE = path.join(DATA_DIR, 'financial.json');
 const PRODUCTION_FILE = path.join(DATA_DIR, 'production.json');
 
+// Same volume-shadowing concern as MONTHLY_FINANCIAL_FILE above - restore from the repo-tracked
+// seed copy if a fresh/empty data volume has shadowed it.
+const PL_CHANNEL_FILE = path.join(DATA_DIR, 'pl-by-channel.json');
+const PL_CHANNEL_SEED = 'seed-data/pl-by-channel.json';
+if (!fs.existsSync(PL_CHANNEL_FILE) && fs.existsSync(PL_CHANNEL_SEED)) {
+  fs.copyFileSync(PL_CHANNEL_SEED, PL_CHANNEL_FILE);
+}
+
 // Maps the bakery's named channels (as used elsewhere in the dashboard, e.g. P&L by Channel)
 // to Square location IDs, so uploaded production CSVs can be compared against Square's
 // "amount sold" per item/day for the Waste tab. Verify these against Square Dashboard >
@@ -185,6 +193,14 @@ const loadProduction = () => {
   }
 };
 
+// Helper: Load pl-by-channel.json ({ channels, markets, revenueAllocation }, each populated
+// independently by its own /api/upload/pl-channel/* endpoint)
+const loadPLChannelData = () => {
+  const data = loadData(PL_CHANNEL_FILE);
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+};
+const savePLChannelData = (data) => saveData(PL_CHANNEL_FILE, data);
+
 // ============= UPLOAD ENDPOINTS =============
 
 // Upload recipes CSV
@@ -270,6 +286,201 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
       fs.unlinkSync(req.file.path);
       res.status(400).json({ error: err.message });
     });
+});
+
+// ============= P&L BY CHANNEL UPLOADS =============
+// Ingests three Google Sheet exports from the bakery's "Market Performance" workbook (Market
+// Analysis, Non Market Channels, Revenue Allocation). Each sheet has its own fixed multi-row title/
+// subtotal header - there's no single header line csv-parser can key off of - so rows are read
+// positionally (headers: false) and sliced past the known preamble instead of matched by column
+// name. Every number is stored exactly as the sheet reports it; nothing here is recomputed.
+// Each upload fully replaces its own slice of data/pl-by-channel.json (these are point-in-time
+// snapshots re-exported periodically, not append-by-date logs like production.json).
+
+const parseMoney = (v) => {
+  if (v == null) return null;
+  const n = parseFloat(String(v).replace(/[$,]/g, ''));
+  return Number.isFinite(n) ? n : null;
+};
+const parsePct = (v) => {
+  if (v == null) return null;
+  const n = parseFloat(String(v).replace(/[%,]/g, ''));
+  return Number.isFinite(n) ? n : null;
+};
+const parseNum = (v) => {
+  if (v == null) return null;
+  const n = parseFloat(String(v).replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+};
+
+// The Non Market Channels / Revenue Allocation sheets name a few channels differently than the rest
+// of the dashboard (WASTE_STORE_LOCATIONS, LOCATION_CHANNELS) - normalize to the shared names.
+const PL_CHANNEL_NAME_ALIASES = {
+  'Arc Institute': 'ARC',
+  Arc: 'ARC',
+  'State St.': 'State St',
+  'LSB (506)': '506 Retail',
+  'Retail 506': '506 Retail',
+  Delivery: 'Delivery 506',
+};
+const normalizePLChannelName = (raw) => {
+  const trimmed = (raw || '').trim();
+  return PL_CHANNEL_NAME_ALIASES[trimmed] || trimmed;
+};
+
+// Read a CSV positionally (no header row) - returns an array of rows, each an array of cell strings.
+const readCsvRowsPositional = (filePath) => new Promise((resolve, reject) => {
+  const rows = [];
+  fs.createReadStream(filePath)
+    .pipe(csv({ headers: false }))
+    .on('data', (row) => rows.push(Object.keys(row).map((k) => row[k])))
+    .on('end', () => resolve(rows))
+    .on('error', reject);
+});
+
+// POST /api/upload/pl-channel/market-analysis
+// "Market Analysis" sheet: per-market performance underlying the Markets channel - one row per
+// farmers market/pop-up (e.g. "FM SF SUN"), kept separate rather than rolled up so each market's
+// contribution can be inspected on its own. First 4 rows are title/subtotal/header text, not data.
+app.post('/api/upload/pl-channel/market-analysis', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    const rows = await readCsvRowsPositional(req.file.path);
+    const markets = rows.slice(4)
+      .filter((r) => (r[0] || '').trim())
+      .map((r) => ({
+        name: r[0].trim(),
+        avgWeeklyRevenue: parseMoney(r[1]),
+        avgTicket: parseMoney(r[2]),
+        avgTickets: parseNum(r[3]),
+        sellers: parseNum(r[4]),
+        drivers: parseNum(r[5]),
+        costs: {
+          seller: parseMoney(r[6]),
+          driver: parseMoney(r[7]),
+          vehicle: parseMoney(r[8]),
+          fees: parseMoney(r[9]),
+          overhead: parseMoney(r[10]),
+          total: parseMoney(r[11]),
+        },
+        contribution: parseMoney(r[12]),
+        contributionPct: parsePct(r[13]),
+        share: parsePct(r[15]),
+        boLaborAllocated: parseMoney(r[16]),
+        adjustedContribution: parseMoney(r[18]),
+        adjustedContributionPct: parsePct(r[19]),
+        annualized: parseMoney(r[21]),
+        aspiration: parseMoney(r[23]),
+        // The sheet's header row only labels 2 columns here ("Aspiration", "Upside/Downside") but
+        // every data row carries 3 trailing values after Annualized - r[24] is a small round-dollar
+        // figure (e.g. $500, $2,000) that reads as a per-market planned weekly increase, distinct
+        // from both Aspiration (r[23]) and the large annualized Upside/Downside figure (r[25]).
+        // Kept uninterpreted since the sheet never names it.
+        weeklyIncreaseTarget: parseMoney(r[24]),
+        upsideDownside: parseMoney(r[25]),
+      }));
+
+    const data = loadPLChannelData();
+    data.markets = markets;
+    data.marketsUpdatedAt = new Date().toISOString();
+    savePLChannelData(data);
+    fs.unlinkSync(req.file.path);
+    res.json({ success: true, count: markets.length });
+  } catch (err) {
+    fs.unlinkSync(req.file.path);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/upload/pl-channel/non-market
+// "Non Market Channels" sheet: named channels other than the farmers markets (Arc, State St, LSK,
+// Retail 506, Delivery, Catering), plus a Bakery/Other sub-split of LSK. First 4 rows are title/
+// subtotal/header text, not data.
+app.post('/api/upload/pl-channel/non-market', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    const rows = await readCsvRowsPositional(req.file.path);
+    const parseChannelRow = (r) => ({
+      name: normalizePLChannelName(r[0]),
+      avgWeeklyRevenue: parseMoney(r[1]),
+      avgTicket: parseMoney(r[2]),
+      avgTickets: parseNum(r[3]),
+      sellers: parseNum(r[4]),
+      drivers: parseNum(r[5]),
+      costs: {
+        seller: parseMoney(r[6]),
+        driver: parseMoney(r[7]),
+        vehicle: parseMoney(r[8]),
+        fees: parseMoney(r[9]),
+        prep: parseMoney(r[10]),
+        overhead: parseMoney(r[11]),
+        total: parseMoney(r[12]),
+      },
+      contribution: parseMoney(r[13]),
+      contributionPct: parsePct(r[14]),
+      boLaborAllocated: parseMoney(r[16]),
+      adjustedContribution: parseMoney(r[18]),
+      adjustedContributionPct: parsePct(r[19]),
+      annualized: parseMoney(r[21]),
+    });
+
+    const dataRows = rows.slice(4).filter((r) => (r[0] || '').trim());
+    const subSplitNames = ['LSK - Bakery', 'LSK - Other'];
+    const channels = dataRows.filter((r) => !subSplitNames.includes(r[0].trim())).map(parseChannelRow);
+    const lskSubChannels = dataRows
+      .filter((r) => subSplitNames.includes(r[0].trim()))
+      .map((r) => ({ ...parseChannelRow(r), name: r[0].trim() }));
+
+    const lsk = channels.find((c) => c.name === 'LSK');
+    if (lsk && lskSubChannels.length) lsk.subChannels = lskSubChannels;
+
+    const data = loadPLChannelData();
+    data.channels = channels;
+    data.channelsUpdatedAt = new Date().toISOString();
+    savePLChannelData(data);
+    fs.unlinkSync(req.file.path);
+    res.json({ success: true, count: channels.length });
+  } catch (err) {
+    fs.unlinkSync(req.file.path);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/upload/pl-channel/revenue-allocation
+// "Revenue Allocation" sheet: trailing-12-months revenue and % share by channel (Markets is the
+// combined total of every row in the Market Analysis sheet), for the top-of-tab summary. No fixed
+// header row - data rows are wherever column 1 (name) is populated with a parseable revenue figure
+// in column 2 (excludes the sheet's "Last 12 Months" section-label row, which names a column but
+// carries no value).
+app.post('/api/upload/pl-channel/revenue-allocation', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    const rows = await readCsvRowsPositional(req.file.path);
+    const named = rows.filter((r) => (r[1] || '').trim() && parseMoney(r[2]) != null);
+    const totalRow = named.find((r) => r[1].trim() === 'Total');
+    const byChannel = named
+      .filter((r) => r[1].trim() !== 'Total')
+      .map((r) => ({
+        name: normalizePLChannelName(r[1]),
+        revenue: parseMoney(r[2]),
+        pctShare: parsePct(r[3]),
+        avgWeeklyRevenue: parseMoney(r[5]),
+      }));
+
+    const data = loadPLChannelData();
+    data.revenueAllocation = {
+      periodLabel: 'Last 12 Months',
+      totalRevenue: totalRow ? parseMoney(totalRow[2]) : null,
+      byChannel,
+    };
+    data.revenueAllocationUpdatedAt = new Date().toISOString();
+    savePLChannelData(data);
+    fs.unlinkSync(req.file.path);
+    res.json({ success: true, count: byChannel.length });
+  } catch (err) {
+    fs.unlinkSync(req.file.path);
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // ============= DATA ENDPOINTS =============
@@ -1124,32 +1335,22 @@ app.get('/api/dashboard', async (req, res) => {
   }
 });
 
-// P&L by Channel
+// GET /api/pl-by-channel
+// Combined channel + market + revenue-allocation P&L, built from the three sheets uploaded via
+// /api/upload/pl-channel/*. Nothing here is computed/derived - every number is exactly what was in
+// the uploaded sheet. A tab loads whichever of the three pieces has been uploaded so far.
 app.get('/api/pl-by-channel', (req, res) => {
-  try {
-    const PL_CHANNEL_FILE = path.join(DATA_DIR, 'pl-by-channel.json');
-    const plData = loadData(PL_CHANNEL_FILE);
-
-    if (!plData || plData.length === 0) {
-      return res.json({
-        channels: [
-          { name: 'ARC', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
-          { name: 'LSK', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
-          { name: 'State St', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
-          { name: 'Catering', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
-          { name: 'Delivery 506', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
-        ],
-        message: 'No P&L data provided yet. Upload bakery allocation data to populate this view.',
-      });
-    }
-
-    res.json({
-      channels: plData,
-      lastUpdated: new Date().toISOString(),
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const data = loadPLChannelData();
+  res.json({
+    channels: data.channels || [],
+    markets: data.markets || [],
+    revenueAllocation: data.revenueAllocation || null,
+    updatedAt: {
+      channels: data.channelsUpdatedAt || null,
+      markets: data.marketsUpdatedAt || null,
+      revenueAllocation: data.revenueAllocationUpdatedAt || null,
+    },
+  });
 });
 
 // ============= WASTE DASHBOARD =============

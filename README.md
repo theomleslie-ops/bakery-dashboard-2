@@ -35,6 +35,17 @@ clean), other dates already on file for that location are kept, and other locati
 so weekly production sheets accumulate into a running log rather than each upload wiping out prior
 weeks.
 
+**Upload P&L by Channel data (for the P&L by Channel tab), one sheet per upload:**
+```bash
+curl -X POST -F "file=@Market Analysis.csv" http://localhost:3001/api/upload/pl-channel/market-analysis
+curl -X POST -F "file=@Non Market Channels.csv" http://localhost:3001/api/upload/pl-channel/non-market
+curl -X POST -F "file=@Revenue Allocation.csv" http://localhost:3001/api/upload/pl-channel/revenue-allocation
+```
+Each expects the exact export format of the corresponding tab in the bakery's "Market Performance"
+Google Sheet (title/subtotal rows then a fixed column layout - not a format meant to be hand-authored).
+Each upload fully replaces its own slice of `data/pl-by-channel.json` (these are point-in-time
+snapshots re-exported periodically, not append-by-date logs); re-upload whichever sheet has changed.
+
 ### Get Data
 
 **Get recipes:**
@@ -69,6 +80,16 @@ and day) to compute waste = produced − sold, per item per day. Defaults to the
 that location's uploaded production data; override with `start`/`end` (`YYYY-MM-DD`). Cached 1 hour.
 Also returns `unmatchedSoldItems`: things Square sold in that window whose name never matched a
 production row — usually means the CSV item name and Square's point-of-sale name have drifted apart.
+
+**Get P&L by channel (P&L by Channel tab):**
+```bash
+curl http://localhost:3001/api/pl-by-channel
+```
+Returns `channels` (named channels other than farmers markets - ARC, LSK, State St, Catering,
+Delivery 506, 506 Retail - with cost/contribution detail and, for LSK, a `subChannels` array split
+into Bakery/Other), `markets` (every farmers market/pop-up kept as its own row, not rolled up), and
+`revenueAllocation` (trailing-12-months revenue and % share by channel). Whichever of the three
+uploads (above) hasn't happened yet is returned empty.
 
 **Get item margins (Item Margins tab):**
 ```bash

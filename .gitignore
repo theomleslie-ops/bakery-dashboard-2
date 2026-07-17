@@ -5,3 +5,4 @@ uploads/
 .DS_Store
 data/*
 !data/monthly-financial.json
+!data/pl-by-channel.json
