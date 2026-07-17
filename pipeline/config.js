@@ -6,12 +6,13 @@
 
 module.exports = {
   // Google Sheets to pull. EVERY tab of each spreadsheet is pulled automatically.
-  // `id` is the long string in the sheet URL:
-  //   https://docs.google.com/spreadsheets/d/<THIS_IS_THE_ID>/edit
-  // Remember to share each sheet with the service-account email (Viewer is enough).
+  // Reference sheets BY NAME — the Drive API resolves the name to an ID, so no URLs needed.
+  // (The sheet just has to be shared with the service account, e.g. via a shared folder.)
+  // Run `node pipeline/refresh.js --list` to see every name the service account can pull.
   googleSheets: [
-    // { id: '1AbCdEf...', label: 'Weekly Ops Tracker' },
-    // { id: '1GhIjKl...', label: 'Market Schedule' },
+    // { name: 'Weekly Ops Tracker' },
+    // { name: 'Market Schedule' },
+    // { id: '1AbCdEf...' },   // an explicit ID also works if you ever want one
   ],
 
   // QuickBooks reports to pull. `report` is the Intuit Reports API name; `params` are passed

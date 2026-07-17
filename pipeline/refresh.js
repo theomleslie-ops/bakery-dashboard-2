@@ -60,27 +60,31 @@ const pullQuickBooks = async () => {
   return { realmId: tokens?.realmId || null, reports };
 };
 
-const pullSheets = async () => {
+// entries: array of { id } and/or { name } (name is resolved via Drive). Defaults to config.
+const pullSheets = async (entries = config.googleSheets) => {
   if (!sheetsClient.hasCredentials()) {
     console.log('  Sheets → skipped (no data/google-service-account.json yet)');
     return { skipped: 'no credentials' };
   }
-  if (!config.googleSheets.length) {
+  if (!entries.length) {
     console.log('  Sheets → skipped (no sheets listed in pipeline/config.js)');
     return { skipped: 'no sheets configured' };
   }
-  const client = await sheetsClient.getSheetsClient();
+  const { sheets, drive } = await sheetsClient.getClients();
   const spreadsheets = {};
-  for (const s of config.googleSheets) {
-    process.stdout.write(`  Sheets → ${s.label || s.id}… `);
+  for (const s of entries) {
+    const ref = s.name || s.label || s.id;
+    process.stdout.write(`  Sheets → ${ref}… `);
     try {
-      const data = await sheetsClient.pullSpreadsheet(client, s.id);
-      spreadsheets[s.id] = data;
+      // Resolve a name to an id via Drive; an explicit id is used as-is.
+      const id = s.id || (await sheetsClient.resolveByName(drive, s.name)).id;
+      const data = await sheetsClient.pullSpreadsheet(sheets, id);
+      spreadsheets[id] = data;
       console.log(`ok — "${data.title}", ${Object.keys(data.tabs).length} tabs`);
     } catch (e) {
       const detail = e.errors?.[0]?.message || e.message;
       console.log(`FAILED — ${detail}`);
-      spreadsheets[s.id] = { id: s.id, error: detail };
+      spreadsheets[s.id || s.name] = { ref, error: detail };
     }
   }
   return { spreadsheets };
@@ -109,26 +113,51 @@ const writeOutputs = (result) => {
   fs.writeFileSync(path.join(snap, 'consolidated.json'), JSON.stringify(result, null, 2));
 };
 
-const refresh = async ({ qbOnly = false, sheetsOnly = false } = {}) => {
+// sheetsOverride: pull these entries ([{name}]/[{id}]) instead of config.googleSheets.
+const refresh = async ({ qbOnly = false, sheetsOnly = false, sheetsOverride = null } = {}) => {
   const result = { generatedAt: new Date().toISOString(), sources: { quickbooks: null, googleSheets: null } };
   if (!sheetsOnly) result.sources.quickbooks = await pullQuickBooks();
-  if (!qbOnly) result.sources.googleSheets = await pullSheets();
+  if (!qbOnly) result.sources.googleSheets = await pullSheets(sheetsOverride || config.googleSheets);
   writeOutputs(result);
   return result;
 };
 
+// Print every sheet the service account can see — the menu of names you can pull by.
+const listAccessibleSheets = async () => {
+  if (!sheetsClient.hasCredentials()) return console.log('No data/google-service-account.json yet — do the Google setup first.');
+  const { drive } = await sheetsClient.getClients();
+  const files = await sheetsClient.listSpreadsheets(drive);
+  if (!files.length) return console.log('The service account can see 0 sheets. Share a sheet (or a folder of sheets) with its email.');
+  console.log(`Sheets the service account can see (${files.length}):`);
+  files.forEach((f) => console.log(`  • ${f.name}`));
+};
+
 if (require.main === module) {
   const args = process.argv.slice(2);
-  const opts = { qbOnly: args.includes('--qb-only'), sheetsOnly: args.includes('--sheets-only') };
-  console.log('Refreshing data pipeline…');
-  refresh(opts)
-    .then((r) => {
-      const qbCount = Object.keys(r.sources.quickbooks?.reports || {}).length;
-      const shCount = Object.values(r.sources.googleSheets?.spreadsheets || {}).reduce((n, sp) => n + Object.keys(sp.tabs || {}).length, 0);
-      console.log(`\nDone. QuickBooks reports: ${qbCount} · Sheet tabs: ${shCount}`);
-      console.log(`Wrote → ${path.relative(process.cwd(), path.join(LATEST_DIR, 'consolidated.json'))} (+ CSVs)`);
-    })
-    .catch((e) => { console.error('Pipeline failed:', e.message); process.exit(1); });
+  const flag = (name) => args.includes(name);
+  const valueOf = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
+
+  const summarize = (r) => {
+    const qbCount = Object.keys(r.sources.quickbooks?.reports || {}).length;
+    const shCount = Object.values(r.sources.googleSheets?.spreadsheets || {}).reduce((n, sp) => n + Object.keys(sp.tabs || {}).length, 0);
+    console.log(`\nDone. QuickBooks reports: ${qbCount} · Sheet tabs: ${shCount}`);
+    console.log(`Wrote → ${path.relative(process.cwd(), path.join(LATEST_DIR, 'consolidated.json'))} (+ CSVs)`);
+  };
+
+  const run = async () => {
+    if (flag('--list')) return listAccessibleSheets();
+
+    const sheetName = valueOf('--sheet');
+    if (sheetName) {
+      console.log(`Pulling sheet "${sheetName}"…`);
+      return summarize(await refresh({ sheetsOnly: true, sheetsOverride: [{ name: sheetName }] }));
+    }
+
+    console.log('Refreshing data pipeline…');
+    summarize(await refresh({ qbOnly: flag('--qb-only'), sheetsOnly: flag('--sheets-only') }));
+  };
+
+  run().catch((e) => { console.error('Pipeline failed:', e.message); process.exit(1); });
 }
 
-module.exports = { refresh };
+module.exports = { refresh, pullSheets, listAccessibleSheets };

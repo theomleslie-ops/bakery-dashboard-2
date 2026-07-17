@@ -7,10 +7,16 @@ as you like to refresh.
 ## Run
 
 ```bash
-npm run pipeline                 # both sources
+npm run pipeline                       # both sources
 node pipeline/refresh.js --qb-only
 node pipeline/refresh.js --sheets-only
+node pipeline/refresh.js --list        # every sheet name the service account can pull
+node pipeline/refresh.js --sheet "Weekly Ops"   # pull one sheet ad hoc, by name
 ```
+
+Sheets are referenced **by name** — the Drive API resolves the name to an ID, so you never handle
+URLs. A sheet just has to be shared with the service account (share one Drive folder with it and
+every sheet inside becomes pullable by name).
 
 Programmatic:
 
@@ -34,10 +40,10 @@ Add a **QuickBooks report** (one line):
 { key: 'ar_aging', report: 'AgedReceivables', range: 'asOfToday' },
 ```
 
-Add a **Google Sheet** (one line — every tab is pulled automatically):
+Add a **Google Sheet** by name (one line — every tab is pulled automatically):
 
 ```js
-{ id: '1AbC…theIdFromTheSheetURL', label: 'Weekly Ops' },
+{ name: 'Weekly Ops' },
 ```
 
 `range` shortcuts: `ytd` · `thisYear` · `lastYear` · `thisMonth` · `asOfToday`. Anything in `params`

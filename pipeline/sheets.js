@@ -1,21 +1,70 @@
 // Google Sheets client for the data pipeline. Uses a service-account key (read-only) so it runs
-// headless — no browser consent. Activates automatically once data/google-service-account.json
-// exists and sheets are listed in config.js. Pulls every tab of each spreadsheet.
+// headless — no browser consent. Sheets are referenced BY NAME: the Drive API resolves a name to
+// an ID, so you never deal with URLs. The service account can only see sheets that have been shared
+// with it (share a single Drive folder with it and every sheet inside becomes discoverable).
 const fs = require('fs');
 const path = require('path');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const CREDS_FILE = path.join(DATA_DIR, 'google-service-account.json');
 
+// spreadsheets.readonly → read values; drive.metadata.readonly → look sheets up by name.
+const SCOPES = [
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/drive.metadata.readonly',
+];
+
 const hasCredentials = () => fs.existsSync(CREDS_FILE);
 
-const getSheetsClient = async () => {
-  const { google } = require('googleapis'); // lazy — so QB-only runs don't need googleapis installed
-  const auth = new google.auth.GoogleAuth({
-    keyFile: CREDS_FILE,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-  });
-  return google.sheets({ version: 'v4', auth: await auth.getClient() });
+const getClients = async () => {
+  const { google } = require('googleapis'); // lazy — QB-only runs don't need googleapis installed
+  const auth = new google.auth.GoogleAuth({ keyFile: CREDS_FILE, scopes: SCOPES });
+  const authClient = await auth.getClient();
+  return {
+    sheets: google.sheets({ version: 'v4', auth: authClient }),
+    drive: google.drive({ version: 'v3', auth: authClient }),
+  };
+};
+
+// Every spreadsheet the service account can see (i.e. that's been shared with it), newest first.
+const listSpreadsheets = async (drive) => {
+  const files = [];
+  let pageToken;
+  do {
+    const res = await drive.files.list({
+      q: "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
+      fields: 'nextPageToken, files(id, name, modifiedTime)',
+      orderBy: 'modifiedTime desc',
+      pageSize: 200,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
+      pageToken,
+    });
+    files.push(...(res.data.files || []));
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
+  return files;
+};
+
+// Resolve a spreadsheet by (case-insensitive) name → { id, name }. Prefers an exact match, falls
+// back to a unique "contains" match, and throws a helpful error if it's missing or ambiguous.
+const resolveByName = async (drive, name) => {
+  const all = await listSpreadsheets(drive);
+  const q = String(name).trim().toLowerCase();
+  const exact = all.filter((f) => f.name.toLowerCase() === q);
+  const partial = all.filter((f) => f.name.toLowerCase().includes(q));
+  const matches = exact.length ? exact : partial;
+
+  if (matches.length === 1) return { id: matches[0].id, name: matches[0].name };
+  if (matches.length === 0) {
+    const visible = all.map((f) => f.name).join(', ') || '(none — has it been shared with the service account?)';
+    const err = new Error(`No sheet named like "${name}". Sheets I can see: ${visible}`);
+    err.code = 'SHEET_NOT_FOUND';
+    throw err;
+  }
+  const err = new Error(`"${name}" is ambiguous — matches: ${matches.map((f) => f.name).join(', ')}. Be more specific.`);
+  err.code = 'SHEET_AMBIGUOUS';
+  throw err;
 };
 
 // A1 range for a whole tab; single-quote and escape the title so tabs with spaces/quotes work.
@@ -47,4 +96,4 @@ const pullSpreadsheet = async (sheets, spreadsheetId) => {
   return { id: spreadsheetId, title, tabs };
 };
 
-module.exports = { hasCredentials, getSheetsClient, pullSpreadsheet, CREDS_FILE };
+module.exports = { hasCredentials, getClients, listSpreadsheets, resolveByName, pullSpreadsheet, CREDS_FILE };
