@@ -246,6 +246,13 @@
       { weeks: 52, label: '52 Weeks' },
     ];
 
+    const MARKET_WEEK_COUNT_OPTIONS = [
+      { weeks: 26, label: '26 Weeks' },
+      { weeks: 52, label: '1 Year' },
+      { weeks: 104, label: '2 Years' },
+      { weeks: 156, label: '3 Years' },
+    ];
+
     function DashboardContent() {
       const [data, setData] = useState([]);
       const [error, setError] = useState('');
@@ -1465,7 +1472,7 @@
       const [selected, setSelected] = useState(new Set());
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
-      const [weeksRange, setWeeksRange] = useState(52);
+      const [weeksRange, setWeeksRange] = useState(156);
       useEffect(() => { fetchData(); }, [weeksRange]);
       const fetchData = async () => {
         try {
@@ -1495,11 +1502,11 @@
         <div className="container">
           <header>
             <h1>🏪 Performance by Market</h1>
-            <p className="subtitle">Weekly revenue by farmers market / pop-up location, past {weeksRange} week{weeksRange === 1 ? '' : 's'}</p>
+            <p className="subtitle">Weekly revenue by farmers market / pop-up location, past {weeksRange % 52 === 0 ? `${weeksRange / 52} year${weeksRange === 52 ? '' : 's'}` : `${weeksRange} week${weeksRange === 1 ? '' : 's'}`}</p>
           </header>
           <div className="controls">
             <div className="view-toggle">
-              {WEEK_COUNT_OPTIONS.map(opt => (
+              {MARKET_WEEK_COUNT_OPTIONS.map(opt => (
                 <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
               ))}
             </div>
@@ -1507,7 +1514,7 @@
               <MarketSelectMenu markets={markets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} />
             )}
           </div>
-          {status === 'loading' && <div className="loading">Loading market sales data from Square… this can take a minute the first time for a given range.</div>}
+          {status === 'loading' && <div className="loading">Loading market sales data from Square… the first load for a new range can take several minutes (up to 3 years of history across ~50 locations); results are cached after that.</div>}
           {status === 'error' && <div className="error">{error}</div>}
           {status === 'empty' && <div className="empty">No market sales data available for this range.</div>}
           {status === 'ready' && (
