@@ -1496,7 +1496,9 @@ const mapWithConcurrency = async (items, limit, fn) => {
 
 // Persists weekly revenue per market to disk (data/market-performance-snapshot.json), so a
 // completed week is only ever fetched from Square once instead of re-fetched across all ~50
-// locations on every request. Only the current (still-accumulating) week is refreshed live.
+// locations on every request. Only the most recent 2 weeks are ever pulled live (mirrors the
+// QuickBooks weekly snapshot pattern above), which covers both the still-accumulating current
+// week and any orders that settle a few days late.
 const MARKET_PERF_SNAPSHOT_FILE = path.join(DATA_DIR, 'market-performance-snapshot.json');
 const loadMarketPerfSnapshot = () => {
   const data = loadData(MARKET_PERF_SNAPSHOT_FILE);
@@ -1508,7 +1510,7 @@ const saveMarketPerfSnapshot = (snapshot) => saveData(MARKET_PERF_SNAPSHOT_FILE,
 
 // Get real per-week revenue for every market location across [rangeStart, rangeEndInclusive]
 // (both week-start dates), backfilling from Square into the on-disk snapshot only as far back as
-// hasn't already been fetched, and always refreshing the current week live.
+// hasn't already been fetched, and always refreshing the most recent 2 weeks live.
 const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow) => {
   const snapshot = loadMarketPerfSnapshot();
   const rangeEndExclusive = addDays(rangeEndInclusive, 7);
@@ -1525,9 +1527,10 @@ const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow) =
     snapshot.backfilledFrom = rangeStart;
   }
 
+  const liveStart = addDays(rangeEndInclusive, -7);
   const liveResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => ({
     name: loc.name,
-    revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, rangeEndInclusive, rangeEndExclusive, startDow),
+    revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, liveStart, rangeEndExclusive, startDow),
   }));
   liveResults.forEach(({ name, revenueByWeek }) => {
     snapshot.revenueByMarket[name] = { ...(snapshot.revenueByMarket[name] || {}), ...revenueByWeek };
@@ -1537,18 +1540,18 @@ const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow) =
   return snapshot.revenueByMarket;
 };
 
-// GET /api/market-performance?weeks=52
+// GET /api/market-performance?weeks=156
 // Weekly gross sales revenue per farmers-market/pop-up location, straight from Square orders -
-// real per-week totals, not estimated or averaged. Completed weeks come from the on-disk
-// snapshot; only the current week is ever re-fetched live. A short in-memory cache on top smooths
-// out rapid repeat page loads.
+// real per-week totals, not estimated or averaged. Range goes back up to 3 years (156 weeks).
+// Completed weeks come from the on-disk snapshot; only the most recent 2 weeks are ever
+// re-fetched live. A short in-memory cache on top smooths out rapid repeat page loads.
 app.get('/api/market-performance', async (req, res) => {
   const token = process.env.SQUARE_ACCESS_TOKEN;
   if (!token || token === 'your_square_token_here') {
     return res.status(400).json({ error: 'Square API credentials not configured', weekStarts: [], markets: [] });
   }
 
-  const weekCount = Math.min(Math.max(parseInt(req.query.weeks, 10) || 52, 1), 52);
+  const weekCount = Math.min(Math.max(parseInt(req.query.weeks, 10) || 52, 1), 156);
   const cacheKey = `market_perf_${weekCount}`;
   const cached = cacheManager.get(cacheKey);
   if (cached) return res.json({ ...cached, cached: true });
