@@ -21,8 +21,12 @@
     .subtitle { color: #8b6c57; font-size: 14px; }
     .controls { display: flex; gap: 20px; margin: 30px 0; flex-wrap: wrap; align-items: center; justify-content: space-between; }
     .view-toggle { display: flex; gap: 8px; }
+    .timeframe-controls { display: flex; gap: 8px; align-items: center; }
+    .timeframe-controls select { padding: 8px 10px; border: 1px solid #d4b5a0; border-radius: 6px; background: white; color: #6b4423; font-size: 13px; font-weight: 500; cursor: pointer; }
+    .timeframe-controls button { padding: 8px 14px; font-size: 15px; line-height: 1; }
     button { padding: 10px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; background: white; color: #6b4423; border: 1px solid #d4b5a0; }
     button:hover { background: #e8ddd5; border-color: #6b4423; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; background: white; border-color: #d4b5a0; }
     button.active { background: #6b4423; color: white; border-color: #6b4423; }
     input[type="file"] { padding: 8px; border: 1px solid #d4b5a0; border-radius: 6px; background: white; }
     .upload-btn { padding: 10px 20px; background: #6b4423; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
@@ -246,12 +250,17 @@
       { weeks: 52, label: '52 Weeks' },
     ];
 
-    const MARKET_WEEK_COUNT_OPTIONS = [
-      { weeks: 26, label: '26 Weeks' },
+    // How wide a slice of history is shown on screen at once. The full 3 years is always fetched
+    // and cached; these just window it client-side so panning back/forward is instant.
+    const MARKET_TIMEFRAME_OPTIONS = [
+      { weeks: 1, label: '1 Week' },
+      { weeks: 2, label: '2 Weeks' },
+      { weeks: 9, label: '2 Months' },
+      { weeks: 26, label: '6 Months' },
       { weeks: 52, label: '1 Year' },
-      { weeks: 104, label: '2 Years' },
       { weeks: 156, label: '3 Years' },
     ];
+    const MARKET_MAX_WEEKS = 156;
 
     function DashboardContent() {
       const [data, setData] = useState([]);
@@ -1383,6 +1392,9 @@
             <polyline key={s.name} points={s.revenue.map((v, i) => `${xPos(i)},${getY(v)}`).join(' ')}
               fill="none" stroke={colorOf(s.name)} strokeWidth="2" vectorEffect="non-scaling-stroke" />
           ))}
+          {n <= 14 && series.map(s => s.revenue.map((v, i) => (
+            <circle key={`${s.name}-${i}`} cx={xPos(i)} cy={getY(v)} r="3" fill={colorOf(s.name)} />
+          )))}
           {hoverIndex !== null && (
             <line x1={xPos(hoverIndex)} y1={plotTop} x2={xPos(hoverIndex)} y2={plotBottom} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
           )}
@@ -1466,23 +1478,31 @@
       );
     }
 
+    const fmtWeekLabelFull = (dateStr) => { const [y, m, d] = dateStr.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); };
+
     function MarketPerformanceDashboard() {
-      const [weekStarts, setWeekStarts] = useState([]);
-      const [markets, setMarkets] = useState([]);
+      // Full 3-year dataset, fetched once. weekStarts is oldest-first; each market's revenue[] is
+      // aligned to it. The visible window (below) is sliced out of this client-side.
+      const [allWeekStarts, setAllWeekStarts] = useState([]);
+      const [allMarkets, setAllMarkets] = useState([]);
       const [selected, setSelected] = useState(new Set());
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
-      const [weeksRange, setWeeksRange] = useState(156);
-      useEffect(() => { fetchData(); }, [weeksRange]);
+      // windowWeeks = how many weeks are shown on screen. offsetWeeks = how far back from the most
+      // recent week the right edge sits (0 = showing through the current week).
+      const [windowWeeks, setWindowWeeks] = useState(26);
+      const [offsetWeeks, setOffsetWeeks] = useState(0);
+
+      useEffect(() => { fetchData(); }, []);
       const fetchData = async () => {
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/market-performance?weeks=${weeksRange}`);
+          const response = await fetch(`${baseUrl}/api/market-performance?weeks=${MARKET_MAX_WEEKS}`);
           const result = await response.json();
           if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
-          setWeekStarts(result.weekStarts || []);
-          setMarkets(result.markets || []);
+          setAllWeekStarts(result.weekStarts || []);
+          setAllMarkets(result.markets || []);
           setSelected(new Set((result.markets || []).slice(0, 8).map(m => m.name)));
           setStatus((result.markets || []).length > 0 ? 'ready' : 'empty');
         } catch (err) {
@@ -1491,32 +1511,54 @@
         }
       };
 
+      // Slice the visible window out of the full dataset.
+      const total = allWeekStarts.length;
+      const maxOffset = Math.max(0, total - windowWeeks);
+      const clampedOffset = Math.min(offsetWeeks, maxOffset);
+      const end = total - clampedOffset;
+      const start = Math.max(0, end - windowWeeks);
+      const weekStarts = allWeekStarts.slice(start, end);
+      const markets = allMarkets.map(m => ({ name: m.name, revenue: m.revenue.slice(start, end) }));
+
+      const step = windowWeeks;
+      const goOlder = () => setOffsetWeeks(o => Math.min(maxOffset, o + step));
+      const goNewer = () => setOffsetWeeks(o => Math.max(0, o - step));
+      const changeTimeframe = (weeks) => { setWindowWeeks(weeks); setOffsetWeeks(0); };
+
+      // Markets keep the server's stable full-range ranking (so colors don't reshuffle when you
+      // pan); totals in the picker reflect the visible window.
       const colorOf = (name) => {
         const idx = markets.findIndex(m => m.name === name);
         return marketColor(idx >= 0 ? idx : 0);
       };
       const totalRevenue = (m) => m.revenue.reduce((s, v) => s + v, 0);
       const visibleSeries = markets.filter(m => selected.has(m.name));
+      const rangeLabel = weekStarts.length ? `${fmtWeekLabelFull(weekStarts[0])} – ${fmtWeekLabelFull(weekStarts[weekStarts.length - 1])}` : '';
 
       return (
         <div className="container">
           <header>
             <h1>🏪 Performance by Market</h1>
-            <p className="subtitle">Weekly revenue by farmers market / pop-up location, past {weeksRange % 52 === 0 ? `${weeksRange / 52} year${weeksRange === 52 ? '' : 's'}` : `${weeksRange} week${weeksRange === 1 ? '' : 's'}`}</p>
+            <p className="subtitle">Weekly revenue by farmers market / pop-up location{rangeLabel ? ` · ${rangeLabel}` : ''}</p>
           </header>
           <div className="controls">
-            <div className="view-toggle">
-              {MARKET_WEEK_COUNT_OPTIONS.map(opt => (
-                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
-              ))}
+            <div className="timeframe-controls">
+              <button onClick={goOlder} disabled={status !== 'ready' || clampedOffset >= maxOffset} title="Earlier">◀</button>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--chart-ink)' }}>
+                Show
+                <select value={windowWeeks} onChange={(e) => changeTimeframe(parseInt(e.target.value, 10))}>
+                  {MARKET_TIMEFRAME_OPTIONS.map(opt => <option key={opt.weeks} value={opt.weeks}>{opt.label}</option>)}
+                </select>
+              </label>
+              <button onClick={goNewer} disabled={status !== 'ready' || clampedOffset <= 0} title="Later">▶</button>
             </div>
             {status === 'ready' && (
               <MarketSelectMenu markets={markets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} />
             )}
           </div>
-          {status === 'loading' && <div className="loading">Loading market sales data from Square… the first load for a new range can take several minutes (up to 3 years of history across ~50 locations); results are cached after that.</div>}
+          {status === 'loading' && <div className="loading">Loading market sales data from Square… the first load can take several minutes (up to 3 years of history across ~50 locations); results are cached after that.</div>}
           {status === 'error' && <div className="error">{error}</div>}
-          {status === 'empty' && <div className="empty">No market sales data available for this range.</div>}
+          {status === 'empty' && <div className="empty">No market sales data available.</div>}
           {status === 'ready' && (
             <div className="chart-container">
               <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
