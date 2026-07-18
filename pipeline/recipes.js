@@ -9,6 +9,39 @@ const sheetsClient = require('./sheets');
 const norm = (v) => (v == null ? '' : String(v)).trim();
 const toNum = (v) => { const n = parseFloat(String(v ?? '').replace(/,/g, '')); return Number.isFinite(n) ? n : NaN; };
 
+const UNIT = 'cookie|scone|muffin|piece|pan|cake|unit|pcs?|loaf|bun|roll|slice|bar|tart';
+// Pull the finished weight of one sold unit out of a recipe's PROCESS notes, so batch cost can be
+// turned into cost-per-unit. Handles the phrasings the sheets actually use.
+const parsePortion = (text) => {
+  if (!text) return null;
+  const t = String(text).replace(/(\d),(\d)/g, '$1.$2'); // "1,4kg" → "1.4kg" (comma decimal)
+  let m;
+  // "Weight 235gr per cookie" / "1865g per pan" / "175 g / piece"
+  m = t.match(new RegExp(`(\\d+(?:\\.\\d+)?)\\s*g(?:r|ram)?s?\\s*(?:per|/)\\s*(${UNIT})`, 'i'));
+  if (m) return { portionKg: parseFloat(m[1]) / 1000, basis: `${m[1]}g per ${m[2].toLowerCase()}` };
+  // "1 muffin = 135gr of batter"
+  m = t.match(new RegExp(`1\\s+(${UNIT})\\s*=\\s*(\\d+(?:\\.\\d+)?)\\s*g`, 'i'));
+  if (m) return { portionKg: parseFloat(m[2]) / 1000, basis: `1 ${m[1].toLowerCase()} = ${m[2]}g` };
+  // "Scale doughs of 1.4kg and detail in 8 pcs"
+  m = t.match(new RegExp(`(\\d+(?:\\.\\d+)?)\\s*kg[^.]*?(?:detail\\s+in\\s+|into\\s+|in\\s+)(\\d+)\\s*(?:${UNIT})`, 'i'));
+  if (m) return { portionKg: parseFloat(m[1]) / parseInt(m[2], 10), basis: `${m[1]}kg ÷ ${m[2]} pcs` };
+  // "...of 1400g ... detail in 8 pcs"
+  m = t.match(new RegExp(`(\\d+(?:\\.\\d+)?)\\s*g[^.]*?(?:detail\\s+in\\s+|into\\s+)(\\d+)\\s*(?:${UNIT})`, 'i'));
+  if (m) return { portionKg: parseFloat(m[1]) / 1000 / parseInt(m[2], 10), basis: `${m[1]}g ÷ ${m[2]} pcs` };
+  // "SHAPING: 160g normal/60g catering" → the normal portion
+  m = t.match(/(\d+(?:\.\d+)?)\s*g\s*normal/i);
+  if (m) return { portionKg: parseFloat(m[1]) / 1000, basis: `${m[1]}g normal` };
+  // "WEIGHT PER LOAF : 1020gr" / "weight per unit: 200 g"
+  m = t.match(/weight\s+per\s+(?:loaf|unit|piece)\s*:?\s*(\d+(?:\.\d+)?)\s*(kg|gr?|g)\b/i);
+  if (m) return { portionKg: /kg/i.test(m[2]) ? parseFloat(m[1]) : parseFloat(m[1]) / 1000, basis: `weight per unit ${m[1]}${m[2]}` };
+  // "1kg/boule" | "500gr/baguette" | "1,45kg/round"
+  m = t.match(/(\d+(?:\.\d+)?)\s*kg\s*\/\s*(baguette|boule|round|loaf|roll|bun)/i);
+  if (m) return { portionKg: parseFloat(m[1]), basis: `${m[1]}kg/${m[2].toLowerCase()}` };
+  m = t.match(/(\d+(?:\.\d+)?)\s*(?:gr?|g)\s*\/\s*(baguette|boule|round|loaf|roll|bun)/i);
+  if (m) return { portionKg: parseFloat(m[1]) / 1000, basis: `${m[1]}g/${m[2].toLowerCase()}` };
+  return null;
+};
+
 // Parse one recipe sheet's first tab. Returns null if it isn't a recognizable recipe sheet.
 const parseRecipeTab = (title, rows) => {
   const flat = (rows || []).map((r) => (r || []).map(norm));
@@ -39,7 +72,20 @@ const parseRecipeTab = (title, rows) => {
   }
   if (!ingredients.length) return null;
 
-  return { recipe: name.trim(), sheet: title.trim(), ingredients, totalKg: ingredients.reduce((s, x) => s + x.kg, 0) };
+  // Capture the PROCESS notes and parse the per-unit weight (yield) from them.
+  const pIdx = flat.findIndex((r) => /^process$/i.test((r[0] || '').trim()));
+  const process = pIdx >= 0
+    ? rows.slice(pIdx + 1).map((r) => (r || []).map((c) => String(c)).join(' ')).join(' ').trim()
+    : (flat.flat().find((c) => c.length > 60) || '');
+  const portion = parsePortion(process);
+  const totalKg = ingredients.reduce((s, x) => s + x.kg, 0);
+
+  return {
+    recipe: name.trim(), sheet: title.trim(), ingredients, totalKg,
+    portionKg: portion ? portion.portionKg : null,
+    portionBasis: portion ? portion.basis : null,
+    unitsPerBatch: portion ? totalKg / portion.portionKg : null,
+  };
 };
 
 // Pull and parse every recipe sheet in a folder. Returns { recipes, skipped }.

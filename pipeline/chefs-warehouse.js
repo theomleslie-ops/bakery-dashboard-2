@@ -54,17 +54,47 @@ const downloadInvoicePdf = async (billId) => {
 // ---- Parsing ----
 const num = (s) => parseFloat(String(s).replace(/,/g, ''));
 
-// Pack size like "4/5 LB", "12/15 OZ", "2/20 LB" → total weight of one case in kg (null if the
-// pack isn't weight-based, e.g. GAL / LT / DZ / CAN).
-const packToKg = (packSize) => {
-  const m = String(packSize).match(/(\d+)\s*\/\s*([\d.]+)\s*(LB|OZ|KG|G)\b/i);
-  if (!m) return null;
-  const qty = num(m[1]) * num(m[2]);
-  const u = m[3].toUpperCase();
-  if (u === 'LB') return qty * KG_PER_LB;
-  if (u === 'OZ') return qty * KG_PER_OZ;
-  if (u === 'KG') return qty;
-  if (u === 'G') return qty / 1000;
+const LITERS_PER = { GAL: 3.785411784, QT: 0.946352946, LT: 1, L: 1, ML: 0.001 };
+// Rough food densities (kg/L) for volume→weight conversion.
+const densityFor = (description) => {
+  const d = String(description).toLowerCase();
+  if (/\boil\b|evoo|olive oil|canola|sesame oil|vegetable/.test(d)) return 0.91;
+  if (/syrup|honey|molasses|agave/.test(d)) return 1.37;
+  return 1.0; // water-based: milk, cream, buttermilk, juice, vinegar, sauce, water
+};
+
+// Pack size → total weight of one case in kg. Handles weight packs ("4/5 LB", "12/15 OZ") directly
+// and volume packs ("4/1 GAL", "4/3 LT") via a food-density estimate. null if unparseable.
+const packToKg = (packSize, description = '') => {
+  const s = String(packSize);
+  let m = s.match(/(\d+)\s*\/\s*([\d.]+)\s*(LB|OZ|KG|G)\b/i);
+  if (m) {
+    const qty = num(m[1]) * num(m[2]);
+    const u = m[3].toUpperCase();
+    if (u === 'LB') return qty * KG_PER_LB;
+    if (u === 'OZ') return qty * KG_PER_OZ;
+    if (u === 'KG') return qty;
+    if (u === 'G') return qty / 1000;
+  }
+  m = s.match(/(\d+)\s*\/\s*([\d.]+)\s*(GAL|QT|LT|L|ML)\b/i);
+  if (m) {
+    const liters = num(m[1]) * num(m[2]) * (LITERS_PER[m[3].toUpperCase()] || 0);
+    return liters > 0 ? liters * densityFor(description) : null;
+  }
+  // Single-quantity packs with no count/size slash, e.g. "2 LB POUCH", "5 LB", "1 GAL".
+  m = s.match(/\b([\d.]+)\s*(LB|OZ|KG|G)\b/i);
+  if (m) {
+    const q = num(m[1]); const u = m[2].toUpperCase();
+    if (u === 'LB') return q * KG_PER_LB;
+    if (u === 'OZ') return q * KG_PER_OZ;
+    if (u === 'KG') return q;
+    if (u === 'G') return q / 1000;
+  }
+  m = s.match(/\b([\d.]+)\s*(GAL|QT|LT|L|ML)\b/i);
+  if (m) {
+    const liters = num(m[1]) * (LITERS_PER[m[2].toUpperCase()] || 0);
+    return liters > 0 ? liters * densityFor(description) : null;
+  }
   return null;
 };
 
@@ -106,8 +136,8 @@ const parseInvoiceText = (text) => {
 const pricePerKg = (item) => {
   if (item.priceUOM === 'LB') return item.unitPrice / KG_PER_LB; // $/LB → $/kg
   if (item.priceUOM === 'OZ') return item.unitPrice / KG_PER_OZ;
-  // CS / PC / EA etc.: price is per pack; derive $/kg from the pack's weight when it's weight-based.
-  const packKg = packToKg(item.packSize);
+  // CS / PC / EA etc.: price is per pack; derive $/kg from the pack's weight (incl. volume→weight).
+  const packKg = packToKg(item.packSize, item.description);
   return packKg ? item.unitPrice / packKg : null;
 };
 

@@ -40,6 +40,15 @@ if (!fs.existsSync(PL_CHANNEL_FILE) && fs.existsSync(PL_CHANNEL_SEED)) {
   fs.copyFileSync(PL_CHANNEL_SEED, PL_CHANNEL_FILE);
 }
 
+// Product Margins reads pipeline-computed recipe costs. Ship a snapshot as seed data so the tab has
+// data on Railway without running the pipeline there (rerun the pipeline locally to refresh it).
+const RECIPE_COSTS_TARGET = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
+const RECIPE_COSTS_SEED = 'seed-data/recipe-costs.json';
+if (!fs.existsSync(RECIPE_COSTS_TARGET) && fs.existsSync(RECIPE_COSTS_SEED)) {
+  fs.mkdirSync(path.join(DATA_DIR, 'pipeline'), { recursive: true });
+  fs.copyFileSync(RECIPE_COSTS_SEED, RECIPE_COSTS_TARGET);
+}
+
 // Maps the bakery's named channels (as used elsewhere in the dashboard, e.g. P&L by Channel)
 // to Square location IDs, so uploaded production CSVs can be compared against Square's
 // "amount sold" per item/day for the Waste tab. Verify these against Square Dashboard >
@@ -1834,6 +1843,28 @@ const fetchProductSales = async (weeks) => {
   return sales;
 };
 
+// Recipe names rarely equal Square's product names ("Double chocolate cookies" vs "Double Choc
+// Chip Cookie"), so match fuzzily: token overlap where abbreviations count (choc↔chocolate,
+// cookie↔cookies). A product-name-overrides file can pin any that don't auto-match.
+const PRODUCT_NAME_OVERRIDES_FILE = path.join(DATA_DIR, 'pipeline', 'product-name-overrides.json');
+const PRODUCT_STOP = new Set(['the', 'a', 'with', 'and', 'of', 'for']);
+const prodTokens = (s) => String(s).toLowerCase().replace(/["']/g, '').replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter((t) => t.length >= 2 && !PRODUCT_STOP.has(t));
+const tokAlike = (x, y) => x === y || (x.length >= 4 && y.startsWith(x)) || (y.length >= 4 && x.startsWith(y)) || (x.length >= 5 && y.includes(x)) || (y.length >= 5 && x.includes(y));
+const matchProductToSquare = (recipeName, salesKeys) => {
+  const rt = prodTokens(recipeName);
+  if (!rt.length) return null;
+  let best = null;
+  for (const key of salesKeys) {
+    const st = prodTokens(key);
+    if (!st.length) continue;
+    const matched = rt.filter((r) => st.some((s) => tokAlike(r, s))).length;
+    const score = matched / rt.length + 0.001 * (matched / st.length);
+    if (!best || score > best.score) best = { key, matched, score };
+  }
+  const need = rt.length <= 2 ? rt.length : Math.ceil(rt.length * 0.6);
+  return best && best.matched >= need ? best.key : null;
+};
+
 // GET /api/product-margins?weeks=8 — one point per sellable product: volume sold (x) vs gross
 // margin % (y). Only fully-costed products that actually sold are plotted; the rest are returned
 // separately so nothing is silently dropped or shown with an understated cost.
@@ -1848,23 +1879,30 @@ app.get('/api/product-margins', async (req, res) => {
   }
 
   const weeks = Math.min(Math.max(parseInt(req.query.weeks, 10) || 8, 1), 52);
+  const rawNameOverrides = loadData(PRODUCT_NAME_OVERRIDES_FILE);
+  const nameOverrides = rawNameOverrides && !Array.isArray(rawNameOverrides) ? rawNameOverrides : {};
   try {
     const sales = await fetchProductSales(weeks);
+    const salesKeys = Object.keys(sales);
     const points = [];
     const incomplete = [];
+    const noYield = [];
     const noSales = [];
 
     report.recipes.forEach((r) => {
       const missing = r.lines.filter((l) => l.lineCost == null).map((l) => l.ingredient.trim());
       if (missing.length) { incomplete.push({ name: r.recipe, missing }); return; }
-      const s = sales[(r.recipe || '').trim().toLowerCase()];
+      if (r.costPerUnit == null) { noYield.push(r.recipe); return; } // priced, but no per-unit weight
+      const key = nameOverrides[r.recipe] ? String(nameOverrides[r.recipe]).toLowerCase() : matchProductToSquare(r.recipe, salesKeys);
+      const s = key ? sales[key] : null;
       if (!s || !(s.volume > 0) || !(s.avgPrice > 0)) { noSales.push(r.recipe); return; }
-      const marginDollars = s.avgPrice - r.cost;
+      const marginDollars = s.avgPrice - r.costPerUnit;
       points.push({
         name: r.recipe,
+        squareItem: key,
         volume: round2(s.volume),
         sellPrice: round2(s.avgPrice),
-        cost: round2(r.cost),
+        cost: round2(r.costPerUnit),
         marginDollars: round2(marginDollars),
         marginPct: round2((marginDollars / s.avgPrice) * 100),
         revenue: round2(s.avgPrice * s.volume),
@@ -1872,7 +1910,7 @@ app.get('/api/product-margins', async (req, res) => {
     });
     points.sort((a, b) => b.marginPct - a.marginPct);
 
-    res.json({ status: 'ready', weeks, priceListDate: report.priceListDate, generatedAt: report.generatedAt, points, incomplete, noSales, skipped: report.skipped || [] });
+    res.json({ status: 'ready', weeks, priceListDate: report.priceListDate, generatedAt: report.generatedAt, points, incomplete, noYield, noSales, skipped: report.skipped || [] });
   } catch (err) {
     res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, points: [] });
   }
