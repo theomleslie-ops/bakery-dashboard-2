@@ -52,27 +52,36 @@ const confidenceOf = (ranked) => {
 
 const load = (f, fallback) => { try { return JSON.parse(fs.readFileSync(f, 'utf-8')); } catch { return fallback; } };
 
-// Cost one recipe. Each line: matched CW item, $/kg, line cost, and a flag if unmatched/non-weight.
-const costRecipe = (recipe, cwList, overrides) => {
+const normName = (n) => englishPart(n).toLowerCase().replace(/\s+/g, ' ').trim();
+
+// Cost one recipe. Each line: matched CW item (or sub-recipe), $/kg, line cost, and a flag.
+// subRecipePrices maps a normalized recipe name → its cost/kg, so an ingredient that is itself one
+// of our recipes (Levain, Frangipane, a glaze) is priced from that recipe instead of Chef's Warehouse.
+const costRecipe = (recipe, cwList, overrides, subRecipePrices = {}) => {
   const byCode = new Map(cwList.map((c) => [c.itemCode, c]));
   const lines = recipe.ingredients.map((ing) => {
-    const override = overrides[ing.name] || overrides[englishPart(ing.name).toLowerCase()];
-    let match, confidence, alternates = [];
-    if (override && byCode.has(override)) { match = byCode.get(override); confidence = 'override'; }
-    else {
+    const norm = normName(ing.name);
+    const override = overrides[ing.name] || overrides[norm];
+    let matchedTo = null, itemCode = null, pricePerKg = null, confidence = 'none', alternates = [];
+
+    if (norm === 'water' || norm === 'ice') {
+      matchedTo = '(water — no cost)'; pricePerKg = 0; confidence = 'water';
+    } else if (norm === 'mother' || norm === 'starter') {
+      // Perpetual sourdough culture (maintained flour+water, used in tiny amounts) — negligible cost.
+      matchedTo = '(starter — negligible)'; pricePerKg = 0; confidence = 'starter';
+    } else if (override && byCode.has(override)) {
+      const m = byCode.get(override); matchedTo = m.description; itemCode = m.itemCode; pricePerKg = m.pricePerKg ?? null; confidence = 'override';
+    } else if (subRecipePrices[norm] != null) {
+      matchedTo = `(sub-recipe: ${ing.name.trim()})`; pricePerKg = subRecipePrices[norm]; confidence = 'sub-recipe';
+    } else {
       const ranked = rankCandidates(ing.name, cwList);
-      match = ranked[0]?.cw;
-      confidence = confidenceOf(ranked);
-      alternates = ranked.slice(1, 3).map((r) => r.cw.description);
+      const m = ranked[0]?.cw;
+      matchedTo = m?.description ?? null; itemCode = m?.itemCode ?? null; pricePerKg = m?.pricePerKg ?? null;
+      confidence = confidenceOf(ranked); alternates = ranked.slice(1, 3).map((r) => r.cw.description);
     }
-    const pricePerKg = match?.pricePerKg ?? null;
     const lineCost = pricePerKg != null ? ing.kg * pricePerKg : null;
-    const flag = !match ? 'no-match' : pricePerKg == null ? 'non-weight' : confidence === 'low' ? 'low-confidence' : '';
-    return {
-      ingredient: ing.name, kg: ing.kg,
-      matchedTo: match?.description ?? null, itemCode: match?.itemCode ?? null,
-      pricePerKg, lineCost, confidence, flag, alternates,
-    };
+    const flag = lineCost != null ? (confidence === 'low' ? 'low-confidence' : '') : (matchedTo ? 'non-weight' : 'no-match');
+    return { ingredient: ing.name, kg: ing.kg, matchedTo, itemCode, pricePerKg, lineCost, confidence, flag, alternates };
   });
   const costed = lines.filter((l) => l.lineCost != null);
   const batchCost = costed.reduce((s, l) => s + l.lineCost, 0);
@@ -106,7 +115,18 @@ const buildCostReport = async (folderName = 'Recipe LSB') => {
       r.unitsPerBatch = r.totalKg / r.portionKg;
     }
   });
-  const costed = recipes.map((r) => costRecipe(r, prices.ingredients, overrides));
+  // Iterate: cost with CW prices, derive per-kg prices for any fully-costed recipe, then re-cost so
+  // recipes that use those as sub-recipes (Levain → scones) resolve. Repeat until nothing new completes.
+  const isComplete = (c) => c.lines.every((l) => l.lineCost != null);
+  let costed = recipes.map((r) => costRecipe(r, prices.ingredients, overrides, {}));
+  for (let i = 0; i < 6; i++) {
+    const subPrices = {};
+    costed.forEach((c) => { if (c.totalKg > 0 && isComplete(c)) subPrices[normName(c.recipe)] = c.cost / c.totalKg; });
+    const next = recipes.map((r) => costRecipe(r, prices.ingredients, overrides, subPrices));
+    const gained = next.filter(isComplete).length - costed.filter(isComplete).length;
+    costed = next;
+    if (gained <= 0) break;
+  }
   const source = fs.existsSync(LOCAL_RECIPE_DIR) ? `local:${path.basename(LOCAL_RECIPE_DIR)}` : `drive:${folderName}`;
   return { generatedAt: new Date().toISOString(), source, priceListDate: prices.generatedAt, skipped, recipes: costed };
 };
