@@ -13,6 +13,7 @@ const OUT_DIR = path.join(DATA_DIR, 'pipeline');
 const LOCAL_RECIPE_DIR = path.join(DATA_DIR, 'recipe-files');
 const PRICES_FILE = path.join(OUT_DIR, 'chefs-warehouse-prices.json');
 const OVERRIDES_FILE = path.join(OUT_DIR, 'ingredient-overrides.json'); // { "<recipe ingredient>": "<CW item code>" }
+const PORTION_OVERRIDES_FILE = path.join(OUT_DIR, 'portion-overrides.json'); // { "<recipe>": <grams per unit> }
 
 const STOP = new Set(['for', 'of', 'the', 'and', 'a', 'pinch', 'to', 'with', 'in', 'raw']);
 // Recipe names are bilingual ("White Sugar/Azucar", "AP Flour (AP Harina)") — take the English part.
@@ -74,9 +75,15 @@ const costRecipe = (recipe, cwList, overrides) => {
     };
   });
   const costed = lines.filter((l) => l.lineCost != null);
+  const batchCost = costed.reduce((s, l) => s + l.lineCost, 0);
+  const allPriced = costed.length === lines.length;
+  // Cost of one sold unit = (batch cost per kg) × the unit's finished weight. Only meaningful when
+  // every ingredient is priced AND we know the per-unit weight (yield).
+  const costPerUnit = (allPriced && recipe.portionKg) ? (batchCost / recipe.totalKg) * recipe.portionKg : null;
   return {
     recipe: recipe.recipe, sheet: recipe.sheet, totalKg: recipe.totalKg,
-    cost: costed.reduce((s, l) => s + l.lineCost, 0),
+    portionKg: recipe.portionKg ?? null, portionBasis: recipe.portionBasis ?? null, unitsPerBatch: recipe.unitsPerBatch ?? null,
+    cost: batchCost, costPerUnit,
     linesCosted: costed.length, linesTotal: lines.length,
     unresolved: lines.filter((l) => l.flag && l.flag !== 'low-confidence').map((l) => l.ingredient),
     lines,
@@ -87,9 +94,18 @@ const buildCostReport = async (folderName = 'Recipe LSB') => {
   const prices = load(PRICES_FILE, null);
   if (!prices) throw new Error('Run `node pipeline/chefs-warehouse.js` first to build the price list.');
   const overrides = load(OVERRIDES_FILE, {});
+  const portionOverrides = load(PORTION_OVERRIDES_FILE, {});
   const { recipes, skipped } = fs.existsSync(LOCAL_RECIPE_DIR)
     ? pullRecipesFromDir(LOCAL_RECIPE_DIR)
     : await pullRecipes(folderName);
+  // Fill in per-unit weight for recipes whose PROCESS notes didn't yield one.
+  recipes.forEach((r) => {
+    if (!r.portionKg && portionOverrides[r.recipe] != null) {
+      r.portionKg = portionOverrides[r.recipe] / 1000;
+      r.portionBasis = `override ${portionOverrides[r.recipe]}g`;
+      r.unitsPerBatch = r.totalKg / r.portionKg;
+    }
+  });
   const costed = recipes.map((r) => costRecipe(r, prices.ingredients, overrides));
   const source = fs.existsSync(LOCAL_RECIPE_DIR) ? `local:${path.basename(LOCAL_RECIPE_DIR)}` : `drive:${folderName}`;
   return { generatedAt: new Date().toISOString(), source, priceListDate: prices.generatedAt, skipped, recipes: costed };

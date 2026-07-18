@@ -1750,6 +1750,7 @@
       };
       const points = (data && data.points) || [];
       const incomplete = (data && data.incomplete) || [];
+      const noYield = (data && data.noYield) || [];
       const noSales = (data && data.noSales) || [];
       const avgMargin = points.length ? points.reduce((s, p) => s + p.marginPct, 0) / points.length : 0;
       const best = points.length ? [...points].sort((a, b) => (b.marginPct * b.volume) - (a.marginPct * a.volume))[0] : null;
@@ -1787,11 +1788,13 @@
               ) : (
                 <div className="empty">Nothing to plot yet — a product needs a complete cost (every ingredient priced) <em>and</em> Square sales. What's excluded, and why, is listed below.</div>
               )}
-              {(incomplete.length > 0 || noSales.length > 0) && (
+              {(incomplete.length > 0 || noYield.length > 0 || noSales.length > 0) && (
                 <div className="chart-container">
-                  <div className="chart-title">Not plotted ({incomplete.length + noSales.length})</div>
-                  {incomplete.length > 0 && <div className="panel-hint" style={{ marginBottom: '8px' }}><strong>Incomplete cost</strong> — missing an ingredient price (usually produce not bought from Chef's Warehouse):</div>}
+                  <div className="chart-title">Not plotted ({incomplete.length + noYield.length + noSales.length})</div>
+                  {incomplete.length > 0 && <div className="panel-hint" style={{ marginBottom: '8px' }}><strong>Incomplete cost</strong> — missing an ingredient price (produce not bought from Chef's Warehouse, an in-house sub-recipe like levain, or a match gap):</div>}
                   {incomplete.map(it => <div key={it.name} style={{ fontSize: '13px', color: 'var(--chart-ink)', padding: '2px 0' }}>• <strong>{it.name}</strong> — missing {it.missing.join(', ')}</div>)}
+                  {noYield.length > 0 && <div className="panel-hint" style={{ margin: '12px 0 6px' }}><strong>Priced, but no per-unit weight</strong> — recipe doesn't state grams-per-unit, so cost-per-item can't be computed:</div>}
+                  {noYield.map(n => <div key={n} style={{ fontSize: '13px', color: 'var(--chart-ink)', padding: '2px 0' }}>• {n}</div>)}
                   {noSales.length > 0 && <div className="panel-hint" style={{ margin: '12px 0 6px' }}><strong>Priced, but no Square sales</strong> — e.g. a component/filling not sold as its own item:</div>}
                   {noSales.map(n => <div key={n} style={{ fontSize: '13px', color: 'var(--chart-ink)', padding: '2px 0' }}>• {n}</div>)}
                 </div>

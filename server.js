@@ -1852,19 +1852,21 @@ app.get('/api/product-margins', async (req, res) => {
     const sales = await fetchProductSales(weeks);
     const points = [];
     const incomplete = [];
+    const noYield = [];
     const noSales = [];
 
     report.recipes.forEach((r) => {
       const missing = r.lines.filter((l) => l.lineCost == null).map((l) => l.ingredient.trim());
       if (missing.length) { incomplete.push({ name: r.recipe, missing }); return; }
+      if (r.costPerUnit == null) { noYield.push(r.recipe); return; } // priced, but no per-unit weight
       const s = sales[(r.recipe || '').trim().toLowerCase()];
       if (!s || !(s.volume > 0) || !(s.avgPrice > 0)) { noSales.push(r.recipe); return; }
-      const marginDollars = s.avgPrice - r.cost;
+      const marginDollars = s.avgPrice - r.costPerUnit;
       points.push({
         name: r.recipe,
         volume: round2(s.volume),
         sellPrice: round2(s.avgPrice),
-        cost: round2(r.cost),
+        cost: round2(r.costPerUnit),
         marginDollars: round2(marginDollars),
         marginPct: round2((marginDollars / s.avgPrice) * 100),
         revenue: round2(s.avgPrice * s.volume),
@@ -1872,7 +1874,7 @@ app.get('/api/product-margins', async (req, res) => {
     });
     points.sort((a, b) => b.marginPct - a.marginPct);
 
-    res.json({ status: 'ready', weeks, priceListDate: report.priceListDate, generatedAt: report.generatedAt, points, incomplete, noSales, skipped: report.skipped || [] });
+    res.json({ status: 'ready', weeks, priceListDate: report.priceListDate, generatedAt: report.generatedAt, points, incomplete, noYield, noSales, skipped: report.skipped || [] });
   } catch (err) {
     res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, points: [] });
   }
