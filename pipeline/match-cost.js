@@ -4,10 +4,13 @@
 // file (recipe ingredient → CW item code) always wins.
 const fs = require('fs');
 const path = require('path');
-const { pullRecipes } = require('./recipes');
+const { pullRecipes, pullRecipesFromDir } = require('./recipes');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const OUT_DIR = path.join(DATA_DIR, 'pipeline');
+// If recipes were downloaded from Drive as a local folder of .xlsx files, use those; otherwise pull
+// live from the shared Drive folder.
+const LOCAL_RECIPE_DIR = path.join(DATA_DIR, 'recipe-files');
 const PRICES_FILE = path.join(OUT_DIR, 'chefs-warehouse-prices.json');
 const OVERRIDES_FILE = path.join(OUT_DIR, 'ingredient-overrides.json'); // { "<recipe ingredient>": "<CW item code>" }
 
@@ -84,9 +87,12 @@ const buildCostReport = async (folderName = 'Recipe LSB') => {
   const prices = load(PRICES_FILE, null);
   if (!prices) throw new Error('Run `node pipeline/chefs-warehouse.js` first to build the price list.');
   const overrides = load(OVERRIDES_FILE, {});
-  const { recipes, skipped } = await pullRecipes(folderName);
+  const { recipes, skipped } = fs.existsSync(LOCAL_RECIPE_DIR)
+    ? pullRecipesFromDir(LOCAL_RECIPE_DIR)
+    : await pullRecipes(folderName);
   const costed = recipes.map((r) => costRecipe(r, prices.ingredients, overrides));
-  return { generatedAt: new Date().toISOString(), folder: folderName, priceListDate: prices.generatedAt, skipped, recipes: costed };
+  const source = fs.existsSync(LOCAL_RECIPE_DIR) ? `local:${path.basename(LOCAL_RECIPE_DIR)}` : `drive:${folderName}`;
+  return { generatedAt: new Date().toISOString(), source, priceListDate: prices.generatedAt, skipped, recipes: costed };
 };
 
 module.exports = { buildCostReport, costRecipe, rankCandidates };

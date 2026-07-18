@@ -1,6 +1,9 @@
-// Parses bakery recipe sheets (the "RECIPE SHEET" format) from a shared Drive folder into a clean
-// { recipe, ingredients: [{ name, kg }], totalKg } shape. Each recipe is one spreadsheet; the
+// Parses bakery recipe sheets (the "RECIPE SHEET" format) into a clean
+// { recipe, ingredients: [{ name, kg }], totalKg } shape. Recipes come from either the shared Drive
+// folder (pullRecipes) or a local folder of exported .xlsx/.xls files (pullRecipesFromDir) — the
 // "Basic recipe" column is the kilograms of each ingredient for one batch.
+const fs = require('fs');
+const path = require('path');
 const sheetsClient = require('./sheets');
 
 const norm = (v) => (v == null ? '' : String(v)).trim();
@@ -57,4 +60,34 @@ const pullRecipes = async (folderName = 'Recipe LSB') => {
   return { folder: folder.name, recipes, skipped };
 };
 
-module.exports = { parseRecipeTab, pullRecipes };
+// ---- Local files (Google Sheets exported as .xlsx/.xls, e.g. a downloaded Drive folder) ----
+const parseRecipeFile = (filePath) => {
+  const XLSX = require('xlsx'); // lazy so the Drive path doesn't require xlsx installed
+  const wb = XLSX.readFile(filePath);
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  return parseRecipeTab(path.basename(filePath).replace(/\.(xlsx|xls)$/i, ''), rows);
+};
+
+const walkRecipeFiles = (dir) => {
+  const out = [];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) out.push(...walkRecipeFiles(p));
+    else if (/\.(xlsx|xls)$/i.test(e.name) && !e.name.startsWith('~$')) out.push(p);
+  }
+  return out;
+};
+
+// Parse every .xlsx/.xls recipe under a local folder (recursively). Returns { recipes, skipped }.
+const pullRecipesFromDir = (dir) => {
+  const recipes = [];
+  const skipped = [];
+  for (const f of walkRecipeFiles(dir)) {
+    try { const r = parseRecipeFile(f); if (r) recipes.push(r); else skipped.push(path.basename(f)); }
+    catch (e) { skipped.push(`${path.basename(f)} [${e.message}]`); }
+  }
+  return { recipes, skipped };
+};
+
+module.exports = { parseRecipeTab, pullRecipes, parseRecipeFile, pullRecipesFromDir };
