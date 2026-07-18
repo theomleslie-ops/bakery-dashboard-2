@@ -1670,6 +1670,138 @@
       );
     }
 
+    const MARGIN_WEEK_OPTIONS = [
+      { weeks: 4, label: '4 Weeks' }, { weeks: 8, label: '8 Weeks' },
+      { weeks: 12, label: '12 Weeks' }, { weeks: 26, label: '26 Weeks' },
+    ];
+
+    function MarginScatterChart({ points }) {
+      const [hover, setHover] = useState(null);
+      const W = 1000, H = 540;
+      const plotLeft = 72, plotRight = 940, plotTop = 30, plotBottom = 452;
+      const vols = points.map(p => p.volume);
+      const margins = points.map(p => p.marginPct);
+      const revs = points.map(p => p.revenue);
+      const xMax = Math.max(1, ...vols) * 1.08;
+      const yMax = Math.min(100, Math.max(10, Math.ceil((Math.max(...margins, 0) + 5) / 10) * 10));
+      const yMin = Math.min(0, Math.floor((Math.min(...margins, 0) - 5) / 10) * 10);
+      const xPos = (v) => plotLeft + (v / xMax) * (plotRight - plotLeft);
+      const yPos = (m) => plotBottom - ((m - yMin) / (yMax - yMin || 1)) * (plotBottom - plotTop);
+      const rMin = Math.min(...revs), rMax = Math.max(...revs);
+      const radius = (r) => (rMax <= rMin ? 12 : 7 + 16 * Math.sqrt((r - rMin) / (rMax - rMin)));
+      const median = (arr) => { const s = [...arr].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length ? (s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) : 0; };
+      const medX = median(vols), medY = median(margins);
+      const midY = (plotTop + plotBottom) / 2;
+
+      return (
+        <svg width="100%" viewBox={`0 0 ${W} ${H}`} onMouseLeave={() => setHover(null)}>
+          <line x1={plotLeft} y1={plotBottom} x2={plotRight} y2={plotBottom} stroke="var(--chart-axis)" strokeWidth="2" />
+          <line x1={plotLeft} y1={plotTop} x2={plotLeft} y2={plotBottom} stroke="var(--chart-axis)" strokeWidth="2" />
+          {[0, 1, 2, 3, 4, 5].map(i => { const m = yMin + (i * (yMax - yMin)) / 5; const y = yPos(m); return (
+            <g key={`y${i}`}>
+              <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--chart-grid)" strokeWidth="1" />
+              <text x={plotLeft - 10} y={y + 4} textAnchor="end" fontSize="12" fill="var(--chart-muted)">{Math.round(m)}%</text>
+            </g>); })}
+          {[0, 1, 2, 3, 4, 5].map(i => { const v = (i * xMax) / 5; return (
+            <text key={`x${i}`} x={xPos(v)} y={plotBottom + 22} textAnchor="middle" fontSize="12" fill="var(--chart-muted)">{Math.round(v)}</text>); })}
+          <text x={(plotLeft + plotRight) / 2} y={H - 8} textAnchor="middle" fontSize="13" fill="var(--chart-ink-secondary)" fontWeight="600">Units sold →</text>
+          <text x={18} y={midY} textAnchor="middle" fontSize="13" fill="var(--chart-ink-secondary)" fontWeight="600" transform={`rotate(-90 18 ${midY})`}>Gross margin →</text>
+          <line x1={xPos(medX)} y1={plotTop} x2={xPos(medX)} y2={plotBottom} stroke="var(--chart-grid)" strokeDasharray="4" />
+          <line x1={plotLeft} y1={yPos(medY)} x2={plotRight} y2={yPos(medY)} stroke="var(--chart-grid)" strokeDasharray="4" />
+          <text x={plotRight - 6} y={plotTop + 16} textAnchor="end" fontSize="12" fill="#2f9e44" fontWeight="700">★ best: high margin · high volume</text>
+          {points.map((p, i) => (
+            <g key={p.name} onMouseEnter={() => setHover(i)} style={{ cursor: 'pointer' }}>
+              <circle cx={xPos(p.volume)} cy={yPos(p.marginPct)} r={radius(p.revenue)} fill={marketColor(i)} fillOpacity={hover === i ? 0.95 : 0.6} stroke="#fff" strokeWidth="1.5" />
+              <text x={xPos(p.volume)} y={yPos(p.marginPct) - radius(p.revenue) - 4} textAnchor="middle" fontSize="11" fill="var(--chart-ink)" fontWeight="600">{p.name}</text>
+            </g>
+          ))}
+          {hover != null && (() => {
+            const p = points[hover]; const cx = xPos(p.volume), cy = yPos(p.marginPct);
+            const tw = 196, th = 92; const tx = Math.min(cx + 14, plotRight - tw); const ty = Math.max(plotTop, cy - th - 8);
+            return (
+              <g>
+                <rect x={tx} y={ty} width={tw} height={th} rx="6" fill="var(--chart-surface)" stroke="var(--chart-grid)" />
+                <text x={tx + 10} y={ty + 20} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{p.name}</text>
+                <text x={tx + 10} y={ty + 40} fontSize="11" fill="var(--chart-ink-secondary)">Sold <tspan fontWeight="700" fill="var(--chart-ink)">{p.volume}</tspan> · Price <tspan fontWeight="700" fill="var(--chart-ink)">${p.sellPrice}</tspan></text>
+                <text x={tx + 10} y={ty + 58} fontSize="11" fill="var(--chart-ink-secondary)">Cost <tspan fontWeight="700" fill="var(--chart-ink)">${p.cost}</tspan> · Margin <tspan fontWeight="700" fill="#2f9e44">{p.marginPct}%</tspan></text>
+                <text x={tx + 10} y={ty + 76} fontSize="11" fill="var(--chart-ink-secondary)">Revenue <tspan fontWeight="700" fill="var(--chart-ink)">${p.revenue}</tspan></text>
+              </g>
+            );
+          })()}
+        </svg>
+      );
+    }
+
+    function MarginScatterDashboard() {
+      const [data, setData] = useState(null);
+      const [status, setStatus] = useState('loading');
+      const [error, setError] = useState('');
+      const [weeks, setWeeks] = useState(8);
+      useEffect(() => { fetchData(); }, [weeks]);
+      const fetchData = async () => {
+        try {
+          setStatus('loading');
+          const res = await fetch(`${window.location.origin}/api/product-margins?weeks=${weeks}`);
+          const result = await res.json();
+          if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
+          setData(result);
+          setStatus(result.status === 'no-costs' ? 'no-costs' : 'ready');
+        } catch (e) { setError('Failed to load data: ' + e.message); setStatus('error'); }
+      };
+      const points = (data && data.points) || [];
+      const incomplete = (data && data.incomplete) || [];
+      const noSales = (data && data.noSales) || [];
+      const avgMargin = points.length ? points.reduce((s, p) => s + p.marginPct, 0) / points.length : 0;
+      const best = points.length ? [...points].sort((a, b) => (b.marginPct * b.volume) - (a.marginPct * a.volume))[0] : null;
+
+      return (
+        <div className="container">
+          <header>
+            <h1>📊 Product Margins</h1>
+            <p className="subtitle">Units sold vs. gross margin — cost-to-make from Chef's Warehouse invoices, sell price &amp; volume from Square. Best products sit top-right.</p>
+          </header>
+          <div className="controls">
+            <div className="view-toggle">
+              {MARGIN_WEEK_OPTIONS.map(o => (
+                <button key={o.weeks} className={weeks === o.weeks ? 'active' : ''} onClick={() => setWeeks(o.weeks)}>{o.label}</button>
+              ))}
+            </div>
+          </div>
+          {status === 'loading' && <div className="loading">Loading margins… aggregating Square sales across locations (can take a minute the first time).</div>}
+          {status === 'error' && <div className="error">{error}</div>}
+          {status === 'no-costs' && <div className="empty">No recipe costs yet. Run the data pipeline to compute cost-to-make, then this view populates.</div>}
+          {status === 'ready' && (
+            <React.Fragment>
+              {points.length > 0 && (
+                <div className="metrics">
+                  <div className="metric-card"><div className="metric-label">Products Plotted</div><div className="metric-value">{points.length}</div></div>
+                  <div className="metric-card"><div className="metric-label">Avg Gross Margin</div><div className="metric-value">{avgMargin.toFixed(1)}%</div></div>
+                  {best && <div className="metric-card"><div className="metric-label">Best (margin × volume)</div><div className="metric-value" style={{ fontSize: '20px' }}>{best.name}</div><div className="metric-sub">{best.marginPct}% · {best.volume} sold</div></div>}
+                </div>
+              )}
+              {points.length > 0 ? (
+                <div className="chart-container">
+                  <div className="chart-title">Volume × Gross Margin</div>
+                  <MarginScatterChart points={points} />
+                </div>
+              ) : (
+                <div className="empty">Nothing to plot yet — a product needs a complete cost (every ingredient priced) <em>and</em> Square sales. What's excluded, and why, is listed below.</div>
+              )}
+              {(incomplete.length > 0 || noSales.length > 0) && (
+                <div className="chart-container">
+                  <div className="chart-title">Not plotted ({incomplete.length + noSales.length})</div>
+                  {incomplete.length > 0 && <div className="panel-hint" style={{ marginBottom: '8px' }}><strong>Incomplete cost</strong> — missing an ingredient price (usually produce not bought from Chef's Warehouse):</div>}
+                  {incomplete.map(it => <div key={it.name} style={{ fontSize: '13px', color: 'var(--chart-ink)', padding: '2px 0' }}>• <strong>{it.name}</strong> — missing {it.missing.join(', ')}</div>)}
+                  {noSales.length > 0 && <div className="panel-hint" style={{ margin: '12px 0 6px' }}><strong>Priced, but no Square sales</strong> — e.g. a component/filling not sold as its own item:</div>}
+                  {noSales.map(n => <div key={n} style={{ fontSize: '13px', color: 'var(--chart-ink)', padding: '2px 0' }}>• {n}</div>)}
+                </div>
+              )}
+            </React.Fragment>
+          )}
+        </div>
+      );
+    }
+
     function MainApp() {
       const [activeTab, setActiveTab] = useState('dashboard');
       return (
@@ -1684,6 +1816,7 @@
                 <button className={`tab-button ${activeTab === 'waste' ? 'active' : ''}`} onClick={() => setActiveTab('waste')}>Waste</button>
                 <button className={`tab-button ${activeTab === 'market-performance' ? 'active' : ''}`} onClick={() => setActiveTab('market-performance')}>Performance by Market</button>
                 <button className={`tab-button ${activeTab === 'item-margins' ? 'active' : ''}`} onClick={() => setActiveTab('item-margins')}>Item Margins</button>
+                <button className={`tab-button ${activeTab === 'product-margins' ? 'active' : ''}`} onClick={() => setActiveTab('product-margins')}>Product Margins</button>
               </div>
             </div>
           </div>
@@ -1694,6 +1827,7 @@
           <div className={`tab-content ${activeTab === 'waste' ? 'active' : ''}`}><WasteDashboard /></div>
           <div className={`tab-content ${activeTab === 'market-performance' ? 'active' : ''}`}><MarketPerformanceDashboard /></div>
           <div className={`tab-content ${activeTab === 'item-margins' ? 'active' : ''}`}><ItemMarginDashboard /></div>
+          <div className={`tab-content ${activeTab === 'product-margins' ? 'active' : ''}`}><MarginScatterDashboard /></div>
         </div>
       );
     }
