@@ -1792,6 +1792,92 @@ app.get('/api/item-margins', async (req, res) => {
   }
 });
 
+// ============= PRODUCT MARGINS (volume × gross margin scatter) =============
+
+// Recipe cost-to-make is produced by the data pipeline (pipeline/match-cost.js writes this file):
+// { recipes: [{ recipe, cost, lines:[{ ingredient, lineCost }] }], ... }. Costs come from real
+// Chef's Warehouse invoice prices; a recipe is "complete" only if every ingredient priced.
+const RECIPE_COSTS_FILE = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
+
+// Units sold + realized average sell price per product name, aggregated across every location over
+// the last `weeks` (from Square orders — the same source the Waste/Market tabs use). Cached 1h.
+const fetchProductSales = async (weeks) => {
+  const cacheKey = `product_sales_${weeks}`;
+  const cached = cacheManager.get(cacheKey);
+  if (cached) return cached;
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const start = addDays(todayStr, -7 * weeks);
+  const end = addDays(todayStr, 1);
+
+  const perLocation = await mapWithConcurrency(WASTE_LOCATIONS, 6, async (loc) => {
+    try { return await fetchSoldQuantities(loc.squareLocationId, start, end); }
+    catch { return { sold: {}, avgPrice: {} }; }
+  });
+
+  const qty = {};
+  const revenue = {};
+  perLocation.forEach(({ sold, avgPrice }) => {
+    const locQty = {};
+    Object.values(sold).forEach((day) => Object.entries(day).forEach(([name, q]) => { locQty[name] = (locQty[name] || 0) + q; }));
+    Object.entries(locQty).forEach(([name, q]) => {
+      qty[name] = (qty[name] || 0) + q;
+      if (avgPrice[name] != null) revenue[name] = (revenue[name] || 0) + avgPrice[name] * q;
+    });
+  });
+
+  const sales = {};
+  Object.keys(qty).forEach((name) => {
+    sales[name] = { volume: qty[name], avgPrice: qty[name] > 0 && revenue[name] != null ? revenue[name] / qty[name] : null };
+  });
+  cacheManager.set(cacheKey, sales, 60 * 60 * 1000);
+  return sales;
+};
+
+// GET /api/product-margins?weeks=8 — one point per sellable product: volume sold (x) vs gross
+// margin % (y). Only fully-costed products that actually sold are plotted; the rest are returned
+// separately so nothing is silently dropped or shown with an understated cost.
+app.get('/api/product-margins', async (req, res) => {
+  const token = process.env.SQUARE_ACCESS_TOKEN;
+  if (!token || token === 'your_square_token_here') {
+    return res.status(400).json({ error: 'Square API credentials not configured', points: [] });
+  }
+  const report = loadData(RECIPE_COSTS_FILE);
+  if (!report || !Array.isArray(report.recipes)) {
+    return res.json({ status: 'no-costs', points: [], incomplete: [], noSales: [], message: 'No recipe costs yet — run the data pipeline (node pipeline/match-cost.js).' });
+  }
+
+  const weeks = Math.min(Math.max(parseInt(req.query.weeks, 10) || 8, 1), 52);
+  try {
+    const sales = await fetchProductSales(weeks);
+    const points = [];
+    const incomplete = [];
+    const noSales = [];
+
+    report.recipes.forEach((r) => {
+      const missing = r.lines.filter((l) => l.lineCost == null).map((l) => l.ingredient.trim());
+      if (missing.length) { incomplete.push({ name: r.recipe, missing }); return; }
+      const s = sales[(r.recipe || '').trim().toLowerCase()];
+      if (!s || !(s.volume > 0) || !(s.avgPrice > 0)) { noSales.push(r.recipe); return; }
+      const marginDollars = s.avgPrice - r.cost;
+      points.push({
+        name: r.recipe,
+        volume: round2(s.volume),
+        sellPrice: round2(s.avgPrice),
+        cost: round2(r.cost),
+        marginDollars: round2(marginDollars),
+        marginPct: round2((marginDollars / s.avgPrice) * 100),
+        revenue: round2(s.avgPrice * s.volume),
+      });
+    });
+    points.sort((a, b) => b.marginPct - a.marginPct);
+
+    res.json({ status: 'ready', weeks, priceListDate: report.priceListDate, generatedAt: report.generatedAt, points, incomplete, noSales, skipped: report.skipped || [] });
+  } catch (err) {
+    res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, points: [] });
+  }
+});
+
 // ============= CACHE STATUS =============
 
 // View all cached items and their expiry times
