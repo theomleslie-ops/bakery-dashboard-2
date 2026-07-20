@@ -29,10 +29,90 @@ const tokenize = (s) => englishPart(s).toLowerCase().replace(/[^a-z0-9 ]/g, ' ')
 const cwTokens = (d) => String(d).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
 const normName = (n) => englishPart(n).toLowerCase().replace(/\s+/g, ' ').trim();
 
-const scoreCandidate = (rTok, cw) => {
+// Extract all bilingual variants from a name (split on /, -, parens, etc.)
+// Returns both the original and normalized (lowercased) versions for comparison
+const getBilingualVariants = (name) => {
+  const s = String(name).trim();
+  const variants = new Set();
+  const normalized = new Set();
+
+  // Split on / and extract both sides
+  for (const part of s.split('/')) {
+    // Split on parentheses and extract both the outer and inner parts
+    const match = part.match(/^([^()]+)(?:\(([^)]+)\))?/);
+    if (match) {
+      if (match[1].trim()) {
+        variants.add(match[1].trim());
+        normalized.add(match[1].trim().toLowerCase());
+      }
+      if (match[2]?.trim()) {
+        variants.add(match[2].trim());
+        normalized.add(match[2].trim().toLowerCase());
+      }
+    }
+  }
+  // Also try splitting on dash for hyphenated variants
+  for (const part of s.split('-')) {
+    if (part.trim()) {
+      variants.add(part.trim());
+      normalized.add(part.trim().toLowerCase());
+    }
+  }
+
+  // Deduplicate by normalized form: keep original case if available, otherwise lowercase
+  const deduplicated = [];
+  const seen = new Set();
+  for (const v of variants) {
+    const norm = v.toLowerCase();
+    if (!seen.has(norm)) {
+      deduplicated.push(v);
+      seen.add(norm);
+    }
+  }
+
+  return deduplicated;
+};
+
+// Simple edit distance (Levenshtein) to allow fuzzy matching for typos
+const editDistance = (a, b) => {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (a[i - 1] === b[j - 1]) dp[i][j] = dp[i - 1][j - 1];
+      else dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+};
+
+const scoreCandidate = (rTok, cw, fuzzyMatch = false) => {
   const ct = cwTokens(cw.description);
   const cset = new Set(ct);
-  const overlap = rTok.filter((t) => cset.has(t));
+  let overlap = rTok.filter((t) => cset.has(t));
+
+  // If exact overlap is weak, try fuzzy matching on individual tokens (typo tolerance)
+  if (fuzzyMatch && overlap.length < rTok.length * 0.5) {
+    const fuzzyMatched = [];
+    for (const rt of rTok) {
+      let bestDist = Infinity, bestMatch = false;
+      for (const ct_token of ct) {
+        const dist = editDistance(rt, ct_token);
+        if (dist < bestDist && dist <= 2) { // allow up to 2 character edits (e.g. "pumkin" → "pumpkin")
+          bestDist = dist;
+          bestMatch = true;
+        }
+      }
+      if (bestMatch) fuzzyMatched.push(rt);
+    }
+    // Boost score if fuzzy matching recovers some tokens
+    if (fuzzyMatched.length > overlap.length) {
+      overlap = fuzzyMatched;
+    }
+  }
+
   if (!overlap.length) return null;
   const head = rTok[rTok.length - 1]; // English head noun ("white sugar" → sugar)
   let score = overlap.length / rTok.length;
@@ -44,9 +124,24 @@ const scoreCandidate = (rTok, cw) => {
 };
 
 const rankCandidates = (name, cwList) => {
-  const rTok = tokenize(name);
-  if (!rTok.length) return [];
-  return cwList.map((cw) => scoreCandidate(rTok, cw)).filter(Boolean).sort((a, b) => b.score - a.score);
+  const variants = getBilingualVariants(name);
+  const allCandidates = [];
+
+  // Try each variant, including fuzzy matching on the second pass
+  for (let pass = 0; pass < 2; pass++) {
+    const fuzzy = pass === 1;
+    for (const variant of variants) {
+      const rTok = tokenize(variant);
+      if (!rTok.length) continue;
+
+      for (const cw of cwList) {
+        const scored = scoreCandidate(rTok, cw, fuzzy);
+        if (scored) allCandidates.push(scored);
+      }
+    }
+  }
+
+  return allCandidates.sort((a, b) => b.score - a.score);
 };
 
 const confidenceOf = (ranked) => {
