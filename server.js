@@ -1757,6 +1757,7 @@ app.get('/api/waste', async (req, res) => {
 // is returned in coverage buckets so the gaps are visible and fixable.
 const RECIPE_COSTS_FILE = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
 const PRODUCT_NAME_OVERRIDES_FILE = path.join(DATA_DIR, 'pipeline', 'product-name-overrides.json');
+const RECIPE_EXCLUSIONS_FILE = path.join(DATA_DIR, 'pipeline', 'recipe-exclusions.json');
 
 // Units sold + realized average sell price per product name, aggregated across every location over
 // the last `weeks` (from Square orders — the same source the Waste/Market tabs use). Cached 1h.
@@ -1830,6 +1831,7 @@ app.get('/api/product-margins', async (req, res) => {
   const weeks = Math.min(Math.max(parseInt(req.query.weeks, 10) || 12, 1), 52);
   const rawNameOverrides = loadData(PRODUCT_NAME_OVERRIDES_FILE);
   const nameOverrides = rawNameOverrides && !Array.isArray(rawNameOverrides) ? rawNameOverrides : {};
+  const exclusions = Array.isArray(loadData(RECIPE_EXCLUSIONS_FILE)) ? new Set(loadData(RECIPE_EXCLUSIONS_FILE)) : new Set();
   try {
     const sales = await fetchProductSales(weeks);
     const salesKeys = Object.keys(sales);
@@ -1839,13 +1841,14 @@ app.get('/api/product-margins', async (req, res) => {
     const noSales = [];              // costed, but no Square sales matched
     report.recipes.forEach((r) => {
       if (!r.allPriced || r.costPerUnit == null) return; // handled via coverage buckets below
+      if (exclusions.has(r.recipe)) return; // skip excluded recipes
       const key = nameOverrides[r.recipe] ? String(nameOverrides[r.recipe]).toLowerCase() : matchProductToSquare(r.recipe, salesKeys);
       const s = key ? sales[key] : null;
       if (!s || !(s.volume > 0) || !(s.avgPrice > 0)) { noSales.push(r.recipe); return; }
       if (key) matchedSalesKeys.add(key);
       const marginDollars = s.avgPrice - r.costPerUnit;
       points.push({
-        name: r.recipe,
+        name: key || r.recipe,
         squareItem: key,
         volume: round2(s.volume),
         sellPrice: round2(s.avgPrice),
@@ -1867,8 +1870,9 @@ app.get('/api/product-margins', async (req, res) => {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 50);
 
+    const { sheetSkipped, ...reportCoverage } = report.coverage || {};
     const coverage = {
-      ...(report.coverage || {}),
+      ...reportCoverage,
       noSales,
       soldButNoRecipe,
     };
