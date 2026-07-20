@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "pipeline": "node pipeline/refresh.js"
+    "pipeline": "node pipeline/refresh.js",
+    "margins": "node pipeline/build-margins.js"
   },
   "keywords": [],
   "author": "",

@@ -224,7 +224,6 @@ app.post('/api/upload/recipes', upload.single('file'), (req, res) => {
       saveData(RECIPES_FILE, recipes);
       fs.unlinkSync(req.file.path);
       cacheManager.invalidate('recipes');
-      cacheManager.invalidate('item_margins');
       res.json({ success: true, count: recipes.length, recipes });
     })
     .on('error', (err) => {
@@ -1056,6 +1055,47 @@ app.post('/api/quickbooks/disconnect', (req, res) => {
   res.json({ success: true });
 });
 
+// ============= GOOGLE OAUTH 2.0 (recipe sheets) =============
+// Authenticate as the bakery's own Google user so the pipeline can read the private recipe folder.
+// Same shape as the QuickBooks flow above. Token handling lives in pipeline/sheets-oauth.js.
+const googleSheets = require('./pipeline/sheets-oauth');
+
+// Step 1: redirect the user to Google's consent screen
+app.get('/api/google/connect', (req, res) => {
+  if (!googleSheets.hasCredentials()) {
+    return res.status(400).send('Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env first (create an OAuth client at https://console.cloud.google.com/apis/credentials).');
+  }
+  res.redirect(googleSheets.getAuthUrl());
+});
+
+// Step 2: Google redirects back here with a code
+app.get('/api/google/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error) return res.status(400).send(`Google authorization failed: ${error}`);
+  if (!code) return res.status(400).send('Missing authorization code from Google');
+  try {
+    await googleSheets.exchangeCodeForTokens(code);
+    res.redirect('/?google=connected');
+  } catch (err) {
+    res.status(500).send(`Failed to connect Google: ${err.message}`);
+  }
+});
+
+// Connection status
+app.get('/api/google/status', (req, res) => {
+  res.json({
+    configured: googleSheets.hasCredentials(),
+    connected: googleSheets.isConnected(),
+    connectedAt: googleSheets.loadTokens()?.connectedAt || null,
+  });
+});
+
+// Disconnect (forget stored tokens)
+app.post('/api/google/disconnect', (req, res) => {
+  googleSheets.disconnect();
+  res.json({ success: true });
+});
+
 // ============= QUICKBOOKS DATA ENDPOINTS =============
 
 // Fetch a Profit & Loss report from QuickBooks, broken into periods (Week or Month) for a date range
@@ -1708,105 +1748,15 @@ app.get('/api/waste', async (req, res) => {
   }
 });
 
-// ============= ITEM MARGIN DASHBOARD =============
-// For every recipe, compares Square's live listed price against the recipe's ingredient cost
-// (Cost / Yield, both already tracked per-batch in the uploaded recipes CSV) to show what share
-// of the price the ingredients eat up. Matched to the Square catalog by exact item name (same
-// name-matching approach as the Waste tab), since there's no shared ID between recipes.csv and
-// the catalog.
-
-// Paginates GET /v2/catalog/list for ITEM objects and returns { lowercased name: { name, price } }
-// using each item's first priced variation. Catalog rarely changes within a session, so callers
-// cache the result.
-const fetchCatalogItemPrices = async () => {
-  const prices = {};
-  let cursor;
-  let page = 0;
-  do {
-    const response = await axios.get(`${SQUARE_API_BASE}/catalog/list`, {
-      headers: squareHeaders(),
-      params: { types: 'ITEM', cursor },
-    });
-    (response.data.objects || []).forEach((obj) => {
-      if (obj.type !== 'ITEM' || obj.is_deleted) return;
-      const itemData = obj.item_data || {};
-      const name = (itemData.name || '').trim();
-      if (!name) return;
-      const variation = (itemData.variations || []).find((v) => v.item_variation_data?.price_money?.amount != null);
-      const amount = variation?.item_variation_data?.price_money?.amount;
-      if (amount == null) return;
-      const key = name.toLowerCase();
-      if (!prices[key]) prices[key] = { name, price: amount / 100 };
-    });
-    cursor = response.data.cursor;
-    page += 1;
-  } while (cursor && page < 50);
-  return prices;
-};
-
-// GET /api/item-margins - ingredient cost as % of listed price, per item. Cached 1 hour.
-app.get('/api/item-margins', async (req, res) => {
-  const token = process.env.SQUARE_ACCESS_TOKEN;
-  if (!token || token === 'your_square_token_here') {
-    return res.status(400).json({ error: 'Square API credentials not configured', items: [] });
-  }
-
-  const recipes = loadData(RECIPES_FILE);
-  if (recipes.length === 0) {
-    return res.json({ items: [], unmatchedRecipes: [], status: 'empty', message: 'No recipes uploaded yet.' });
-  }
-
-  const cacheKey = 'item_margins';
-  const cached = cacheManager.get(cacheKey);
-  if (cached) return res.json({ ...cached, cached: true });
-
-  try {
-    const catalogPrices = await fetchCatalogItemPrices();
-
-    const items = [];
-    const unmatchedRecipes = [];
-    recipes.forEach((r) => {
-      const name = (r['Recipe Name'] || '').trim();
-      const cost = parseFloat(r['Cost']);
-      const yieldQty = parseFloat(r['Yield']);
-      if (!name || !Number.isFinite(cost) || !Number.isFinite(yieldQty) || yieldQty <= 0) return;
-
-      const match = catalogPrices[name.toLowerCase()];
-      if (!match || !(match.price > 0)) {
-        unmatchedRecipes.push(name);
-        return;
-      }
-
-      const ingredientCost = cost / yieldQty;
-      items.push({
-        name,
-        category: r['Category'] || '',
-        listedPrice: match.price,
-        ingredientCost,
-        percent: (ingredientCost / match.price) * 100,
-      });
-    });
-
-    items.sort((a, b) => b.percent - a.percent);
-
-    const result = { items, unmatchedRecipes, lastUpdated: new Date().toISOString() };
-    cacheManager.set(cacheKey, result, 60 * 60 * 1000); // 1 hour
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({
-      error: 'Square API error',
-      message: err.response?.data?.errors?.[0]?.detail || err.message,
-      items: [],
-    });
-  }
-});
-
-// ============= PRODUCT MARGINS (volume × gross margin scatter) =============
-
-// Recipe cost-to-make is produced by the data pipeline (pipeline/match-cost.js writes this file):
-// { recipes: [{ recipe, cost, lines:[{ ingredient, lineCost }] }], ... }. Costs come from real
-// Chef's Warehouse invoice prices; a recipe is "complete" only if every ingredient priced.
+// ============= PRODUCT MARGINS =============
+// Per sellable product: the gross margin between what Square actually sold it for and what it costs
+// to make, weighted by units sold. The cost side is produced offline by the data pipeline
+// (pipeline/build-margins.js → data/pipeline/recipe-costs.json): each recipe is costed from real
+// Chef's Warehouse invoice prices (via QuickBooks) and divided by its per-unit yield. The sell/volume
+// side is joined live here from Square Orders. Nothing that can't be costed is dropped silently — it
+// is returned in coverage buckets so the gaps are visible and fixable.
 const RECIPE_COSTS_FILE = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
+const PRODUCT_NAME_OVERRIDES_FILE = path.join(DATA_DIR, 'pipeline', 'product-name-overrides.json');
 
 // Units sold + realized average sell price per product name, aggregated across every location over
 // the last `weeks` (from Square orders — the same source the Waste/Market tabs use). Cached 1h.
@@ -1846,7 +1796,6 @@ const fetchProductSales = async (weeks) => {
 // Recipe names rarely equal Square's product names ("Double chocolate cookies" vs "Double Choc
 // Chip Cookie"), so match fuzzily: token overlap where abbreviations count (choc↔chocolate,
 // cookie↔cookies). A product-name-overrides file can pin any that don't auto-match.
-const PRODUCT_NAME_OVERRIDES_FILE = path.join(DATA_DIR, 'pipeline', 'product-name-overrides.json');
 const PRODUCT_STOP = new Set(['the', 'a', 'with', 'and', 'of', 'for']);
 const prodTokens = (s) => String(s).toLowerCase().replace(/["']/g, '').replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter((t) => t.length >= 2 && !PRODUCT_STOP.has(t));
 const tokAlike = (x, y) => x === y || (x.length >= 4 && y.startsWith(x)) || (y.length >= 4 && x.startsWith(y)) || (x.length >= 5 && y.includes(x)) || (y.length >= 5 && x.includes(y));
@@ -1865,9 +1814,9 @@ const matchProductToSquare = (recipeName, salesKeys) => {
   return best && best.matched >= need ? best.key : null;
 };
 
-// GET /api/product-margins?weeks=8 — one point per sellable product: volume sold (x) vs gross
-// margin % (y). Only fully-costed products that actually sold are plotted; the rest are returned
-// separately so nothing is silently dropped or shown with an understated cost.
+// GET /api/product-margins?weeks=12 — one row per fully-costed product that sold: sell price, cost,
+// margin $/%, units, and total margin contribution ($ = margin × units). Everything that couldn't be
+// costed or matched is returned in `coverage` so the bakery can drive coverage toward 100%.
 app.get('/api/product-margins', async (req, res) => {
   const token = process.env.SQUARE_ACCESS_TOKEN;
   if (!token || token === 'your_square_token_here') {
@@ -1875,27 +1824,25 @@ app.get('/api/product-margins', async (req, res) => {
   }
   const report = loadData(RECIPE_COSTS_FILE);
   if (!report || !Array.isArray(report.recipes)) {
-    return res.json({ status: 'no-costs', points: [], incomplete: [], noSales: [], message: 'No recipe costs yet — run the data pipeline (node pipeline/match-cost.js).' });
+    return res.json({ status: 'no-costs', points: [], coverage: {}, message: 'No recipe costs yet — run the pipeline (npm run margins).' });
   }
 
-  const weeks = Math.min(Math.max(parseInt(req.query.weeks, 10) || 8, 1), 52);
+  const weeks = Math.min(Math.max(parseInt(req.query.weeks, 10) || 12, 1), 52);
   const rawNameOverrides = loadData(PRODUCT_NAME_OVERRIDES_FILE);
   const nameOverrides = rawNameOverrides && !Array.isArray(rawNameOverrides) ? rawNameOverrides : {};
   try {
     const sales = await fetchProductSales(weeks);
     const salesKeys = Object.keys(sales);
-    const points = [];
-    const incomplete = [];
-    const noYield = [];
-    const noSales = [];
+    const matchedSalesKeys = new Set();
 
+    const points = [];
+    const noSales = [];              // costed, but no Square sales matched
     report.recipes.forEach((r) => {
-      const missing = r.lines.filter((l) => l.lineCost == null).map((l) => l.ingredient.trim());
-      if (missing.length) { incomplete.push({ name: r.recipe, missing }); return; }
-      if (r.costPerUnit == null) { noYield.push(r.recipe); return; } // priced, but no per-unit weight
+      if (!r.allPriced || r.costPerUnit == null) return; // handled via coverage buckets below
       const key = nameOverrides[r.recipe] ? String(nameOverrides[r.recipe]).toLowerCase() : matchProductToSquare(r.recipe, salesKeys);
       const s = key ? sales[key] : null;
       if (!s || !(s.volume > 0) || !(s.avgPrice > 0)) { noSales.push(r.recipe); return; }
+      if (key) matchedSalesKeys.add(key);
       const marginDollars = s.avgPrice - r.costPerUnit;
       points.push({
         name: r.recipe,
@@ -1906,11 +1853,35 @@ app.get('/api/product-margins', async (req, res) => {
         marginDollars: round2(marginDollars),
         marginPct: round2((marginDollars / s.avgPrice) * 100),
         revenue: round2(s.avgPrice * s.volume),
+        totalMargin: round2(marginDollars * s.volume), // margin contribution over the window
       });
     });
-    points.sort((a, b) => b.marginPct - a.marginPct);
+    // Default sort: biggest total margin contribution first (the volume-weighted view).
+    points.sort((a, b) => b.totalMargin - a.totalMargin);
 
-    res.json({ status: 'ready', weeks, priceListDate: report.priceListDate, generatedAt: report.generatedAt, points, incomplete, noYield, noSales, skipped: report.skipped || [] });
+    // Reconcile the other direction: Square products that actually sold but matched no recipe —
+    // the real "items we can't cost yet" list. Top by revenue so the biggest gaps surface first.
+    const soldButNoRecipe = salesKeys
+      .filter((k) => !matchedSalesKeys.has(k) && sales[k].volume > 0 && sales[k].avgPrice > 0)
+      .map((k) => ({ name: k, volume: round2(sales[k].volume), revenue: round2(sales[k].avgPrice * sales[k].volume) }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 50);
+
+    const coverage = {
+      ...(report.coverage || {}),
+      noSales,
+      soldButNoRecipe,
+    };
+
+    res.json({
+      status: 'ready',
+      weeks,
+      priceListDate: report.priceListDate,
+      generatedAt: report.generatedAt,
+      totals: { ...(report.totals || {}), plotted: points.length },
+      points,
+      coverage,
+    });
   } catch (err) {
     res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, points: [] });
   }

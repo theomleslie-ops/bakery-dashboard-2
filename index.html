@@ -1569,106 +1569,9 @@
       );
     }
 
-    function ItemMarginDashboard() {
-      const [data, setData] = useState(null);
-      const [status, setStatus] = useState('loading');
-      const [error, setError] = useState('');
-
-      useEffect(() => {
-        const baseUrl = window.location.origin;
-        fetch(`${baseUrl}/api/item-margins`)
-          .then((r) => r.json())
-          .then((result) => {
-            if (result.error) { setError(result.error); setStatus('error'); return; }
-            setData(result);
-            setStatus(result.status || 'ready');
-          })
-          .catch((err) => { setError('Failed to load data: ' + err.message); setStatus('error'); });
-      }, []);
-
-      const items = (data && data.items) || [];
-      const unmatched = (data && data.unmatchedRecipes) || [];
-      const avgPct = items.length ? items.reduce((s, it) => s + it.percent, 0) / items.length : 0;
-      const maxPct = items.length ? items[0].percent : 0;
-      const scaleMax = Math.max(100, Math.ceil((maxPct * 1.05) / 10) * 10);
-      const refLinePct = scaleMax > 100 ? (100 / scaleMax) * 100 : null;
-
-      return (
-        <div className="container">
-          <header>
-            <h1>🥐 Item Margins</h1>
-            <p className="subtitle">Ingredient cost as a share of listed price, per item — Square catalog price vs. recipe cost</p>
-          </header>
-          {error && <div className="error">{error}</div>}
-          {status === 'loading' && <div className="loading">Loading recipes &amp; Square catalog prices…</div>}
-          {status === 'empty' && <div className="empty">No recipes uploaded yet. Upload recipes.csv to populate this view.</div>}
-          {status === 'ready' && items.length === 0 && unmatched.length === 0 && (
-            <div className="empty">No recipes matched a Square catalog item by name.</div>
-          )}
-          {status === 'ready' && items.length > 0 && (
-            <>
-              <div className="metrics">
-                <div className="metric-card">
-                  <div className="metric-label">Items Tracked</div>
-                  <div className="metric-value">{items.length}</div>
-                  <div className="metric-sub">{unmatched.length} recipe{unmatched.length === 1 ? '' : 's'} unmatched</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Average Ingredient Cost</div>
-                  <div className="metric-value">{avgPct.toFixed(1)}%</div>
-                  <div className="metric-sub">of listed price</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Highest</div>
-                  <div className="metric-value" style={{ color: '#d03b3b' }}>{items[0].percent.toFixed(1)}%</div>
-                  <div className="metric-sub">{items[0].name}</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Lowest</div>
-                  <div className="metric-value" style={{ color: '#2f9e44' }}>{items[items.length - 1].percent.toFixed(1)}%</div>
-                  <div className="metric-sub">{items[items.length - 1].name}</div>
-                </div>
-              </div>
-              <div className="chart-container">
-                <div className="chart-title">Ingredient Cost as % of Listed Price</div>
-                <div className="panel-hint">
-                  Sorted highest to lowest — the top items are where ingredients eat the biggest share of the price.
-                  {refLinePct != null && ' The dashed line marks 100% (ingredient cost equals the listed price).'}
-                </div>
-                <div className="margin-bar-list">
-                  {items.map((it) => {
-                    const widthPct = Math.min(100, (it.percent / scaleMax) * 100);
-                    return (
-                      <div className="margin-bar-row" key={it.name}>
-                        <div className="margin-bar-label" title={it.name}>{it.name}</div>
-                        <div className="margin-bar-track">
-                          {refLinePct != null && <div className="margin-bar-refline" style={{ left: `${refLinePct}%` }} />}
-                          <div className="margin-bar-fill" style={{ width: `${widthPct}%` }} />
-                        </div>
-                        <div className="margin-bar-value">
-                          {it.percent.toFixed(1)}%
-                          <span className="margin-bar-detail">{fmtMoney(it.ingredientCost)} / {fmtMoney(it.listedPrice)}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </>
-          )}
-          {unmatched.length > 0 && (
-            <div className="panel">
-              <div className="panel-title">Recipes without a matching Square item</div>
-              <div className="panel-hint">These are in recipes.csv but no active Square catalog item has this exact name — rename the recipe to match Square's item name, or it's not currently sold.</div>
-              <table>
-                <thead><tr><th>Recipe name</th></tr></thead>
-                <tbody>{unmatched.map((name) => (<tr key={name}><td>{name}</td></tr>))}</tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      );
-    }
+    // (The old "Item Margins" tab — recipe Cost/Yield vs Square catalog price — was removed here.
+    //  It's superseded by the Product Margins tab below, which costs recipes bottom-up from
+    //  Chef's Warehouse invoices and weights by real Square volume.)
 
     const MARGIN_WEEK_OPTIONS = [
       { weeks: 4, label: '4 Weeks' }, { weeks: 8, label: '8 Weeks' },
@@ -1732,11 +1635,23 @@
       );
     }
 
+    function CoveragePanel({ title, hint, count, children }) {
+      if (!count) return null;
+      return (
+        <div className="chart-container">
+          <div className="chart-title">{title} ({count})</div>
+          <div className="panel-hint" style={{ marginBottom: '8px' }}>{hint}</div>
+          {children}
+        </div>
+      );
+    }
+
     function MarginScatterDashboard() {
       const [data, setData] = useState(null);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
-      const [weeks, setWeeks] = useState(8);
+      const [weeks, setWeeks] = useState(12);
+      const [sortBy, setSortBy] = useState('totalMargin'); // 'totalMargin' | 'marginPct'
       useEffect(() => { fetchData(); }, [weeks]);
       const fetchData = async () => {
         try {
@@ -1748,18 +1663,29 @@
           setStatus(result.status === 'no-costs' ? 'no-costs' : 'ready');
         } catch (e) { setError('Failed to load data: ' + e.message); setStatus('error'); }
       };
+
       const points = (data && data.points) || [];
-      const incomplete = (data && data.incomplete) || [];
-      const noYield = (data && data.noYield) || [];
-      const noSales = (data && data.noSales) || [];
-      const avgMargin = points.length ? points.reduce((s, p) => s + p.marginPct, 0) / points.length : 0;
-      const best = points.length ? [...points].sort((a, b) => (b.marginPct * b.volume) - (a.marginPct * a.volume))[0] : null;
+      const coverage = (data && data.coverage) || {};
+      const needsYield = coverage.needsYield || [];
+      const unpricedIngredient = coverage.unpricedIngredient || [];
+      const noSales = coverage.noSales || [];
+      const soldButNoRecipe = coverage.soldButNoRecipe || [];
+      const sheetSkipped = coverage.sheetSkipped || [];
+
+      const totalMargin = points.reduce((s, p) => s + p.totalMargin, 0);
+      const totalRevenue = points.reduce((s, p) => s + p.revenue, 0);
+      const weightedMarginPct = totalRevenue > 0 ? (totalMargin / totalRevenue) * 100 : 0;
+      const sorted = [...points].sort((a, b) => sortBy === 'marginPct' ? b.marginPct - a.marginPct : b.totalMargin - a.totalMargin);
+      const best = sorted[0];
+      const worst = points.length ? [...points].sort((a, b) => a.marginPct - b.marginPct)[0] : null;
+      const marginColor = (pct) => pct >= 60 ? '#2f9e44' : pct >= 35 ? '#b8860b' : '#d03b3b';
+      const asDate = (iso) => iso ? new Date(iso).toLocaleDateString() : '—';
 
       return (
         <div className="container">
           <header>
             <h1>📊 Product Margins</h1>
-            <p className="subtitle">Units sold vs. gross margin — cost-to-make from Chef's Warehouse invoices, sell price &amp; volume from Square. Best products sit top-right.</p>
+            <p className="subtitle">Per product: what Square sold it for minus what it costs to make (Chef's Warehouse invoices via QuickBooks, priced through the Google Sheets recipe), weighted by units sold.</p>
           </header>
           <div className="controls">
             <div className="view-toggle">
@@ -1767,38 +1693,92 @@
                 <button key={o.weeks} className={weeks === o.weeks ? 'active' : ''} onClick={() => setWeeks(o.weeks)}>{o.label}</button>
               ))}
             </div>
+            {status === 'ready' && data && (
+              <div className="panel-hint" style={{ margin: 0 }}>Costs as of {asDate(data.priceListDate)} · recipes built {asDate(data.generatedAt)}</div>
+            )}
           </div>
           {status === 'loading' && <div className="loading">Loading margins… aggregating Square sales across locations (can take a minute the first time).</div>}
           {status === 'error' && <div className="error">{error}</div>}
-          {status === 'no-costs' && <div className="empty">No recipe costs yet. Run the data pipeline to compute cost-to-make, then this view populates.</div>}
+          {status === 'no-costs' && <div className="empty">No recipe costs yet. Run <code>npm run margins</code> (needs QuickBooks + Google connected) to compute cost-to-make, then this view populates.</div>}
           {status === 'ready' && (
             <React.Fragment>
-              {points.length > 0 && (
-                <div className="metrics">
-                  <div className="metric-card"><div className="metric-label">Products Plotted</div><div className="metric-value">{points.length}</div></div>
-                  <div className="metric-card"><div className="metric-label">Avg Gross Margin</div><div className="metric-value">{avgMargin.toFixed(1)}%</div></div>
-                  {best && <div className="metric-card"><div className="metric-label">Best (margin × volume)</div><div className="metric-value" style={{ fontSize: '20px' }}>{best.name}</div><div className="metric-sub">{best.marginPct}% · {best.volume} sold</div></div>}
-                </div>
-              )}
+              <div className="metrics">
+                <div className="metric-card"><div className="metric-label">Products Costed &amp; Sold</div><div className="metric-value">{points.length}</div><div className="metric-sub">of {(data.totals && data.totals.recipes) || '—'} recipes</div></div>
+                <div className="metric-card"><div className="metric-label">Total Gross Margin</div><div className="metric-value">{fmtMoney(totalMargin)}</div><div className="metric-sub">over {weeks} weeks</div></div>
+                <div className="metric-card"><div className="metric-label">Weighted Avg Margin</div><div className="metric-value">{weightedMarginPct.toFixed(1)}%</div><div className="metric-sub">revenue-weighted</div></div>
+                {best && <div className="metric-card"><div className="metric-label">Top Margin Contributor</div><div className="metric-value" style={{ fontSize: '18px' }}>{best.name}</div><div className="metric-sub">{fmtMoney(best.totalMargin)} · {best.marginPct}%</div></div>}
+              </div>
+
               {points.length > 0 ? (
                 <div className="chart-container">
-                  <div className="chart-title">Volume × Gross Margin</div>
-                  <MarginScatterChart points={points} />
+                  <div className="chart-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                    <span>Products by {sortBy === 'totalMargin' ? 'total margin contribution' : 'margin %'}</span>
+                    <span className="view-toggle" style={{ fontSize: '12px' }}>
+                      <button className={sortBy === 'totalMargin' ? 'active' : ''} onClick={() => setSortBy('totalMargin')}>Margin $</button>
+                      <button className={sortBy === 'marginPct' ? 'active' : ''} onClick={() => setSortBy('marginPct')}>Margin %</button>
+                    </span>
+                  </div>
+                  <div className="panel-hint">“Total margin” is per-unit margin × units sold over the window — the products that actually move the most money, not just the fattest per-unit margin.</div>
+                  <table>
+                    <thead><tr>
+                      <th style={{ textAlign: 'left' }}>Product</th>
+                      <th style={{ textAlign: 'right' }}>Sell price</th>
+                      <th style={{ textAlign: 'right' }}>Cost/unit</th>
+                      <th style={{ textAlign: 'right' }}>Margin/unit</th>
+                      <th style={{ textAlign: 'right' }}>Margin %</th>
+                      <th style={{ textAlign: 'right' }}>Units</th>
+                      <th style={{ textAlign: 'right' }}>Total margin</th>
+                    </tr></thead>
+                    <tbody>
+                      {sorted.map((p) => (
+                        <tr key={p.name}>
+                          <td style={{ textAlign: 'left' }} title={p.squareItem ? `Square: ${p.squareItem}` : ''}>{p.name}</td>
+                          <td style={{ textAlign: 'right' }}>{fmtMoney(p.sellPrice)}</td>
+                          <td style={{ textAlign: 'right' }}>{fmtMoney(p.cost)}</td>
+                          <td style={{ textAlign: 'right' }}>{fmtMoney(p.marginDollars)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: marginColor(p.marginPct) }}>{p.marginPct}%</td>
+                          <td style={{ textAlign: 'right' }}>{p.volume}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMoney(p.totalMargin)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
-                <div className="empty">Nothing to plot yet — a product needs a complete cost (every ingredient priced) <em>and</em> Square sales. What's excluded, and why, is listed below.</div>
+                <div className="empty">Nothing costed &amp; sold yet — a product needs every ingredient priced, a per-unit yield, <em>and</em> Square sales. The coverage panels below show exactly what's missing.</div>
               )}
-              {(incomplete.length > 0 || noYield.length > 0 || noSales.length > 0) && (
+
+              {points.length > 0 && (
                 <div className="chart-container">
-                  <div className="chart-title">Not plotted ({incomplete.length + noYield.length + noSales.length})</div>
-                  {incomplete.length > 0 && <div className="panel-hint" style={{ marginBottom: '8px' }}><strong>Incomplete cost</strong> — missing an ingredient price (produce not bought from Chef's Warehouse, an in-house sub-recipe like levain, or a match gap):</div>}
-                  {incomplete.map(it => <div key={it.name} style={{ fontSize: '13px', color: 'var(--chart-ink)', padding: '2px 0' }}>• <strong>{it.name}</strong> — missing {it.missing.join(', ')}</div>)}
-                  {noYield.length > 0 && <div className="panel-hint" style={{ margin: '12px 0 6px' }}><strong>Priced, but no per-unit weight</strong> — recipe doesn't state grams-per-unit, so cost-per-item can't be computed:</div>}
-                  {noYield.map(n => <div key={n} style={{ fontSize: '13px', color: 'var(--chart-ink)', padding: '2px 0' }}>• {n}</div>)}
-                  {noSales.length > 0 && <div className="panel-hint" style={{ margin: '12px 0 6px' }}><strong>Priced, but no Square sales</strong> — e.g. a component/filling not sold as its own item:</div>}
-                  {noSales.map(n => <div key={n} style={{ fontSize: '13px', color: 'var(--chart-ink)', padding: '2px 0' }}>• {n}</div>)}
+                  <div className="chart-title">Volume × Gross Margin</div>
+                  <div className="panel-hint">Bubble size = revenue. Best products sit top-right (high margin, high volume).</div>
+                  <MarginScatterChart points={points} />
                 </div>
               )}
+
+              {(needsYield.length + unpricedIngredient.length + soldButNoRecipe.length + noSales.length + sheetSkipped.length) > 0 && (
+                <h2 style={{ margin: '32px 0 4px', color: '#6b4423', fontSize: '20px' }}>Coverage — close these to cost more products</h2>
+              )}
+              <CoveragePanel title="Needs a per-unit yield" count={needsYield.length}
+                hint="Fully priced, but the recipe doesn't state grams-per-unit / units-per-batch, so cost-per-item can't be computed. Add a yield cell to the sheet or an entry in yield-overrides.json.">
+                {needsYield.map((r) => <div key={r.recipe} style={{ fontSize: '13px', padding: '2px 0' }}>• {r.recipe} <span style={{ color: 'var(--chart-muted)' }}>(batch cost {fmtMoney(r.batchCost || 0)})</span></div>)}
+              </CoveragePanel>
+              <CoveragePanel title="Unpriced ingredient" count={unpricedIngredient.length}
+                hint="At least one ingredient has no Chef's Warehouse price — a name mismatch (fix in ingredient-overrides.json) or genuinely bought elsewhere.">
+                {unpricedIngredient.map((r) => <div key={r.recipe} style={{ fontSize: '13px', padding: '2px 0' }}>• <strong>{r.recipe}</strong> — missing {(r.missing || []).join(', ')}</div>)}
+              </CoveragePanel>
+              <CoveragePanel title="Sold in Square, but no recipe" count={soldButNoRecipe.length}
+                hint="Products with real sales that matched no recipe — the true 'we can't cost this yet' list. Add/rename a recipe, or pin it in product-name-overrides.json. Top by revenue.">
+                {soldButNoRecipe.map((r) => <div key={r.name} style={{ fontSize: '13px', padding: '2px 0' }}>• {r.name} <span style={{ color: 'var(--chart-muted)' }}>({r.volume} sold · {fmtMoney(r.revenue)})</span></div>)}
+              </CoveragePanel>
+              <CoveragePanel title="Costed, but no Square sales" count={noSales.length}
+                hint="Priced with a yield, but no matching Square sales in this window — a component/filling not sold on its own, or a name that didn't match.">
+                {noSales.map((n) => <div key={n} style={{ fontSize: '13px', padding: '2px 0' }}>• {n}</div>)}
+              </CoveragePanel>
+              <CoveragePanel title="Sheets skipped" count={sheetSkipped.length}
+                hint="Files in the recipe folder that didn't parse as a RECIPE SHEET (not a recipe, or a different layout).">
+                {sheetSkipped.map((n) => <div key={n} style={{ fontSize: '13px', padding: '2px 0' }}>• {n}</div>)}
+              </CoveragePanel>
             </React.Fragment>
           )}
         </div>
@@ -1818,7 +1798,6 @@
                 <button className={`tab-button ${activeTab === 'pl-channel' ? 'active' : ''}`} onClick={() => setActiveTab('pl-channel')}>P&L by Channel</button>
                 <button className={`tab-button ${activeTab === 'waste' ? 'active' : ''}`} onClick={() => setActiveTab('waste')}>Waste</button>
                 <button className={`tab-button ${activeTab === 'market-performance' ? 'active' : ''}`} onClick={() => setActiveTab('market-performance')}>Performance by Market</button>
-                <button className={`tab-button ${activeTab === 'item-margins' ? 'active' : ''}`} onClick={() => setActiveTab('item-margins')}>Item Margins</button>
                 <button className={`tab-button ${activeTab === 'product-margins' ? 'active' : ''}`} onClick={() => setActiveTab('product-margins')}>Product Margins</button>
               </div>
             </div>
@@ -1829,7 +1808,6 @@
           <div className={`tab-content ${activeTab === 'pl-channel' ? 'active' : ''}`}><PLByChannelDashboard /></div>
           <div className={`tab-content ${activeTab === 'waste' ? 'active' : ''}`}><WasteDashboard /></div>
           <div className={`tab-content ${activeTab === 'market-performance' ? 'active' : ''}`}><MarketPerformanceDashboard /></div>
-          <div className={`tab-content ${activeTab === 'item-margins' ? 'active' : ''}`}><ItemMarginDashboard /></div>
           <div className={`tab-content ${activeTab === 'product-margins' ? 'active' : ''}`}><MarginScatterDashboard /></div>
         </div>
       );
