@@ -11,7 +11,12 @@
 // coverage report as "needs-yield" rather than being silently dropped.
 const path = require('path');
 const fs = require('fs');
-const sheetsClient = require('./sheets-oauth');
+// Read recipe sheets via whichever Google client is available. Prefer the service account (headless,
+// no consent screen, no 7-day token expiry) when its key is present; otherwise fall back to user
+// OAuth. Both modules expose the same getClients / resolveFolderByName / listSheetsInFolder /
+// pullSpreadsheet interface, so the rest of this file doesn't care which one is used.
+const SA_KEY = path.join(__dirname, '..', 'data', 'google-service-account.json');
+const sheetsClient = fs.existsSync(SA_KEY) ? require('./sheets') : require('./sheets-oauth');
 
 const norm = (v) => (v == null ? '' : String(v)).trim();
 const toNum = (v) => { const n = parseFloat(String(v ?? '').replace(/,/g, '')); return Number.isFinite(n) ? n : NaN; };
@@ -134,7 +139,17 @@ const pullRecipes = async (folderName = 'Recipe LSB', { yieldOverrides = {} } = 
   const recipes = [];
   const skipped = [];
   for (const s of list) {
-    const sp = await sheetsClient.pullSpreadsheet(sheets, s.id);
+    let sp;
+    try {
+      if (s.isExcel) {
+        sp = await sheetsClient.downloadAndParseExcel(drive, s.id, s.name);
+      } else {
+        sp = await sheetsClient.pullSpreadsheet(sheets, s.id);
+      }
+    } catch (e) {
+      skipped.push(`${s.name} (error: ${e.message})`);
+      continue;
+    }
     const firstTab = Object.values(sp.tabs)[0];
     const parsed = firstTab ? parseRecipeTab(sp.title, firstTab.rows, { yieldOverrides }) : null;
     if (parsed) recipes.push(parsed);

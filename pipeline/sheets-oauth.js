@@ -154,24 +154,77 @@ const resolveFolderByName = async (drive, name) => {
   throw err;
 };
 
-// Every spreadsheet directly inside a folder → [{ id, name }].
+// Every spreadsheet or Excel file inside a folder (recursively, including subfolders) → [{ id, name, isExcel }].
 const listSheetsInFolder = async (drive, folderId) => {
-  const files = [];
-  let pageToken;
-  do {
-    const res = await drive.files.list({
-      q: `mimeType='application/vnd.google-apps.spreadsheet' and '${folderId}' in parents and trashed=false`,
-      fields: 'nextPageToken, files(id, name)',
-      orderBy: 'name', pageSize: 200, includeItemsFromAllDrives: true, supportsAllDrives: true, pageToken,
-    });
-    files.push(...(res.data.files || []));
-    pageToken = res.data.nextPageToken;
-  } while (pageToken);
-  return files;
+  const sheets = [];
+
+  const collectFromFolder = async (parentId) => {
+    let pageToken;
+    do {
+      const res = await drive.files.list({
+        q: `'${parentId}' in parents and trashed=false`,
+        fields: 'nextPageToken, files(id, name, mimeType)',
+        pageSize: 200, includeItemsFromAllDrives: true, supportsAllDrives: true, pageToken,
+      });
+      for (const file of (res.data.files || [])) {
+        if (file.mimeType === 'application/vnd.google-apps.spreadsheet') {
+          sheets.push({ id: file.id, name: file.name, isExcel: false });
+        } else if (file.mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.mimeType === 'application/vnd.ms-excel') {
+          sheets.push({ id: file.id, name: file.name, isExcel: true });
+        } else if (file.mimeType === 'application/vnd.google-apps.folder') {
+          await collectFromFolder(file.id);
+        }
+      }
+      pageToken = res.data.nextPageToken;
+    } while (pageToken);
+  };
+
+  await collectFromFolder(folderId);
+  sheets.sort((a, b) => a.name.localeCompare(b.name));
+  return sheets;
 };
 
 // A1 range for a whole tab; single-quote and escape the title so tabs with spaces/quotes work.
 const tabRange = (name) => `'${String(name).replace(/'/g, "''")}'`;
+
+// Download and parse an Excel file from Drive.
+// Returns { id, title, tabs: { <tabName>: { rows, rowCount, colCount } } }
+const downloadAndParseExcel = async (drive, fileId, fileName) => {
+  const { Readable } = require('stream');
+  const buffers = [];
+  const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'stream' });
+
+  for await (const chunk of res.data) {
+    buffers.push(chunk);
+  }
+  const buffer = Buffer.concat(buffers);
+
+  const { read: readExcel } = require('xlsx');
+  const workbook = readExcel(buffer);
+  const title = fileName.replace(/\.[^.]+$/, ''); // remove extension
+
+  const tabs = {};
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const rows = [];
+    for (let i = 0; ; i++) {
+      const row = [];
+      let hasData = false;
+      for (let j = 0; j < 50; j++) { // max 50 cols per row (recipes don't need more)
+        const cell = sheet[String.fromCharCode(65 + j) + (i + 1)];
+        const val = cell ? cell.v : '';
+        row.push(val);
+        if (val != null && val !== '') hasData = true;
+      }
+      if (!hasData && i > 10) break; // stop after 10 empty rows
+      if (hasData || i < 2) rows.push(row);
+    }
+    const colCount = rows.reduce((m, r) => Math.max(m, r.length), 0);
+    tabs[sheetName] = { rows, rowCount: rows.length, colCount };
+  }
+
+  return { id: fileId, title, tabs };
+};
 
 // Pull every tab of one spreadsheet in a single batch call.
 // Returns { id, title, tabs: { <tabName>: { rows, rowCount, colCount } } }
@@ -203,5 +256,5 @@ module.exports = {
   TOKENS_FILE, SCOPES,
   hasCredentials, isConnected, loadTokens, saveTokens, disconnect,
   getAuthUrl, exchangeCodeForTokens, getRedirectUri,
-  getClients, listSpreadsheets, resolveByName, resolveFolderByName, listSheetsInFolder, pullSpreadsheet,
+  getClients, listSpreadsheets, resolveByName, resolveFolderByName, listSheetsInFolder, pullSpreadsheet, downloadAndParseExcel,
 };
