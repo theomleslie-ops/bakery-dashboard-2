@@ -88,9 +88,16 @@ const parseRecipeTab = (title, rows, { yieldOverrides = {} } = {}) => {
   if (header < 0) return null;
 
   const ingredients = [];
+  let totalFromSheet = null; // "Total brut" or "Total net" value from the sheet
   for (let i = header + 1; i < rows.length; i++) {
     const nm = norm(rows[i] && rows[i][0]);
-    if (/^total/i.test(nm) || /^process/i.test(nm) || /^sum$/i.test(nm)) break;
+    // Capture "Total brut" or "Total net" as the per-unit finished product weight
+    if (/^total\s+(brut|net)$/i.test(nm)) {
+      const val = toNum(rows[i][1]);
+      if (val > 0) totalFromSheet = val;
+      break;
+    }
+    if (/^process/i.test(nm) || /^sum$/i.test(nm)) break;
     if (!nm) continue;
     const kg = toNum(rows[i][1]);
     if (!(kg > 0)) continue;
@@ -100,22 +107,27 @@ const parseRecipeTab = (title, rows, { yieldOverrides = {} } = {}) => {
   const totalKg = ingredients.reduce((s, x) => s + x.kg, 0);
   const recipeName = name.trim();
 
-  // Yield: structured cell → override file → PROCESS-notes parse.
+  // Yield: "Total brut/net" (most reliable) → structured cell → override file → PROCESS-notes parse.
   let portionKg = null;
   let portionBasis = null;
-  const structured = parseStructuredYield(flat, totalKg);
-  if (structured) {
-    ({ portionKg, basis: portionBasis } = structured);
-  } else if (Number.isFinite(toNum(yieldOverrides[recipeName])) && toNum(yieldOverrides[recipeName]) > 0) {
-    portionKg = toNum(yieldOverrides[recipeName]) / 1000;
-    portionBasis = `override ${yieldOverrides[recipeName]}g`;
+  if (totalFromSheet != null) {
+    portionKg = totalFromSheet;
+    portionBasis = 'sheet: Total brut/net';
   } else {
-    const pIdx = flat.findIndex((r) => /^process$/i.test((r[0] || '').trim()));
-    const process = pIdx >= 0
-      ? rows.slice(pIdx + 1).map((r) => (r || []).map((c) => String(c)).join(' ')).join(' ').trim()
-      : (flat.flat().find((c) => c.length > 60) || '');
-    const portion = parsePortion(process);
-    if (portion) { portionKg = portion.portionKg; portionBasis = portion.basis; }
+    const structured = parseStructuredYield(flat, totalKg);
+    if (structured) {
+      ({ portionKg, basis: portionBasis } = structured);
+    } else if (Number.isFinite(toNum(yieldOverrides[recipeName])) && toNum(yieldOverrides[recipeName]) > 0) {
+      portionKg = toNum(yieldOverrides[recipeName]) / 1000;
+      portionBasis = `override ${yieldOverrides[recipeName]}g`;
+    } else {
+      const pIdx = flat.findIndex((r) => /^process$/i.test((r[0] || '').trim()));
+      const process = pIdx >= 0
+        ? rows.slice(pIdx + 1).map((r) => (r || []).map((c) => String(c)).join(' ')).join(' ').trim()
+        : (flat.flat().find((c) => c.length > 60) || '');
+      const portion = parsePortion(process);
+      if (portion) { portionKg = portion.portionKg; portionBasis = portion.basis; }
+    }
   }
 
   return {
