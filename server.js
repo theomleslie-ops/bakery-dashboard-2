@@ -4,18 +4,23 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
 const path = require('path');
+const { Readable } = require('stream');
 const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(cors());
 app.use(express.json());
 
 // Data storage paths
 const DATA_DIR = 'data';
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
+try {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+} catch (e) {
+  // Ignore errors - directory may already exist or be read-only
+}
 
 // If DATA_DIR is backed by a persistent volume (e.g. Railway), a fresh/empty volume shadows
 // whatever git-tracked files used to live at this path in the image (data/monthly-financial.json
@@ -24,7 +29,11 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 const MONTHLY_FINANCIAL_FILE = path.join(DATA_DIR, 'monthly-financial.json');
 const MONTHLY_FINANCIAL_SEED = 'seed-data/monthly-financial.json';
 if (!fs.existsSync(MONTHLY_FINANCIAL_FILE) && fs.existsSync(MONTHLY_FINANCIAL_SEED)) {
-  fs.copyFileSync(MONTHLY_FINANCIAL_SEED, MONTHLY_FINANCIAL_FILE);
+  try {
+    fs.copyFileSync(MONTHLY_FINANCIAL_SEED, MONTHLY_FINANCIAL_FILE);
+  } catch (e) {
+    // Ignore errors - file may already exist or directory may be read-only
+  }
 }
 
 const RECIPES_FILE = path.join(DATA_DIR, 'recipes.json');
@@ -37,7 +46,11 @@ const PRODUCTION_FILE = path.join(DATA_DIR, 'production.json');
 const PL_CHANNEL_FILE = path.join(DATA_DIR, 'pl-by-channel.json');
 const PL_CHANNEL_SEED = 'seed-data/pl-by-channel.json';
 if (!fs.existsSync(PL_CHANNEL_FILE) && fs.existsSync(PL_CHANNEL_SEED)) {
-  fs.copyFileSync(PL_CHANNEL_SEED, PL_CHANNEL_FILE);
+  try {
+    fs.copyFileSync(PL_CHANNEL_SEED, PL_CHANNEL_FILE);
+  } catch (e) {
+    // Ignore errors - file may already exist or directory may be read-only
+  }
 }
 
 // Product Margins reads pipeline-computed recipe costs. Ship a snapshot as seed data so the tab has
@@ -45,8 +58,13 @@ if (!fs.existsSync(PL_CHANNEL_FILE) && fs.existsSync(PL_CHANNEL_SEED)) {
 const RECIPE_COSTS_TARGET = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
 const RECIPE_COSTS_SEED = 'seed-data/recipe-costs.json';
 if (!fs.existsSync(RECIPE_COSTS_TARGET) && fs.existsSync(RECIPE_COSTS_SEED)) {
-  fs.mkdirSync(path.join(DATA_DIR, 'pipeline'), { recursive: true });
-  fs.copyFileSync(RECIPE_COSTS_SEED, RECIPE_COSTS_TARGET);
+  try {
+    const pipelineDir = path.join(DATA_DIR, 'pipeline');
+    if (!fs.existsSync(pipelineDir)) fs.mkdirSync(pipelineDir, { recursive: true });
+    fs.copyFileSync(RECIPE_COSTS_SEED, RECIPE_COSTS_TARGET);
+  } catch (e) {
+    // Ignore errors - file may already exist or directory may be read-only
+  }
 }
 
 // Maps the bakery's named channels (as used elsewhere in the dashboard, e.g. P&L by Channel)
@@ -217,17 +235,15 @@ app.post('/api/upload/recipes', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const recipes = [];
-  fs.createReadStream(req.file.path)
+  Readable.from([req.file.buffer])
     .pipe(csv())
     .on('data', (row) => recipes.push(row))
     .on('end', () => {
       saveData(RECIPES_FILE, recipes);
-      fs.unlinkSync(req.file.path);
       cacheManager.invalidate('recipes');
       res.json({ success: true, count: recipes.length, recipes });
     })
     .on('error', (err) => {
-      fs.unlinkSync(req.file.path);
       res.status(400).json({ error: err.message });
     });
 });
@@ -237,17 +253,15 @@ app.post('/api/upload/ingredients', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const ingredients = [];
-  fs.createReadStream(req.file.path)
+  Readable.from([req.file.buffer])
     .pipe(csv())
     .on('data', (row) => ingredients.push(row))
     .on('end', () => {
       saveData(INGREDIENTS_FILE, ingredients);
-      fs.unlinkSync(req.file.path);
       cacheManager.invalidate('ingredients');
       res.json({ success: true, count: ingredients.length, ingredients });
     })
     .on('error', (err) => {
-      fs.unlinkSync(req.file.path);
       res.status(400).json({ error: err.message });
     });
 });
@@ -264,12 +278,11 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
 
   const location = req.body.location;
   if (!WASTE_LOCATIONS.some((l) => l.name === location)) {
-    fs.unlinkSync(req.file.path);
     return res.status(400).json({ error: `Unknown location "${location}". Expected one of: ${WASTE_LOCATIONS.map((l) => l.name).join(', ')}` });
   }
 
   const rows = [];
-  fs.createReadStream(req.file.path)
+  Readable.from([req.file.buffer])
     .pipe(csv())
     .on('data', (row) => {
       const date = (row['Date'] || '').trim();
@@ -286,12 +299,10 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
       const newDates = new Set(rows.map((r) => r.date));
       production[location] = existing.filter((r) => !newDates.has(r.date)).concat(rows);
       saveData(PRODUCTION_FILE, production);
-      fs.unlinkSync(req.file.path);
       cacheManager.invalidate(`waste_${location}`);
       res.json({ success: true, location, count: rows.length, totalRows: production[location].length });
     })
     .on('error', (err) => {
-      fs.unlinkSync(req.file.path);
       res.status(400).json({ error: err.message });
     });
 });
@@ -337,9 +348,12 @@ const normalizePLChannelName = (raw) => {
 };
 
 // Read a CSV positionally (no header row) - returns an array of rows, each an array of cell strings.
-const readCsvRowsPositional = (filePath) => new Promise((resolve, reject) => {
+const readCsvRowsPositional = (filePathOrBuffer) => new Promise((resolve, reject) => {
   const rows = [];
-  fs.createReadStream(filePath)
+  const stream = typeof filePathOrBuffer === 'string'
+    ? fs.createReadStream(filePathOrBuffer)
+    : Readable.from([filePathOrBuffer]);
+  stream
     .pipe(csv({ headers: false }))
     .on('data', (row) => rows.push(Object.keys(row).map((k) => row[k])))
     .on('end', () => resolve(rows))
@@ -353,7 +367,7 @@ const readCsvRowsPositional = (filePath) => new Promise((resolve, reject) => {
 app.post('/api/upload/pl-channel/market-analysis', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
-    const rows = await readCsvRowsPositional(req.file.path);
+    const rows = await readCsvRowsPositional(req.file.buffer);
     const markets = rows.slice(4)
       .filter((r) => (r[0] || '').trim())
       .map((r) => ({
@@ -392,10 +406,8 @@ app.post('/api/upload/pl-channel/market-analysis', upload.single('file'), async 
     data.markets = markets;
     data.marketsUpdatedAt = new Date().toISOString();
     savePLChannelData(data);
-    fs.unlinkSync(req.file.path);
     res.json({ success: true, count: markets.length });
   } catch (err) {
-    fs.unlinkSync(req.file.path);
     res.status(400).json({ error: err.message });
   }
 });
@@ -407,7 +419,7 @@ app.post('/api/upload/pl-channel/market-analysis', upload.single('file'), async 
 app.post('/api/upload/pl-channel/non-market', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
-    const rows = await readCsvRowsPositional(req.file.path);
+    const rows = await readCsvRowsPositional(req.file.buffer);
     const parseChannelRow = (r) => ({
       name: normalizePLChannelName(r[0]),
       avgWeeklyRevenue: parseMoney(r[1]),
@@ -446,10 +458,8 @@ app.post('/api/upload/pl-channel/non-market', upload.single('file'), async (req,
     data.channels = channels;
     data.channelsUpdatedAt = new Date().toISOString();
     savePLChannelData(data);
-    fs.unlinkSync(req.file.path);
     res.json({ success: true, count: channels.length });
   } catch (err) {
-    fs.unlinkSync(req.file.path);
     res.status(400).json({ error: err.message });
   }
 });
@@ -463,7 +473,7 @@ app.post('/api/upload/pl-channel/non-market', upload.single('file'), async (req,
 app.post('/api/upload/pl-channel/revenue-allocation', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
-    const rows = await readCsvRowsPositional(req.file.path);
+    const rows = await readCsvRowsPositional(req.file.buffer);
     const named = rows.filter((r) => (r[1] || '').trim() && parseMoney(r[2]) != null);
     const totalRow = named.find((r) => r[1].trim() === 'Total');
     const byChannel = named
@@ -483,10 +493,8 @@ app.post('/api/upload/pl-channel/revenue-allocation', upload.single('file'), asy
     };
     data.revenueAllocationUpdatedAt = new Date().toISOString();
     savePLChannelData(data);
-    fs.unlinkSync(req.file.path);
     res.json({ success: true, count: byChannel.length });
   } catch (err) {
-    fs.unlinkSync(req.file.path);
     res.status(400).json({ error: err.message });
   }
 });
