@@ -4,6 +4,7 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
 const path = require('path');
+const { Readable } = require('stream');
 const axios = require('axios');
 require('dotenv').config();
 
@@ -215,17 +216,15 @@ app.post('/api/upload/recipes', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const recipes = [];
-  fs.createReadStream(req.file.path)
+  Readable.from([req.file.buffer])
     .pipe(csv())
     .on('data', (row) => recipes.push(row))
     .on('end', () => {
       saveData(RECIPES_FILE, recipes);
-      fs.unlinkSync(req.file.path);
       cacheManager.invalidate('recipes');
       res.json({ success: true, count: recipes.length, recipes });
     })
     .on('error', (err) => {
-      fs.unlinkSync(req.file.path);
       res.status(400).json({ error: err.message });
     });
 });
@@ -235,17 +234,15 @@ app.post('/api/upload/ingredients', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const ingredients = [];
-  fs.createReadStream(req.file.path)
+  Readable.from([req.file.buffer])
     .pipe(csv())
     .on('data', (row) => ingredients.push(row))
     .on('end', () => {
       saveData(INGREDIENTS_FILE, ingredients);
-      fs.unlinkSync(req.file.path);
       cacheManager.invalidate('ingredients');
       res.json({ success: true, count: ingredients.length, ingredients });
     })
     .on('error', (err) => {
-      fs.unlinkSync(req.file.path);
       res.status(400).json({ error: err.message });
     });
 });
@@ -262,12 +259,11 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
 
   const location = req.body.location;
   if (!WASTE_LOCATIONS.some((l) => l.name === location)) {
-    fs.unlinkSync(req.file.path);
     return res.status(400).json({ error: `Unknown location "${location}". Expected one of: ${WASTE_LOCATIONS.map((l) => l.name).join(', ')}` });
   }
 
   const rows = [];
-  fs.createReadStream(req.file.path)
+  Readable.from([req.file.buffer])
     .pipe(csv())
     .on('data', (row) => {
       const date = (row['Date'] || '').trim();
@@ -284,12 +280,10 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
       const newDates = new Set(rows.map((r) => r.date));
       production[location] = existing.filter((r) => !newDates.has(r.date)).concat(rows);
       saveData(PRODUCTION_FILE, production);
-      fs.unlinkSync(req.file.path);
       cacheManager.invalidate(`waste_${location}`);
       res.json({ success: true, location, count: rows.length, totalRows: production[location].length });
     })
     .on('error', (err) => {
-      fs.unlinkSync(req.file.path);
       res.status(400).json({ error: err.message });
     });
 });
@@ -335,9 +329,12 @@ const normalizePLChannelName = (raw) => {
 };
 
 // Read a CSV positionally (no header row) - returns an array of rows, each an array of cell strings.
-const readCsvRowsPositional = (filePath) => new Promise((resolve, reject) => {
+const readCsvRowsPositional = (filePathOrBuffer) => new Promise((resolve, reject) => {
   const rows = [];
-  fs.createReadStream(filePath)
+  const stream = typeof filePathOrBuffer === 'string'
+    ? fs.createReadStream(filePathOrBuffer)
+    : Readable.from([filePathOrBuffer]);
+  stream
     .pipe(csv({ headers: false }))
     .on('data', (row) => rows.push(Object.keys(row).map((k) => row[k])))
     .on('end', () => resolve(rows))
@@ -351,7 +348,7 @@ const readCsvRowsPositional = (filePath) => new Promise((resolve, reject) => {
 app.post('/api/upload/pl-channel/market-analysis', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
-    const rows = await readCsvRowsPositional(req.file.path);
+    const rows = await readCsvRowsPositional(req.file.buffer);
     const markets = rows.slice(4)
       .filter((r) => (r[0] || '').trim())
       .map((r) => ({
@@ -390,10 +387,8 @@ app.post('/api/upload/pl-channel/market-analysis', upload.single('file'), async 
     data.markets = markets;
     data.marketsUpdatedAt = new Date().toISOString();
     savePLChannelData(data);
-    fs.unlinkSync(req.file.path);
     res.json({ success: true, count: markets.length });
   } catch (err) {
-    fs.unlinkSync(req.file.path);
     res.status(400).json({ error: err.message });
   }
 });
@@ -405,7 +400,7 @@ app.post('/api/upload/pl-channel/market-analysis', upload.single('file'), async 
 app.post('/api/upload/pl-channel/non-market', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
-    const rows = await readCsvRowsPositional(req.file.path);
+    const rows = await readCsvRowsPositional(req.file.buffer);
     const parseChannelRow = (r) => ({
       name: normalizePLChannelName(r[0]),
       avgWeeklyRevenue: parseMoney(r[1]),
@@ -444,10 +439,8 @@ app.post('/api/upload/pl-channel/non-market', upload.single('file'), async (req,
     data.channels = channels;
     data.channelsUpdatedAt = new Date().toISOString();
     savePLChannelData(data);
-    fs.unlinkSync(req.file.path);
     res.json({ success: true, count: channels.length });
   } catch (err) {
-    fs.unlinkSync(req.file.path);
     res.status(400).json({ error: err.message });
   }
 });
@@ -461,7 +454,7 @@ app.post('/api/upload/pl-channel/non-market', upload.single('file'), async (req,
 app.post('/api/upload/pl-channel/revenue-allocation', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
-    const rows = await readCsvRowsPositional(req.file.path);
+    const rows = await readCsvRowsPositional(req.file.buffer);
     const named = rows.filter((r) => (r[1] || '').trim() && parseMoney(r[2]) != null);
     const totalRow = named.find((r) => r[1].trim() === 'Total');
     const byChannel = named
@@ -481,10 +474,8 @@ app.post('/api/upload/pl-channel/revenue-allocation', upload.single('file'), asy
     };
     data.revenueAllocationUpdatedAt = new Date().toISOString();
     savePLChannelData(data);
-    fs.unlinkSync(req.file.path);
     res.json({ success: true, count: byChannel.length });
   } catch (err) {
-    fs.unlinkSync(req.file.path);
     res.status(400).json({ error: err.message });
   }
 });
