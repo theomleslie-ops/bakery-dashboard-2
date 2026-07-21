@@ -1273,8 +1273,17 @@ const getQBWeeklyRows = async (rangeStart, rangeEndInclusive) => {
 // Get raw P/L Statement from QuickBooks
 app.get('/api/quickbooks/pl', async (req, res) => {
   try {
-    const year = new Date().getFullYear();
-    const data = await fetchQBProfitAndLoss(req.query.start_date || `${year}-01-01`, req.query.end_date || `${year}-12-31`);
+    const cacheKey = `qb-pl-${req.query.start_date || 'default'}-${req.query.end_date || 'default'}`;
+    const cached = cacheManager.get(cacheKey);
+    if (cached) return res.json({ success: true, data: cached, note: 'P/L statement from QuickBooks (cached)' });
+
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const startDate = req.query.start_date || thirtyDaysAgo.toISOString().split('T')[0];
+    const endDate = req.query.end_date || today.toISOString().split('T')[0];
+
+    const data = await fetchQBProfitAndLoss(startDate, endDate);
+    cacheManager.set(cacheKey, data, 10 * 60 * 1000); // Cache for 10 minutes
     res.json({ success: true, data, note: 'P/L statement from QuickBooks' });
   } catch (err) {
     if (err.code === 'QB_NOT_CONNECTED') return res.json({ error: err.message, connected: false, data: [] });
@@ -1285,12 +1294,18 @@ app.get('/api/quickbooks/pl', async (req, res) => {
 // Get Account Balances from QuickBooks
 app.get('/api/quickbooks/accounts', async (req, res) => {
   try {
+    const cacheKey = 'qb-accounts';
+    const cached = cacheManager.get(cacheKey);
+    if (cached) return res.json({ success: true, data: cached, note: 'Account balances from QuickBooks (cached)' });
+
     const tokens = await getValidQBAccessToken();
     const response = await axios.get(`${getQBBaseUrl()}/v3/company/${tokens.realmId}/query`, {
       params: { query: 'SELECT * FROM Account' },
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
     });
-    res.json({ success: true, data: response.data.QueryResponse.Account || [], note: 'Account balances from QuickBooks' });
+    const data = response.data.QueryResponse.Account || [];
+    cacheManager.set(cacheKey, data, 10 * 60 * 1000); // Cache for 10 minutes
+    res.json({ success: true, data, note: 'Account balances from QuickBooks' });
   } catch (err) {
     if (err.code === 'QB_NOT_CONNECTED') return res.json({ error: err.message, connected: false, data: [] });
     res.status(500).json({ error: 'QuickBooks API error', message: err.response?.data?.fault?.detail?.[0]?.message || err.message });
@@ -1300,12 +1315,18 @@ app.get('/api/quickbooks/accounts', async (req, res) => {
 // Get Expenses from QuickBooks (filtered by category)
 app.get('/api/quickbooks/expenses', async (req, res) => {
   try {
+    const cacheKey = 'qb-expenses';
+    const cached = cacheManager.get(cacheKey);
+    if (cached) return res.json({ success: true, data: cached, note: 'Expense accounts from QuickBooks (cached)' });
+
     const tokens = await getValidQBAccessToken();
     const response = await axios.get(`${getQBBaseUrl()}/v3/company/${tokens.realmId}/query`, {
       params: { query: "SELECT * FROM Account WHERE AccountType='Expense'" },
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
     });
-    res.json({ success: true, data: response.data.QueryResponse.Account || [], note: 'Expense accounts from QuickBooks' });
+    const data = response.data.QueryResponse.Account || [];
+    cacheManager.set(cacheKey, data, 10 * 60 * 1000); // Cache for 10 minutes
+    res.json({ success: true, data, note: 'Expense accounts from QuickBooks' });
   } catch (err) {
     if (err.code === 'QB_NOT_CONNECTED') return res.json({ error: err.message, connected: false, data: [] });
     res.status(500).json({ error: 'QuickBooks API error', message: err.response?.data?.fault?.detail?.[0]?.message || err.message });
