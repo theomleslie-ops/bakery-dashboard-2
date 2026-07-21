@@ -1630,7 +1630,7 @@ app.get('/api/market-performance', async (req, res) => {
       .sort((a, b) => b.revenue.reduce((s, v) => s + v, 0) - a.revenue.reduce((s, v) => s + v, 0));
 
     const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: currentWeekStart };
-    cacheManager.set(cacheKey, response, 60 * 60 * 1000);
+    cacheManager.set(cacheKey, response, 4 * 60 * 60 * 1000); // Cache for 4 hours
     res.json(response);
   } catch (err) {
     res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, weekStarts: [], markets: [] });
