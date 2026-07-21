@@ -22,6 +22,12 @@ const round2 = (n) => (n == null ? null : Math.round(n * 100) / 100);
 
 // ---- name matching ----
 const STOP = new Set(['for', 'of', 'the', 'and', 'a', 'pinch', 'to', 'with', 'in', 'raw', 'fresh']);
+// Prep/state descriptors: variants consisting only of these words carry no ingredient info and
+// must not be allowed to score as a standalone match (e.g. "frozen" from "Blackberries (frozen)").
+const PREP_DESCRIPTORS = new Set(['frozen', 'fresh', 'dried', 'diced', 'chopped', 'sliced', 'minced',
+  'ground', 'crushed', 'shredded', 'melted', 'softened', 'cooked', 'whole', 'canned', 'bulk',
+  'cold', 'hot', 'warm', 'room', 'temp', 'roasted', 'toasted', 'blanched', 'peeled', 'seeded',
+  'stemmed', 'trimmed', 'separated', 'folded']);
 // Recipe ingredient names are bilingual ("White Sugar/Azucar", "AP Flour (AP Harina)") — keep the
 // English part before a slash or parenthesis.
 const englishPart = (n) => String(n).split('/')[0].split('(')[0].trim();
@@ -133,6 +139,11 @@ const rankCandidates = (name, cwList) => {
     for (const variant of variants) {
       const rTok = tokenize(variant);
       if (!rTok.length) continue;
+
+      // Skip variants consisting entirely of prep descriptors — they carry no ingredient info
+      // and would cause false matches (e.g. "frozen" matching "FROZEN EDAMAME" instead of failing).
+      const allDescriptors = rTok.every((t) => PREP_DESCRIPTORS.has(t));
+      if (allDescriptors) continue;
 
       for (const cw of cwList) {
         const scored = scoreCandidate(rTok, cw, fuzzy);
