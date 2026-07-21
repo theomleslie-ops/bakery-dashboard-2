@@ -1575,7 +1575,7 @@
 
     const MARGIN_WEEK_OPTIONS = [
       { weeks: 4, label: '4 Weeks' }, { weeks: 8, label: '8 Weeks' },
-      { weeks: 12, label: '12 Weeks' }, { weeks: 26, label: '26 Weeks' },
+      { weeks: 12, label: '12 Weeks' }, { weeks: 26, label: '26 Weeks' }, { weeks: 52, label: '52 Weeks (12mo)' },
     ];
 
     function MarginScatterChart({ points }) {
@@ -1646,61 +1646,11 @@
       );
     }
 
-    function TopRevenuePanel() {
-      const [data, setData] = useState(null);
-      const [status, setStatus] = useState('loading');
-      const [error, setError] = useState('');
-      useEffect(() => {
-        const fetchData = async () => {
-          try {
-            setStatus('loading');
-            const res = await fetch(`${window.location.origin}/api/product-revenue-top?weeks=52`);
-            const result = await res.json();
-            if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
-            setData(result);
-            setStatus('ready');
-          } catch (e) { setError('Failed to load data: ' + e.message); setStatus('error'); }
-        };
-        fetchData();
-      }, []);
-
-      const products = (data && data.products) || [];
-
-      return (
-        <div className="chart-container" style={{ marginBottom: '24px' }}>
-          <div className="chart-title">Top 20 Products by Revenue</div>
-          <div className="panel-hint" style={{ marginBottom: '12px' }}>Last 12 months — helps prioritize which products to cost first.</div>
-          {error && <div className="error">{error}</div>}
-          {status === 'loading' && <div className="loading">Loading…</div>}
-          {status === 'ready' && products.length > 0 && (
-            <table>
-              <thead><tr>
-                <th style={{ textAlign: 'center', width: '40px' }}>#</th>
-                <th style={{ textAlign: 'left' }}>Product</th>
-                <th style={{ textAlign: 'right' }}>Units Sold</th>
-                <th style={{ textAlign: 'right' }}>Revenue</th>
-              </tr></thead>
-              <tbody>
-                {products.map((p, i) => (
-                  <tr key={p.name}>
-                    <td style={{ textAlign: 'center', fontWeight: '600', color: 'var(--chart-muted)' }}>{i + 1}</td>
-                    <td style={{ textAlign: 'left' }}>{p.name}</td>
-                    <td style={{ textAlign: 'right' }}>{fmtQty(p.volume)}</td>
-                    <td style={{ textAlign: 'right', fontWeight: '600' }}>{fmtMoney(p.revenue)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      );
-    }
-
     function MarginScatterDashboard() {
       const [data, setData] = useState(null);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
-      const [weeks, setWeeks] = useState(12);
+      const [weeks, setWeeks] = useState(52);
       const [sortBy, setSortBy] = useState('totalMargin'); // 'totalMargin' | 'marginPct'
       useEffect(() => { fetchData(); }, [weeks]);
       const fetchData = async () => {
@@ -1714,20 +1664,16 @@
         } catch (e) { setError('Failed to load data: ' + e.message); setStatus('error'); }
       };
 
-      const points = (data && data.points) || [];
-      const coverage = (data && data.coverage) || {};
-      const needsYield = coverage.needsYield || [];
-      const unpricedIngredient = coverage.unpricedIngredient || [];
-      const noSales = coverage.noSales || [];
-      const soldButNoRecipe = coverage.soldButNoRecipe || [];
-      const sheetSkipped = coverage.sheetSkipped || [];
+      const top20 = (data && data.top20) || [];
+      const costedTop20 = top20.filter(p => p.status === 'costed');
+      const needsInfoTop20 = top20.filter(p => p.status === 'needs-info');
 
-      const totalMargin = points.reduce((s, p) => s + p.totalMargin, 0);
-      const totalRevenue = points.reduce((s, p) => s + p.revenue, 0);
+      const totalMargin = costedTop20.reduce((s, p) => s + p.totalMargin, 0);
+      const totalRevenue = costedTop20.reduce((s, p) => s + p.revenue, 0);
       const weightedMarginPct = totalRevenue > 0 ? (totalMargin / totalRevenue) * 100 : 0;
-      const sorted = [...points].sort((a, b) => sortBy === 'marginPct' ? b.marginPct - a.marginPct : b.totalMargin - a.totalMargin);
+      const sorted = [...costedTop20].sort((a, b) => sortBy === 'marginPct' ? b.marginPct - a.marginPct : b.totalMargin - a.totalMargin);
       const best = sorted[0];
-      const worst = points.length ? [...points].sort((a, b) => a.marginPct - b.marginPct)[0] : null;
+      const worst = costedTop20.length ? [...costedTop20].sort((a, b) => a.marginPct - b.marginPct)[0] : null;
       const marginColor = (pct) => pct >= 60 ? '#2f9e44' : pct >= 35 ? '#b8860b' : '#d03b3b';
       const asDate = (iso) => iso ? new Date(iso).toLocaleDateString() : '—';
 
@@ -1750,17 +1696,16 @@
           {status === 'loading' && <div className="loading">Loading margins… aggregating Square sales across locations (can take a minute the first time).</div>}
           {status === 'error' && <div className="error">{error}</div>}
           {status === 'no-costs' && <div className="empty">No recipe costs yet. Run <code>npm run margins</code> (needs QuickBooks + Google connected) to compute cost-to-make, then this view populates.</div>}
-          <TopRevenuePanel />
           {status === 'ready' && (
             <React.Fragment>
               <div className="metrics">
-                <div className="metric-card"><div className="metric-label">Products Costed &amp; Sold</div><div className="metric-value">{points.length}</div><div className="metric-sub">of {(data.totals && data.totals.recipes) || '—'} recipes</div></div>
+                <div className="metric-card"><div className="metric-label">Products Costed &amp; Sold</div><div className="metric-value">{costedTop20.length}</div><div className="metric-sub">of top 20 by revenue</div></div>
                 <div className="metric-card"><div className="metric-label">Total Gross Margin</div><div className="metric-value">{fmtMoney(totalMargin)}</div><div className="metric-sub">over {weeks} weeks</div></div>
                 <div className="metric-card"><div className="metric-label">Weighted Avg Margin</div><div className="metric-value">{weightedMarginPct.toFixed(1)}%</div><div className="metric-sub">revenue-weighted</div></div>
                 {best && <div className="metric-card"><div className="metric-label">Top Margin Contributor</div><div className="metric-value" style={{ fontSize: '18px' }}>{best.name}</div><div className="metric-sub">{fmtMoney(best.totalMargin)} · {best.marginPct}%</div></div>}
               </div>
 
-              {points.length > 0 ? (
+              {costedTop20.length > 0 ? (
                 <div className="chart-container">
                   <div className="chart-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                     <span>Products by {sortBy === 'totalMargin' ? 'total margin contribution' : 'margin %'}</span>
@@ -1799,37 +1744,38 @@
                 <div className="empty">Nothing costed &amp; sold yet — a product needs every ingredient priced, a per-unit yield, <em>and</em> Square sales. The coverage panels below show exactly what's missing.</div>
               )}
 
-              {points.length > 0 && (
+              {costedTop20.length > 0 && (
                 <div className="chart-container">
                   <div className="chart-title">Volume × Gross Margin</div>
                   <div className="panel-hint">Bubble size = revenue. Best products sit top-right (high margin, high volume).</div>
-                  <MarginScatterChart points={points} />
+                  <MarginScatterChart points={costedTop20} />
                 </div>
               )}
 
-              {(needsYield.length + unpricedIngredient.length + soldButNoRecipe.length + noSales.length + sheetSkipped.length) > 0 && (
-                <h2 style={{ margin: '32px 0 4px', color: '#6b4423', fontSize: '20px' }}>Coverage — close these to cost more products</h2>
+              {needsInfoTop20.length > 0 && (
+                <div className="chart-container">
+                  <div className="chart-title" style={{ color: '#d03b3b' }}>Top 20 by Revenue — What's Missing</div>
+                  <div className="panel-hint">These are in your top 20 revenue drivers but aren't costed yet. Here's what each one needs to be priced for gross margin calculations.</div>
+                  <table>
+                    <thead><tr>
+                      <th style={{ textAlign: 'left' }}>Product</th>
+                      <th style={{ textAlign: 'right' }}>Units Sold</th>
+                      <th style={{ textAlign: 'right' }}>Revenue</th>
+                      <th style={{ textAlign: 'left' }}>What's Needed</th>
+                    </tr></thead>
+                    <tbody>
+                      {needsInfoTop20.map((p) => (
+                        <tr key={p.name}>
+                          <td style={{ textAlign: 'left' }}>{p.name}</td>
+                          <td style={{ textAlign: 'right' }}>{fmtQty(p.volume)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: '600' }}>{fmtMoney(p.revenue)}</td>
+                          <td style={{ textAlign: 'left', fontSize: '12px', color: 'var(--chart-ink-secondary)' }}>{p.detail}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
-              <CoveragePanel title="Needs a per-unit yield" count={needsYield.length}
-                hint="Fully priced, but the recipe doesn't state grams-per-unit / units-per-batch, so cost-per-item can't be computed. Add a yield cell to the sheet or an entry in yield-overrides.json.">
-                {needsYield.map((r) => <div key={r.recipe} style={{ fontSize: '13px', padding: '2px 0' }}>• {r.recipe} <span style={{ color: 'var(--chart-muted)' }}>(batch cost {fmtMoney(r.batchCost || 0)})</span></div>)}
-              </CoveragePanel>
-              <CoveragePanel title="Unpriced ingredient" count={unpricedIngredient.length}
-                hint="At least one ingredient has no Chef's Warehouse price — a name mismatch (fix in ingredient-overrides.json) or genuinely bought elsewhere.">
-                {unpricedIngredient.map((r) => <div key={r.recipe} style={{ fontSize: '13px', padding: '2px 0' }}>• <strong>{r.recipe}</strong> — missing {(r.missing || []).join(', ')}</div>)}
-              </CoveragePanel>
-              <CoveragePanel title="Sold in Square, but no recipe" count={soldButNoRecipe.length}
-                hint="Products with real sales that matched no recipe — the true 'we can't cost this yet' list. Add/rename a recipe, or pin it in product-name-overrides.json. Top by revenue.">
-                {soldButNoRecipe.map((r) => <div key={r.name} style={{ fontSize: '13px', padding: '2px 0' }}>• {r.name} <span style={{ color: 'var(--chart-muted)' }}>({r.volume} sold · {fmtMoney(r.revenue)})</span></div>)}
-              </CoveragePanel>
-              <CoveragePanel title="Costed, but no Square sales" count={noSales.length}
-                hint="Priced with a yield, but no matching Square sales in this window — a component/filling not sold on its own, or a name that didn't match.">
-                {noSales.map((n) => <div key={n} style={{ fontSize: '13px', padding: '2px 0' }}>• {n}</div>)}
-              </CoveragePanel>
-              <CoveragePanel title="Sheets skipped" count={sheetSkipped.length}
-                hint="Files in the recipe folder that didn't parse as a RECIPE SHEET (not a recipe, or a different layout).">
-                {sheetSkipped.map((n) => <div key={n} style={{ fontSize: '13px', padding: '2px 0' }}>• {n}</div>)}
-              </CoveragePanel>
             </React.Fragment>
           )}
         </div>

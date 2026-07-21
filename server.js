@@ -1815,6 +1815,15 @@ const matchProductToSquare = (recipeName, salesKeys) => {
   return best && best.matched >= need ? best.key : null;
 };
 
+// Rank all Square products by revenue, returning top N
+const rankProductsByRevenue = (sales, n = 20) => {
+  return Object.entries(sales)
+    .map(([name, s]) => ({ name, volume: round2(s.volume), revenue: round2((s.avgPrice || 0) * s.volume) }))
+    .filter(p => p.revenue > 0)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, n);
+};
+
 // GET /api/product-margins?weeks=12 — one row per fully-costed product that sold: sell price, cost,
 // margin $/%, units, and total margin contribution ($ = margin × units). Everything that couldn't be
 // costed or matched is returned in `coverage` so the bakery can drive coverage toward 100%.
@@ -1831,7 +1840,9 @@ app.get('/api/product-margins', async (req, res) => {
   const weeks = Math.min(Math.max(parseInt(req.query.weeks, 10) || 12, 1), 52);
   const rawNameOverrides = loadData(PRODUCT_NAME_OVERRIDES_FILE);
   const nameOverrides = rawNameOverrides && !Array.isArray(rawNameOverrides) ? rawNameOverrides : {};
-  const exclusions = Array.isArray(loadData(RECIPE_EXCLUSIONS_FILE)) ? new Set(loadData(RECIPE_EXCLUSIONS_FILE)) : new Set();
+  const exclusionsRaw = Array.isArray(loadData(RECIPE_EXCLUSIONS_FILE)) ? loadData(RECIPE_EXCLUSIONS_FILE) : [];
+  const nameExclusions = new Set(exclusionsRaw.filter(e => typeof e === 'string'));
+  const sheetExclusions = new Set(exclusionsRaw.filter(e => e && typeof e === 'object').map(e => `${e.recipe}::${e.sheet}`));
   try {
     const sales = await fetchProductSales(weeks);
     const salesKeys = Object.keys(sales);
@@ -1841,7 +1852,7 @@ app.get('/api/product-margins', async (req, res) => {
     const noSales = [];              // costed, but no Square sales matched
     report.recipes.forEach((r) => {
       if (!r.allPriced || r.costPerUnit == null) return; // handled via coverage buckets below
-      if (exclusions.has(r.recipe)) return; // skip excluded recipes
+      if (nameExclusions.has(r.recipe) || sheetExclusions.has(`${r.recipe}::${r.sheet}`)) return; // skip excluded recipes
       const key = nameOverrides[r.recipe] ? String(nameOverrides[r.recipe]).toLowerCase() : matchProductToSquare(r.recipe, salesKeys);
       const s = key ? sales[key] : null;
       if (!s || !(s.volume > 0) || !(s.avgPrice > 0)) { noSales.push(r.recipe); return; }
@@ -1877,6 +1888,32 @@ app.get('/api/product-margins', async (req, res) => {
       soldButNoRecipe,
     };
 
+    // Compute top 20 by revenue across all Square sales, with costing status and reasons for gaps
+    const allByRevenue = rankProductsByRevenue(sales, 20);
+    const top20 = allByRevenue.map((entry) => {
+      const costedPoint = points.find((p) => p.name === entry.name);
+      if (costedPoint) {
+        return {
+          ...entry,
+          status: 'costed',
+          sellPrice: costedPoint.sellPrice,
+          cost: costedPoint.cost,
+          marginDollars: costedPoint.marginDollars,
+          marginPct: costedPoint.marginPct,
+          totalMargin: costedPoint.totalMargin,
+        };
+      }
+      // Not costed — items in top 20 by Square sales are definitely not in a "no sales" bucket,
+      // so almost always "no recipe". Simpler to just report that rather than doing expensive
+      // matchProductToSquare fuzzy matching against every coverage bucket.
+      return {
+        ...entry,
+        status: 'needs-info',
+        reason: 'no-recipe',
+        detail: 'No recipe found for this product — needs a new recipe sheet, or a name fix in product-name-overrides.json if a similar recipe already exists.',
+      };
+    });
+
     res.json({
       status: 'ready',
       weeks,
@@ -1885,6 +1922,7 @@ app.get('/api/product-margins', async (req, res) => {
       totals: { ...(report.totals || {}), plotted: points.length },
       points,
       coverage,
+      top20,
     });
   } catch (err) {
     res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, points: [] });
