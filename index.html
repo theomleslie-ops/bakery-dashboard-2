@@ -1587,7 +1587,7 @@
       const revs = points.map(p => p.revenue);
       const volMax = Math.max(1, ...vols) * 1.08;
       const marginMax = Math.min(100, Math.max(10, Math.ceil((Math.max(...margins, 0) + 5) / 10) * 10));
-      const marginMin = Math.min(50, Math.floor((Math.min(...margins, 50)) / 10) * 10);
+      const marginMin = Math.min(60, Math.floor((Math.min(...margins, 60)) / 10) * 10);
       const xPos = (m) => plotLeft + ((m - marginMin) / (marginMax - marginMin || 1)) * (plotRight - plotLeft);
       const yPos = (v) => plotBottom - (v / volMax) * (plotBottom - plotTop);
       const rMin = Math.min(...revs), rMax = Math.max(...revs);
