@@ -15,6 +15,7 @@ const { buildPriceList } = require('./chefs-warehouse');
 const OUT_DIR = path.join(__dirname, '..', 'data', 'pipeline');
 const PRICES_FILE = path.join(OUT_DIR, 'chefs-warehouse-prices.json');
 const OVERRIDES_FILE = path.join(OUT_DIR, 'ingredient-overrides.json'); // { "<recipe ingredient>": "<CW item code>" }
+const PRICE_OVERRIDES_FILE = path.join(OUT_DIR, 'ingredient-price-overrides.json'); // { "<ingredient>": <$/kg> }
 const YIELD_OVERRIDES_FILE = path.join(OUT_DIR, 'yield-overrides.json'); // { "<recipe>": <grams per unit> }
 
 const load = (f, fallback) => { try { return JSON.parse(fs.readFileSync(f, 'utf-8')); } catch { return fallback; } };
@@ -22,6 +23,12 @@ const round2 = (n) => (n == null ? null : Math.round(n * 100) / 100);
 
 // ---- name matching ----
 const STOP = new Set(['for', 'of', 'the', 'and', 'a', 'pinch', 'to', 'with', 'in', 'raw', 'fresh']);
+// Prep/state descriptors: variants consisting only of these words carry no ingredient info and
+// must not be allowed to score as a standalone match (e.g. "frozen" from "Blackberries (frozen)").
+const PREP_DESCRIPTORS = new Set(['frozen', 'fresh', 'dried', 'diced', 'chopped', 'sliced', 'minced',
+  'ground', 'crushed', 'shredded', 'melted', 'softened', 'cooked', 'whole', 'canned', 'bulk',
+  'cold', 'hot', 'warm', 'room', 'temp', 'roasted', 'toasted', 'blanched', 'peeled', 'seeded',
+  'stemmed', 'trimmed', 'separated', 'folded']);
 // Recipe ingredient names are bilingual ("White Sugar/Azucar", "AP Flour (AP Harina)") — keep the
 // English part before a slash or parenthesis.
 const englishPart = (n) => String(n).split('/')[0].split('(')[0].trim();
@@ -134,6 +141,11 @@ const rankCandidates = (name, cwList) => {
       const rTok = tokenize(variant);
       if (!rTok.length) continue;
 
+      // Skip variants consisting entirely of prep descriptors — they carry no ingredient info
+      // and would cause false matches (e.g. "frozen" matching "FROZEN EDAMAME" instead of failing).
+      const allDescriptors = rTok.every((t) => PREP_DESCRIPTORS.has(t));
+      if (allDescriptors) continue;
+
       for (const cw of cwList) {
         const scored = scoreCandidate(rTok, cw, fuzzy);
         if (scored) allCandidates.push(scored);
@@ -156,17 +168,20 @@ const confidenceOf = (ranked) => {
 // ---- costing one recipe ----
 // subRecipePrices maps a normalized recipe name → its $/kg, so an ingredient that is itself one of
 // our recipes (Levain, Frangipane, a glaze) is priced from that recipe instead of Chef's Warehouse.
-const costRecipe = (recipe, cwList, overrides, subRecipePrices = {}) => {
+const costRecipe = (recipe, cwList, overrides, priceOverrides = {}, subRecipePrices = {}) => {
   const byCode = new Map(cwList.map((c) => [c.itemCode, c]));
   const lines = recipe.ingredients.map((ing) => {
     const norm = normName(ing.name);
     const override = overrides[ing.name] || overrides[norm];
+    const priceOverride = priceOverrides[ing.name] || priceOverrides[norm];
     let matchedTo = null, itemCode = null, pricePerKg = null, confidence = 'none', alternates = [];
 
     if (norm === 'water' || norm === 'ice') {
       matchedTo = '(water — no cost)'; pricePerKg = 0; confidence = 'water';
     } else if (norm === 'mother' || norm === 'starter' || norm === 'levain build') {
       matchedTo = '(starter — negligible)'; pricePerKg = 0; confidence = 'starter';
+    } else if (priceOverride != null) {
+      matchedTo = `(manual override)`; pricePerKg = priceOverride; confidence = 'price-override';
     } else if (override && byCode.has(override)) {
       const m = byCode.get(override); matchedTo = m.description; itemCode = m.itemCode; pricePerKg = m.pricePerKg ?? null; confidence = 'override';
     } else if (subRecipePrices[norm] != null) {
@@ -221,23 +236,61 @@ const buildCostReport = async ({ folderName = 'Recipe LSB', refreshPrices = fals
   }
   const overrides = load(OVERRIDES_FILE, {});
   const yieldOverrides = load(YIELD_OVERRIDES_FILE, {});
+  const priceOverrides = load(PRICE_OVERRIDES_FILE, {});
 
   const { folder, recipes, skipped } = await pullRecipes(folderName, { yieldOverrides });
 
   // Iterate: cost with CW prices, then derive $/kg for any fully-costed recipe and re-cost so
   // recipes that use those as sub-recipes (Levain → scones) resolve. Repeat until nothing new completes.
-  let costed = recipes.map((r) => costRecipe(r, prices.ingredients, overrides, {}));
+  let costed = recipes.map((r) => costRecipe(r, prices.ingredients, overrides, priceOverrides, {}));
   for (let i = 0; i < 6; i++) {
     const subPrices = {};
     costed.forEach((c) => { if (c.totalKg > 0 && c.allPriced) subPrices[normName(c.recipe)] = c.batchCost / c.totalKg; });
-    const next = recipes.map((r) => costRecipe(r, prices.ingredients, overrides, subPrices));
+    const next = recipes.map((r) => costRecipe(r, prices.ingredients, overrides, priceOverrides, subPrices));
     const gained = next.filter((c) => c.allPriced).length - costed.filter((c) => c.allPriced).length;
     costed = next;
     if (gained <= 0) break;
   }
 
+  // Synthesize portion-derived recipes: if a recipe (e.g. "Country dough") is fully costed,
+  // and portion-overrides.json specifies sibling products that are portions of it, create
+  // synthetic entries so Square products can match to them.
+  const portionOverrides = load(path.join(OUT_DIR, 'portion-overrides.json'), {});
+  const portionSourceMissing = [];
+  const costByRecipeName = {};
+  costed.forEach((c) => {
+    if (c.allPriced && c.costPerUnit != null) costByRecipeName[c.recipe] = c;
+  });
+
+  Object.entries(portionOverrides).forEach(([derivedName, config]) => {
+    const sourceRecipe = costByRecipeName[config.sourceRecipe];
+    if (!sourceRecipe) {
+      portionSourceMissing.push(derivedName);
+      return;
+    }
+    const portionKgValue = (config.portionGrams || 0) / 1000;
+    const derived = {
+      recipe: derivedName,
+      sheet: `derived: ${sourceRecipe.sheet}`,
+      totalKg: sourceRecipe.totalKg,
+      portionKg: portionKgValue,
+      portionBasis: `override ${config.portionGrams}g (of ${config.sourceRecipe})`,
+      unitsPerBatch: sourceRecipe.totalKg / portionKgValue,
+      batchCost: sourceRecipe.batchCost,
+      costPerUnit: round2((sourceRecipe.batchCost / sourceRecipe.totalKg) * portionKgValue),
+      allPriced: true,
+      linesCosted: sourceRecipe.linesCosted,
+      linesTotal: sourceRecipe.linesTotal,
+      unpricedIngredients: [],
+      derivedFrom: config.sourceRecipe,
+      lines: sourceRecipe.lines,
+    };
+    costed.push(derived);
+  });
+
   const coverage = buildCoverage(costed);
   coverage.sheetSkipped = skipped;
+  if (portionSourceMissing.length > 0) coverage.portionSourceMissing = portionSourceMissing;
 
   return {
     generatedAt: new Date().toISOString(),
