@@ -8,14 +8,13 @@ const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(cors());
 app.use(express.json());
 
 // Data storage paths
 const DATA_DIR = 'data';
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
 // If DATA_DIR is backed by a persistent volume (e.g. Railway), a fresh/empty volume shadows
 // whatever git-tracked files used to live at this path in the image (data/monthly-financial.json
@@ -45,7 +44,6 @@ if (!fs.existsSync(PL_CHANNEL_FILE) && fs.existsSync(PL_CHANNEL_SEED)) {
 const RECIPE_COSTS_TARGET = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
 const RECIPE_COSTS_SEED = 'seed-data/recipe-costs.json';
 if (!fs.existsSync(RECIPE_COSTS_TARGET) && fs.existsSync(RECIPE_COSTS_SEED)) {
-  fs.mkdirSync(path.join(DATA_DIR, 'pipeline'), { recursive: true });
   fs.copyFileSync(RECIPE_COSTS_SEED, RECIPE_COSTS_TARGET);
 }
 
