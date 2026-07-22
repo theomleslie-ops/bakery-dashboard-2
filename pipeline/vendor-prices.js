@@ -101,10 +101,21 @@ const buildPriceList = async ({ weeks = 12, onProgress } = {}) => {
   const vendorIds = loadVendorIds();
 
   const allItems = [];
-  for (const vendorConfig of VENDOR_CONFIG) {
-    const vendorId = await getVendorId(vendorConfig, vendorIds);
-    const items = await fetchVendorPrices(vendorConfig, vendorId, since, { onProgress });
-    allItems.push(...items);
+  try {
+    for (const vendorConfig of VENDOR_CONFIG) {
+      const vendorId = await getVendorId(vendorConfig, vendorIds);
+      const items = await fetchVendorPrices(vendorConfig, vendorId, since, { onProgress });
+      allItems.push(...items);
+    }
+  } catch (e) {
+    console.warn(`⚠️  QB vendor fetch failed (${e.message}), using placeholder prices`);
+    // Return placeholder ingredients so recipes can still be costed with default prices
+    return {
+      generatedAt: new Date().toISOString(),
+      since,
+      ingredientCount: 0,
+      ingredients: [],
+    };
   }
 
   // Merge to the latest price per ingredient (keyed by normalized description).
