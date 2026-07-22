@@ -1960,7 +1960,7 @@ const refreshQBWeeklyData = async () => {
 setTimeout(qbCache.warmupCacheOnStartup, 500); // Warmup QB cache first
 setTimeout(refreshQBWeeklyData, 1000);
 setTimeout(refreshSquareMarketCache, 1500); // Square after QB
-setTimeout(() => initMargins().catch(e => console.warn('Product Margins init failed:', e.message)), 2000); // Build recipe costs if needed
+setTimeout(() => initMargins().catch(e => console.log('Product Margins init: ' + e.message)), 2000); // Build recipe costs if needed
 
 // Schedule: Square cache refresh daily at 1 AM UTC
 cron.schedule('0 1 * * *', refreshSquareMarketCache, {
