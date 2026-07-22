@@ -2030,6 +2030,29 @@ app.get('/eula', (req, res) => {
 </body></html>`);
 });
 
+// ============= SQUARE MARKET PERFORMANCE CACHE WARMER =============
+// Pre-warms market performance cache on startup and daily at 1 AM UTC, so deployments don't stall.
+
+const refreshSquareMarketCache = async () => {
+  try {
+    const token = process.env.SQUARE_ACCESS_TOKEN;
+    if (!token || token === 'your_square_token_here') {
+      console.log(`⏸️  Square market cache refresh skipped: Square API not configured`);
+      return;
+    }
+
+    const startDow = await fetchWorkweekStartDow();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentWeekStart = getWeekStart(todayStr, startDow);
+    const oneYearAgo = addDays(currentWeekStart, -52 * 7);
+
+    await getMarketWeeklyRevenue(oneYearAgo, currentWeekStart, startDow);
+    console.log(`✅ Square market performance cache warmed (${oneYearAgo} to ${currentWeekStart})`);
+  } catch (err) {
+    console.error(`❌ Square cache refresh failed:`, err.message);
+  }
+};
+
 // ============= QUICKBOOKS AUTO-REFRESH SCHEDULER =============
 // Refreshes QB P&L data every 2 weeks, so all users see cached data without needing to connect individually.
 // Runs once on startup, then on a schedule (Sundays at 12:05 AM UTC, every 2 weeks).
@@ -2052,7 +2075,15 @@ const refreshQBWeeklyData = async () => {
 };
 
 // Run on startup (after a brief delay so DB is ready)
+setTimeout(refreshSquareMarketCache, 1500); // Square after QB
 setTimeout(refreshQBWeeklyData, 1000);
+
+// Schedule: Square cache refresh daily at 1 AM UTC
+cron.schedule('0 1 * * *', refreshSquareMarketCache, {
+  runOnInit: false,
+  timezone: 'UTC',
+});
+console.log(`📅 Square market cache warmed daily at 01:00 UTC`);
 
 // Schedule: every 2 weeks on Sunday at 12:05 AM UTC (cron: minute hour day month dayOfWeek)
 // '5 0 * * 0' = 00:05 every Sunday; then runs every 14 days
