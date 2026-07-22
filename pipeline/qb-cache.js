@@ -21,6 +21,18 @@ const basicAuth = () =>
   `Basic ${Buffer.from(`${process.env.QUICKBOOKS_CLIENT_ID}:${process.env.QUICKBOOKS_CLIENT_SECRET}`).toString('base64')}`;
 
 const loadTokens = () => {
+  // Check .env first for pre-configured tokens (no user sign-in needed)
+  if (process.env.QUICKBOOKS_REFRESH_TOKEN && process.env.QUICKBOOKS_REALM_ID) {
+    return {
+      refresh_token: process.env.QUICKBOOKS_REFRESH_TOKEN,
+      realmId: process.env.QUICKBOOKS_REALM_ID,
+      access_token: null, // Will be fetched on first use
+      expires_at: 0, // Force immediate refresh
+      source: 'env',
+    };
+  }
+
+  // Fall back to stored tokens file
   try {
     return JSON.parse(fs.readFileSync(QB_TOKENS_FILE, 'utf-8'));
   } catch {
@@ -29,6 +41,8 @@ const loadTokens = () => {
 };
 
 const saveTokens = (t) => {
+  // Don't overwrite if tokens came from .env (they're managed there)
+  if (t.source === 'env') return;
   fs.writeFileSync(QB_TOKENS_FILE, JSON.stringify(t, null, 2));
 };
 
@@ -36,7 +50,7 @@ const saveTokens = (t) => {
 const getValidAccessToken = async () => {
   const tokens = loadTokens();
   if (!tokens || !tokens.refresh_token) {
-    const err = new Error('QuickBooks not connected. Connect at /api/quickbooks/connect');
+    const err = new Error('QuickBooks not connected. Set QUICKBOOKS_REFRESH_TOKEN and QUICKBOOKS_REALM_ID in .env or visit /api/quickbooks/connect');
     err.code = 'QB_NOT_CONNECTED';
     throw err;
   }
