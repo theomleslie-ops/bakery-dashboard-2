@@ -21,20 +21,8 @@ const VENDOR_CONFIG = [
     vendorIdEnv: 'CW_VENDOR_ID',
     vendorIdDefault: '233',
   },
-  {
-    name: 'greenleaf',
-    displayName: 'Greenleaf',
-    parser: greenleafParser,
-    vendorIdEnv: 'GREENLEAF_VENDOR_ID',
-    vendorIdDefault: null,
-  },
-  {
-    name: 'alan-brothers',
-    displayName: 'Alan Brothers',
-    parser: alanBrothersParser,
-    vendorIdEnv: 'ALAN_BROTHERS_VENDOR_ID',
-    vendorIdDefault: null,
-  },
+  // TODO: Greenleaf (image-based PDFs — needs OCR or digital invoice format)
+  // TODO: Alan Brothers (image-based PDFs — needs OCR or digital invoice format)
 ];
 
 const loadCache = () => { try { return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8')); } catch { return {}; } };
