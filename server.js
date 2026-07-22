@@ -1857,6 +1857,244 @@ cron.schedule('5 0 * * 0', refreshQBWeeklyData, {
 });
 console.log(`📅 QB P&L auto-refresh scheduled: Sundays at 00:05 UTC (every 2 weeks)`);
 
+// ============= GOOGLE OAUTH (Product Margins recipe sheets) =============
+
+const sheetsOAuth = require('./pipeline/sheets-oauth');
+
+app.get('/api/google/connect', (req, res) => {
+  try {
+    const authUrl = sheetsOAuth.getAuthUrl();
+    res.json({ authUrl });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/google/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) {
+    return res.status(400).json({ error: 'Missing authorization code' });
+  }
+  try {
+    const tokens = await sheetsOAuth.exchangeCodeForTokens(code);
+    res.redirect('/?message=Google%20authorized.%20Recipes%20can%20now%20be%20fetched.');
+  } catch (e) {
+    res.status(400).json({ error: `Failed to exchange code: ${e.message}` });
+  }
+});
+
+app.post('/api/google/disconnect', (req, res) => {
+  try {
+    sheetsOAuth.disconnect();
+    res.json({ success: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ============= INTEGRATIONS STATUS (Google + QuickBooks health) =============
+
+app.get('/api/integrations/status', (req, res) => {
+  const qbTokens = loadQBTokens();
+  const googleConnected = sheetsOAuth.isConnected();
+
+  res.json({
+    google: googleConnected ? 'ok' : 'disconnected',
+    quickbooks: (qbTokens && qbTokens.refresh_token) ? 'ok' : 'disconnected',
+  });
+});
+
+// ============= PRODUCT MARGINS ENDPOINTS =============
+
+const matcher = require('./pipeline/matcher');
+
+// On-disk cache for Square sales data (persists across server restarts)
+const SQUARE_SALES_CACHE_FILE = path.join(DATA_DIR, 'pipeline', 'square-sales-cache.json');
+
+const loadSquareSalesCache = () => {
+  try {
+    return JSON.parse(fs.readFileSync(SQUARE_SALES_CACHE_FILE, 'utf-8'));
+  } catch {
+    return null;
+  }
+};
+
+const saveSquareSalesCache = (data) => {
+  const dir = path.dirname(SQUARE_SALES_CACHE_FILE);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(SQUARE_SALES_CACHE_FILE, JSON.stringify(data, null, 2));
+};
+
+// Fetch Square order data once for 1 year, cache on disk with timestamp, slice into 5 windows on each request
+const fetchSquareSalesData = async () => {
+  const cached = loadSquareSalesCache();
+  const MAX_CACHE_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  if (cached && cached.fetchedAt && Date.now() - new Date(cached.fetchedAt).getTime() < MAX_CACHE_AGE_MS) {
+    return cached;
+  }
+
+  console.log('Fetching 1-year Square sales data...');
+  const oneYearAgo = new Date(Date.now() - 365 * 86400_000).toISOString().slice(0, 10);
+  const allOrders = [];
+
+  for (const locationId of WASTE_LOCATIONS) {
+    let cursor = null;
+    let page = 0;
+    const MAX_PAGES = 1000;
+
+    try {
+      while (page < MAX_PAGES) {
+        const req = {
+          begin_time: new Date(`${oneYearAgo}T00:00:00Z`).getTime(),
+          end_time: Date.now(),
+          limit: 500,
+          sort_order: 'DESC',
+        };
+        if (cursor) req.cursor = cursor;
+
+        const res = await axios.post(`https://connect.squareup.com/v2/orders/search`, req, {
+          headers: {
+            Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        for (const order of (res.data.orders || [])) {
+          if (order.state !== 'COMPLETED') continue;
+          for (const lineItem of (order.line_items || [])) {
+            allOrders.push({
+              orderId: order.id,
+              closedAt: order.closed_at,
+              locationId: order.location_id,
+              itemName: lineItem.name,
+              qty: lineItem.quantity,
+              totalMoney: lineItem.gross_sales_money?.amount || 0,
+            });
+          }
+        }
+
+        cursor = res.data.cursor;
+        if (!cursor) break;
+        page += 1;
+      }
+    } catch (e) {
+      console.error(`Failed to fetch orders for location ${locationId}:`, e.message);
+    }
+  }
+
+  const cached_data = {
+    fetchedAt: new Date().toISOString(),
+    orders: allOrders,
+  };
+  saveSquareSalesCache(cached_data);
+  return cached_data;
+};
+
+// Bucket orders by item name and date window, compute revenue and qty
+const bucketOrdersByItem = (orders, windowDays) => {
+  const cutoffDate = new Date(Date.now() - windowDays * 86400_000);
+  const byItem = {};
+
+  for (const order of orders) {
+    const orderDate = new Date(order.closedAt);
+    if (orderDate < cutoffDate) continue;
+
+    const item = order.itemName;
+    if (!byItem[item]) byItem[item] = { revenue: 0, qty: 0, avgPrice: 0 };
+    byItem[item].revenue += order.totalMoney / 100; // cents to dollars
+    byItem[item].qty += parseFloat(order.qty) || 0;
+  }
+
+  for (const item of Object.values(byItem)) {
+    item.avgPrice = item.qty > 0 ? item.revenue / item.qty : 0;
+  }
+
+  return byItem;
+};
+
+// Top 20 sellers by revenue
+const rankProductsByRevenue = (sales, n = 20) => {
+  return Object.entries(sales)
+    .sort((a, b) => b[1].revenue - a[1].revenue)
+    .slice(0, n)
+    .map(([name, data]) => ({ name, ...data }));
+};
+
+// Match recipe to Square item name
+const matchRecipeToSquareItem = (recipeName, squareItemName) => {
+  const recipeToks = matcher.tokenize(recipeName);
+  const squareToks = matcher.tokenize(squareItemName);
+
+  if (!recipeToks.length || !squareToks.length) return false;
+  const overlap = recipeToks.filter((t) => squareToks.includes(t));
+  return overlap.length / recipeToks.length >= 0.6; // at least 60% token overlap
+};
+
+// Main product margins endpoint
+app.get('/api/product-margins', async (req, res) => {
+  try {
+    // Load recipe costs
+    const recipeCostsFile = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
+    const recipeCosts = JSON.parse(fs.readFileSync(recipeCostsFile, 'utf-8'));
+    const costByRecipe = {};
+    for (const r of recipeCosts.recipes) {
+      costByRecipe[r.recipe.toLowerCase()] = r.costPerUnit;
+    }
+
+    // Fetch/cache Square sales data
+    const salesData = await fetchSquareSalesData();
+
+    // Compute margins for each time window
+    const windows = [
+      { name: '2 week', days: 14 },
+      { name: '4 week', days: 28 },
+      { name: '2 month', days: 60 },
+      { name: '6 month', days: 180 },
+      { name: '1 year', days: 365 },
+    ];
+
+    const result = {};
+    for (const window of windows) {
+      const sales = bucketOrdersByItem(salesData.orders, window.days);
+      const top20 = rankProductsByRevenue(sales, 20);
+
+      const withMargins = [];
+      for (const item of top20) {
+        const recipeKey = item.name.toLowerCase();
+        const costPerUnit = costByRecipe[recipeKey];
+
+        withMargins.push({
+          name: item.name,
+          revenue: Math.round(item.revenue * 100) / 100,
+          quantity: Math.round(item.qty * 100) / 100,
+          avgPrice: Math.round(item.avgPrice * 100) / 100,
+          cogs: costPerUnit != null ? Math.round(item.qty * costPerUnit * 100) / 100 : null,
+          costPerUnit,
+          margin$: costPerUnit != null ? Math.round((item.revenue - item.qty * costPerUnit) * 100) / 100 : null,
+          marginPct: costPerUnit != null ? Math.round((1 - item.qty * costPerUnit / item.revenue) * 10000) / 100 : null,
+          status: costPerUnit != null ? 'costed' : 'needs-cost',
+        });
+      }
+
+      result[window.name] = {
+        fetchedAt: salesData.fetchedAt,
+        window: `${window.days} days`,
+        top20: withMargins,
+      };
+    }
+
+    res.json({
+      generatedAt: new Date().toISOString(),
+      squareSalesCache: salesData.fetchedAt,
+      windows: result,
+    });
+  } catch (e) {
+    console.error('Product margins error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Start server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
