@@ -2054,7 +2054,7 @@ const fetchSquareSalesData = async () => {
   const oneYearAgo = new Date(Date.now() - 365 * 86400_000).toISOString().slice(0, 10);
   const allOrders = [];
 
-  for (const locationId of WASTE_LOCATIONS) {
+  for (const location of WASTE_LOCATIONS) {
     let cursor = null;
     let page = 0;
     const MAX_PAGES = 1000;
@@ -2066,8 +2066,18 @@ const fetchSquareSalesData = async () => {
           end_time: Date.now(),
           limit: 500,
           sort_order: 'DESC',
+          query: {
+            filter: {
+              state_filter: {
+                states: ['COMPLETED'],
+              },
+              location_filter: {
+                location_ids: [location.squareLocationId],
+              },
+            },
+          },
         };
-        if (cursor) req.cursor = cursor;
+        if (cursor) req.query.cursor = cursor;
 
         const res = await axios.post(`https://connect.squareup.com/v2/orders/search`, req, {
           headers: {
@@ -2095,7 +2105,7 @@ const fetchSquareSalesData = async () => {
         page += 1;
       }
     } catch (e) {
-      console.error(`Failed to fetch orders for location ${locationId}:`, e.message);
+      console.error(`Failed to fetch orders for location ${location.name} (${location.squareLocationId}):`, e.message);
     }
   }
 
