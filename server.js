@@ -199,11 +199,11 @@ class CacheManager {
 const cacheManager = new CacheManager();
 
 // Helper: Load JSON file or return empty array
-const loadData = (filepath) => {
+const loadData = (filepath, fallback = {}) => {
   try {
     return JSON.parse(fs.readFileSync(filepath, 'utf-8'));
   } catch {
-    return [];
+    return fallback;
   }
 };
 
@@ -1793,8 +1793,8 @@ app.get('/api/waste', async (req, res) => {
 // side is joined live here from Square Orders. Nothing that can't be costed is dropped silently — it
 // is returned in coverage buckets so the gaps are visible and fixable.
 const RECIPE_COSTS_FILE = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
-const PRODUCT_NAME_OVERRIDES_FILE = path.join(DATA_DIR, 'pipeline', 'product-name-overrides.json');
-const RECIPE_EXCLUSIONS_FILE = path.join(DATA_DIR, 'pipeline', 'recipe-exclusions.json');
+const PRODUCT_NAME_OVERRIDES_FILE = path.join(DATA_DIR, 'product-name-overrides.json');
+const RECIPE_EXCLUSIONS_FILE = path.join(DATA_DIR, 'recipe-exclusions.json');
 
 // Units sold + realized average sell price per product name, aggregated across every location over
 // the last `weeks` (from Square orders — the same source the Waste/Market tabs use). Cached 1h.
@@ -1926,6 +1926,26 @@ app.get('/api/product-margins', async (req, res) => {
       soldButNoRecipe,
     };
 
+    // Build case-insensitive product→recipe map from nameOverrides (which is already product→recipe)
+    const productToRecipe = {};
+    Object.entries(nameOverrides).forEach(([product, recipe]) => {
+      productToRecipe[String(product).toLowerCase()] = recipe;
+    });
+
+    // Build coverage reason maps: recipe name → reason, and handle dict/array variants
+    const coverageReasons = {};
+    (coverage.needsYield || []).forEach((item) => {
+      const recipe = typeof item === 'string' ? item : item.recipe;
+      coverageReasons[recipe] = 'needs-yield';
+    });
+    (coverage.unpricedIngredient || []).forEach((item) => {
+      const recipe = typeof item === 'string' ? item : item.recipe;
+      coverageReasons[recipe] = 'unpriced-ingredient';
+    });
+    (coverage.noSales || []).forEach((recipe) => {
+      coverageReasons[recipe] = 'no-sales';
+    });
+
     // Compute top 20 by revenue across all Square sales, with costing status and reasons for gaps
     const allByRevenue = rankProductsByRevenue(sales, 20);
     const top20 = allByRevenue.map((entry) => {
@@ -1941,9 +1961,37 @@ app.get('/api/product-margins', async (req, res) => {
           totalMargin: costedPoint.totalMargin,
         };
       }
-      // Not costed — items in top 20 by Square sales are definitely not in a "no sales" bucket,
-      // so almost always "no recipe". Simpler to just report that rather than doing expensive
-      // matchProductToSquare fuzzy matching against every coverage bucket.
+
+      // Check if this product maps to a recipe via nameOverrides
+      const mappedRecipe = productToRecipe[entry.name.toLowerCase()];
+      const coverageReason = mappedRecipe ? coverageReasons[mappedRecipe] : null;
+
+      if (coverageReason === 'needs-yield') {
+        return {
+          ...entry,
+          status: 'needs-info',
+          reason: 'needs-yield',
+          detail: 'Recipe found but missing yield (grams per unit). Add to data/pipeline/yield-overrides.json.',
+        };
+      }
+      if (coverageReason === 'unpriced-ingredient') {
+        return {
+          ...entry,
+          status: 'needs-info',
+          reason: 'unpriced-ingredient',
+          detail: 'Recipe found but missing ingredient prices. Review data/pipeline/ingredient-match-approval.csv for unmatched items.',
+        };
+      }
+      if (coverageReason === 'no-sales') {
+        return {
+          ...entry,
+          status: 'needs-info',
+          reason: 'no-sales',
+          detail: 'Recipe costed but no Square sales matched. Check product-name-overrides.json.',
+        };
+      }
+
+      // Product not in overrides and doesn't fuzzy-match any costed recipe
       return {
         ...entry,
         status: 'needs-info',
