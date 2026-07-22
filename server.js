@@ -1074,8 +1074,8 @@ app.post('/api/quickbooks/refresh', async (req, res) => {
 
 // ============= GOOGLE OAUTH 2.0 (recipe sheets) =============
 // Authenticate as the bakery's own Google user so the pipeline can read the private recipe folder.
-// Same shape as the QuickBooks flow above. Token handling lives in pipeline/sheets-oauth.js.
-const googleSheets = require('./pipeline/sheets-oauth');
+// Same shape as the QuickBooks flow above. Token handling lives in pipeline/sheets.js.
+const googleSheets = require('./pipeline/sheets');
 
 // Step 1: redirect the user to Google's consent screen
 app.get('/api/google/connect', (req, res) => {
