@@ -1074,8 +1074,8 @@ app.post('/api/quickbooks/refresh', async (req, res) => {
 
 // ============= GOOGLE OAUTH 2.0 (recipe sheets) =============
 // Authenticate as the bakery's own Google user so the pipeline can read the private recipe folder.
-// Same shape as the QuickBooks flow above. Token handling lives in pipeline/sheets.js.
-const googleSheets = require('./pipeline/sheets');
+// Same shape as the QuickBooks flow above. Token handling lives in pipeline/sheets-oauth.js.
+const googleSheets = require('./pipeline/sheets-oauth');
 
 // Step 1: redirect the user to Google's consent screen
 app.get('/api/google/connect', (req, res) => {
@@ -1956,8 +1956,9 @@ const refreshQBWeeklyData = async () => {
 };
 
 // Run on startup (after a brief delay so DB is ready)
-setTimeout(refreshSquareMarketCache, 1500); // Square after QB
+setTimeout(qbCache.warmupCacheOnStartup, 500); // Warmup QB cache first
 setTimeout(refreshQBWeeklyData, 1000);
+setTimeout(refreshSquareMarketCache, 1500); // Square after QB
 
 // Schedule: Square cache refresh daily at 1 AM UTC
 cron.schedule('0 1 * * *', refreshSquareMarketCache, {

@@ -148,6 +148,11 @@ const fetchExpenses = async () => {
   return res.data.QueryResponse.Account || [];
 };
 
+// Check if cache is populated
+const isCachePopulated = () => {
+  return loadCache('pl-30d') && loadCache('accounts') && loadCache('expenses');
+};
+
 // Fetch and cache all QB data
 const refreshAllQBData = async () => {
   try {
@@ -189,8 +194,23 @@ const refreshAllQBData = async () => {
   }
 };
 
+// Warm up cache on startup if empty
+const warmupCacheOnStartup = async () => {
+  if (isCachePopulated()) {
+    console.log('✅ QB cache already populated');
+    return;
+  }
+  try {
+    await refreshAllQBData();
+  } catch (err) {
+    console.log('⏸️  QB cache warmup skipped on startup (QB not connected yet)');
+  }
+};
+
 module.exports = {
   refreshAllQBData,
+  warmupCacheOnStartup,
+  isCachePopulated,
   loadCache,
   saveCache,
   getValidAccessToken,
