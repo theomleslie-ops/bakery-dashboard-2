@@ -6,7 +6,10 @@ const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
 const axios = require('axios');
+const cron = require('node-cron');
 require('dotenv').config();
+
+const qbCache = require('./pipeline/qb-cache');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -1049,6 +1052,67 @@ app.post('/api/quickbooks/disconnect', (req, res) => {
   res.json({ success: true });
 });
 
+// Manual refresh of all QB data (P&L, accounts, expenses)
+app.post('/api/quickbooks/refresh', async (req, res) => {
+  try {
+    const result = await qbCache.refreshAllQBData();
+    res.json({
+      success: true,
+      ...result,
+      message: 'QuickBooks data refreshed successfully',
+    });
+  } catch (err) {
+    if (err.code === 'QB_NOT_CONNECTED') {
+      return res.json({ error: err.message, connected: false });
+    }
+    res.status(500).json({
+      error: 'QuickBooks refresh failed',
+      message: err.response?.data?.fault?.detail?.[0]?.message || err.message,
+    });
+  }
+});
+
+// ============= GOOGLE OAUTH 2.0 (recipe sheets) =============
+// Authenticate as the bakery's own Google user so the pipeline can read the private recipe folder.
+// Same shape as the QuickBooks flow above. Token handling lives in pipeline/sheets-oauth.js.
+const googleSheets = require('./pipeline/sheets-oauth');
+
+// Step 1: redirect the user to Google's consent screen
+app.get('/api/google/connect', (req, res) => {
+  if (!googleSheets.hasCredentials()) {
+    return res.status(400).send('Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env first (create an OAuth client at https://console.cloud.google.com/apis/credentials).');
+  }
+  res.redirect(googleSheets.getAuthUrl());
+});
+
+// Step 2: Google redirects back here with a code
+app.get('/api/google/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error) return res.status(400).send(`Google authorization failed: ${error}`);
+  if (!code) return res.status(400).send('Missing authorization code from Google');
+  try {
+    await googleSheets.exchangeCodeForTokens(code);
+    res.redirect('/?google=connected');
+  } catch (err) {
+    res.status(500).send(`Failed to connect Google: ${err.message}`);
+  }
+});
+
+// Connection status
+app.get('/api/google/status', (req, res) => {
+  res.json({
+    configured: googleSheets.hasCredentials(),
+    connected: googleSheets.isConnected(),
+    connectedAt: googleSheets.loadTokens()?.connectedAt || null,
+  });
+});
+
+// Disconnect (forget stored tokens)
+app.post('/api/google/disconnect', (req, res) => {
+  googleSheets.disconnect();
+  res.json({ success: true });
+});
+
 // ============= QUICKBOOKS DATA ENDPOINTS =============
 
 // Fetch a Profit & Loss report from QuickBooks, broken into periods (Week or Month) for a date range
@@ -1193,20 +1257,27 @@ const fetchQBWeeklyRows = async (startDate, endDateExclusive) => {
 
 // Get real per-week QuickBooks P&L totals for [rangeStart, rangeEndInclusive] (both Sundays),
 // backfilling from QuickBooks into the on-disk snapshot only for weeks not already cached, and
-// always refreshing the most recent 2 weeks live.
+// refreshing the most recent 2 weeks live if QB is connected. If QB is not connected, serves from cache.
 const getQBWeeklyRows = async (rangeStart, rangeEndInclusive) => {
   const snapshot = loadQBWeeklySnapshot();
   const earliestCached = Object.keys(snapshot.weeks).sort()[0];
 
-  if (!earliestCached || rangeStart < earliestCached) {
-    const backfillEnd = earliestCached && earliestCached > rangeStart ? earliestCached : addDays(rangeEndInclusive, 7);
-    Object.assign(snapshot.weeks, await fetchQBWeeklyRows(rangeStart, backfillEnd));
+  // Only try to fetch from QB if connected
+  const isQBConnected = () => {
+    try { return !!fs.existsSync(QB_TOKENS_FILE) && JSON.parse(fs.readFileSync(QB_TOKENS_FILE, 'utf-8')).refresh_token; } catch { return false; }
+  };
+
+  if (isQBConnected()) {
+    if (!earliestCached || rangeStart < earliestCached) {
+      const backfillEnd = earliestCached && earliestCached > rangeStart ? earliestCached : addDays(rangeEndInclusive, 7);
+      Object.assign(snapshot.weeks, await fetchQBWeeklyRows(rangeStart, backfillEnd));
+    }
+
+    const liveStart = addDays(rangeEndInclusive, -7);
+    Object.assign(snapshot.weeks, await fetchQBWeeklyRows(liveStart, addDays(rangeEndInclusive, 7)));
+
+    saveQBWeeklySnapshot(snapshot);
   }
-
-  const liveStart = addDays(rangeEndInclusive, -7);
-  Object.assign(snapshot.weeks, await fetchQBWeeklyRows(liveStart, addDays(rangeEndInclusive, 7)));
-
-  saveQBWeeklySnapshot(snapshot);
 
   const rows = [];
   for (let d = rangeStart; d <= rangeEndInclusive; d = addDays(d, 7)) {
@@ -1215,44 +1286,115 @@ const getQBWeeklyRows = async (rangeStart, rangeEndInclusive) => {
   return rows;
 };
 
-// Get raw P/L Statement from QuickBooks
+// Get raw P/L Statement from QuickBooks (serves from persistent cache first)
 app.get('/api/quickbooks/pl', async (req, res) => {
   try {
-    const year = new Date().getFullYear();
-    const data = await fetchQBProfitAndLoss(req.query.start_date || `${year}-01-01`, req.query.end_date || `${year}-12-31`);
-    res.json({ success: true, data, note: 'P/L statement from QuickBooks' });
+    // Try persistent disk cache first
+    const cached = qbCache.loadCache('pl-30d');
+    if (cached) {
+      return res.json({
+        success: true,
+        data: cached.data,
+        source: 'QuickBooks (persistent cache)',
+        cachedAt: cached.cachedAt,
+      });
+    }
+
+    // Fall back to live API fetch
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const startDate = req.query.start_date || thirtyDaysAgo.toISOString().split('T')[0];
+    const endDate = req.query.end_date || today.toISOString().split('T')[0];
+
+    const data = await fetchQBProfitAndLoss(startDate, endDate);
+    res.json({ success: true, data, note: 'P/L statement from QuickBooks (live)' });
   } catch (err) {
-    if (err.code === 'QB_NOT_CONNECTED') return res.json({ error: err.message, connected: false, data: [] });
+    if (err.code === 'QB_NOT_CONNECTED') {
+      // Try to serve from cache even if not connected
+      const cached = qbCache.loadCache('pl-30d');
+      if (cached) {
+        return res.json({
+          success: true,
+          data: cached.data,
+          source: 'QuickBooks (offline cache)',
+          cachedAt: cached.cachedAt,
+          note: 'Using cached data — QB not currently connected',
+        });
+      }
+      return res.json({ error: err.message, connected: false, data: [] });
+    }
     res.status(500).json({ error: 'QuickBooks API error', message: err.response?.data?.fault?.detail?.[0]?.message || err.message });
   }
 });
 
-// Get Account Balances from QuickBooks
+// Get Account Balances from QuickBooks (serves from persistent cache first)
 app.get('/api/quickbooks/accounts', async (req, res) => {
   try {
-    const tokens = await getValidQBAccessToken();
-    const response = await axios.get(`${getQBBaseUrl()}/v3/company/${tokens.realmId}/query`, {
-      params: { query: 'SELECT * FROM Account' },
-      headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
-    });
-    res.json({ success: true, data: response.data.QueryResponse.Account || [], note: 'Account balances from QuickBooks' });
+    // Try persistent disk cache first
+    const cached = qbCache.loadCache('accounts');
+    if (cached) {
+      return res.json({
+        success: true,
+        data: cached.data,
+        source: 'QuickBooks (persistent cache)',
+        cachedAt: cached.cachedAt,
+      });
+    }
+
+    // Fall back to live API fetch
+    const data = await qbCache.fetchAccounts();
+    res.json({ success: true, data, note: 'Account balances from QuickBooks (live)' });
   } catch (err) {
-    if (err.code === 'QB_NOT_CONNECTED') return res.json({ error: err.message, connected: false, data: [] });
+    if (err.code === 'QB_NOT_CONNECTED') {
+      // Try to serve from cache even if not connected
+      const cached = qbCache.loadCache('accounts');
+      if (cached) {
+        return res.json({
+          success: true,
+          data: cached.data,
+          source: 'QuickBooks (offline cache)',
+          cachedAt: cached.cachedAt,
+          note: 'Using cached data — QB not currently connected',
+        });
+      }
+      return res.json({ error: err.message, connected: false, data: [] });
+    }
     res.status(500).json({ error: 'QuickBooks API error', message: err.response?.data?.fault?.detail?.[0]?.message || err.message });
   }
 });
 
-// Get Expenses from QuickBooks (filtered by category)
+// Get Expenses from QuickBooks (filtered by category, serves from persistent cache first)
 app.get('/api/quickbooks/expenses', async (req, res) => {
   try {
-    const tokens = await getValidQBAccessToken();
-    const response = await axios.get(`${getQBBaseUrl()}/v3/company/${tokens.realmId}/query`, {
-      params: { query: "SELECT * FROM Account WHERE AccountType='Expense'" },
-      headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
-    });
-    res.json({ success: true, data: response.data.QueryResponse.Account || [], note: 'Expense accounts from QuickBooks' });
+    // Try persistent disk cache first
+    const cached = qbCache.loadCache('expenses');
+    if (cached) {
+      return res.json({
+        success: true,
+        data: cached.data,
+        source: 'QuickBooks (persistent cache)',
+        cachedAt: cached.cachedAt,
+      });
+    }
+
+    // Fall back to live API fetch
+    const data = await qbCache.fetchExpenses();
+    res.json({ success: true, data, note: 'Expense accounts from QuickBooks (live)' });
   } catch (err) {
-    if (err.code === 'QB_NOT_CONNECTED') return res.json({ error: err.message, connected: false, data: [] });
+    if (err.code === 'QB_NOT_CONNECTED') {
+      // Try to serve from cache even if not connected
+      const cached = qbCache.loadCache('expenses');
+      if (cached) {
+        return res.json({
+          success: true,
+          data: cached.data,
+          source: 'QuickBooks (offline cache)',
+          cachedAt: cached.cachedAt,
+          note: 'Using cached data — QB not currently connected',
+        });
+      }
+      return res.json({ error: err.message, connected: false, data: [] });
+    }
     res.status(500).json({ error: 'QuickBooks API error', message: err.response?.data?.fault?.detail?.[0]?.message || err.message });
   }
 });
@@ -1575,7 +1717,7 @@ app.get('/api/market-performance', async (req, res) => {
       .sort((a, b) => b.revenue.reduce((s, v) => s + v, 0) - a.revenue.reduce((s, v) => s + v, 0));
 
     const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: currentWeekStart };
-    cacheManager.set(cacheKey, response, 60 * 60 * 1000);
+    cacheManager.set(cacheKey, response, 4 * 60 * 60 * 1000); // Cache for 4 hours
     res.json(response);
   } catch (err) {
     res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, weekStarts: [], markets: [] });
@@ -1765,9 +1907,77 @@ app.get('/eula', (req, res) => {
 </body></html>`);
 });
 
+// ============= SQUARE MARKET PERFORMANCE CACHE WARMER =============
+// Pre-warms market performance cache on startup and daily at 1 AM UTC, so deployments don't stall.
+
+const refreshSquareMarketCache = async () => {
+  try {
+    const token = process.env.SQUARE_ACCESS_TOKEN;
+    if (!token || token === 'your_square_token_here') {
+      console.log(`⏸️  Square market cache refresh skipped: Square API not configured`);
+      return;
+    }
+
+    const startDow = await fetchWorkweekStartDow();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentWeekStart = getWeekStart(todayStr, startDow);
+    const oneYearAgo = addDays(currentWeekStart, -52 * 7);
+
+    await getMarketWeeklyRevenue(oneYearAgo, currentWeekStart, startDow);
+    console.log(`✅ Square market performance cache warmed (${oneYearAgo} to ${currentWeekStart})`);
+  } catch (err) {
+    console.error(`❌ Square cache refresh failed:`, err.message);
+  }
+};
+
+// ============= QUICKBOOKS AUTO-REFRESH SCHEDULER =============
+// Refreshes all QB data weekly (every Sunday at 12:05 AM UTC), so all users see cached data
+// without needing to sign in individually. Runs once on startup with a brief delay, then on schedule.
+
+const refreshQBWeeklyData = async () => {
+  try {
+    // Refresh persistent QB cache (P&L, accounts, expenses)
+    await qbCache.refreshAllQBData();
+
+    // Also refresh the weekly P&L snapshot
+    const today = new Date().toISOString().slice(0, 10);
+    const currentWeekStart = getWeekStart(today, 0); // Sunday-based weeks
+    const twoWeeksAgo = addDays(currentWeekStart, -14);
+    await getQBWeeklyRows(twoWeeksAgo, currentWeekStart);
+
+    console.log(`✅ QB cache + weekly snapshot refreshed (${twoWeeksAgo} to ${currentWeekStart})`);
+  } catch (err) {
+    if (err.code === 'QB_NOT_CONNECTED') {
+      console.log(`⏸️  QB cache refresh skipped: QuickBooks not connected. Connect at /api/quickbooks/connect`);
+    } else {
+      console.error(`❌ QB cache refresh failed:`, err.message);
+    }
+  }
+};
+
+// Run on startup (after a brief delay so DB is ready)
+setTimeout(refreshSquareMarketCache, 1500); // Square after QB
+setTimeout(refreshQBWeeklyData, 1000);
+
+// Schedule: Square cache refresh daily at 1 AM UTC
+cron.schedule('0 1 * * *', refreshSquareMarketCache, {
+  runOnInit: false,
+  timezone: 'UTC',
+});
+console.log(`📅 Square market cache warmed daily at 01:00 UTC`);
+
+// Schedule: every Sunday at 12:05 AM UTC to refresh all QB data + weekly snapshot
+// '5 0 * * 0' = 00:05 every Sunday
+cron.schedule('5 0 * * 0', refreshQBWeeklyData, {
+  runOnInit: false, // Already runs on startup above
+  timezone: 'UTC',
+});
+console.log(`📅 QB data auto-refresh scheduled: Sundays at 00:05 UTC (weekly - P&L, accounts, expenses)`);
+
 // Start server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🍞 Bakery Dashboard API running on http://localhost:${PORT}`);
   console.log(`📋 Next: Add Square & QuickBooks API credentials to .env`);
+  console.log(`🚀 Railway auto-deploy is live and working`);
 });
