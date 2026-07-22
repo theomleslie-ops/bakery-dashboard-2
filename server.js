@@ -2156,14 +2156,25 @@ app.get('/api/product-margins', async (req, res) => {
   try {
     // Load recipe costs
     const recipeCostsFile = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
+    if (!fs.existsSync(recipeCostsFile)) {
+      return res.status(503).json({ error: 'Recipe costs not available. Run: npm run margins' });
+    }
+
     const recipeCosts = JSON.parse(fs.readFileSync(recipeCostsFile, 'utf-8'));
     const costByRecipe = {};
-    for (const r of recipeCosts.recipes) {
+    for (const r of recipeCosts.recipes || []) {
       costByRecipe[r.recipe.toLowerCase()] = r.costPerUnit;
     }
 
-    // Fetch/cache Square sales data
-    const salesData = await fetchSquareSalesData();
+    // Try to fetch Square data, fallback to empty if not available
+    let salesData = { fetchedAt: new Date().toISOString(), orders: [] };
+    try {
+      if (process.env.SQUARE_ACCESS_TOKEN) {
+        salesData = await fetchSquareSalesData();
+      }
+    } catch (e) {
+      console.warn('Square data unavailable:', e.message);
+    }
 
     // Compute margins for each time window
     const windows = [
@@ -2210,7 +2221,7 @@ app.get('/api/product-margins', async (req, res) => {
       windows: result,
     });
   } catch (e) {
-    console.error('Product margins error:', e.message);
+    console.error('Product margins error:', e.message, e.stack);
     res.status(500).json({ error: e.message });
   }
 });
