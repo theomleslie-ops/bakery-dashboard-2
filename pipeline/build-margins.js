@@ -35,7 +35,7 @@ const main = async ({ weeks = 12 } = {}) => {
     if (e.code === 'QB_NOT_CONNECTED') {
       console.error('    Connect QuickBooks first via the app: /api/quickbooks/connect');
     }
-    process.exit(1);
+    throw e;
   }
 
   const priceList = priceListData.ingredients;
@@ -57,7 +57,7 @@ const main = async ({ weeks = 12 } = {}) => {
     if (e.code === 'GOOGLE_NOT_CONNECTED') {
       console.error('    Connect Google Drive first via the app: /api/google/connect');
     }
-    process.exit(1);
+    throw e;
   }
 
   // Step 3: Cost each recipe
