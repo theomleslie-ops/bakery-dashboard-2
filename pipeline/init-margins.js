@@ -1,4 +1,5 @@
-// Initialize Product Margins on startup: try to build, fallback to seed data if auth unavailable
+// Initialize Product Margins on startup: seed from static snapshot only, never live-build.
+// Live rebuild (local Google Sheets pull + QB vendor invoice parsing) happens only via npm run margins
 const fs = require('fs');
 const path = require('path');
 
@@ -10,11 +11,11 @@ const seedData = () => {
     if (fs.existsSync(SEED_FILE)) {
       fs.mkdirSync(path.dirname(RECIPE_COSTS_FILE), { recursive: true });
       fs.copyFileSync(SEED_FILE, RECIPE_COSTS_FILE);
-      console.log('✓ Seeded recipe-costs.json from seed-data/');
+      console.log('✓ Recipe costs seeded from snapshot');
       return true;
     }
   } catch (e) {
-    console.warn('Failed to seed data:', e.message);
+    console.warn('Failed to seed recipe costs:', e.message);
   }
   return false;
 };
@@ -22,19 +23,12 @@ const seedData = () => {
 const initMargins = async () => {
   // If recipe costs already exist, skip
   if (fs.existsSync(RECIPE_COSTS_FILE)) {
-    console.log('✓ Recipe costs already available');
+    console.log('✓ Recipe costs available');
     return;
   }
 
-  try {
-    console.log('Attempting to build Product Margins…');
-    const { main: buildMargins } = require('./build-margins');
-    await buildMargins({ weeks: 12 });
-    console.log('✓ Margins built successfully');
-  } catch (e) {
-    console.warn(`⚠ Could not build margins: ${e.message}`);
-    seedData();
-  }
+  // Seed from snapshot only — no live builds on startup
+  seedData();
 };
 
 module.exports = { initMargins };

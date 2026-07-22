@@ -2007,40 +2007,6 @@ cron.schedule('5 0 * * 0', refreshQBWeeklyData, {
 });
 console.log(`📅 QB data auto-refresh scheduled: Sundays at 00:05 UTC (weekly - P&L, accounts, expenses)`);
 
-// ============= GOOGLE OAUTH (Product Margins recipe sheets) =============
-
-const sheetsOAuth = require('./pipeline/sheets-oauth');
-
-app.get('/api/google/connect', (req, res) => {
-  try {
-    const authUrl = sheetsOAuth.getAuthUrl();
-    res.json({ authUrl });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
-
-app.get('/api/google/callback', async (req, res) => {
-  const { code } = req.query;
-  if (!code) {
-    return res.status(400).json({ error: 'Missing authorization code' });
-  }
-  try {
-    const tokens = await sheetsOAuth.exchangeCodeForTokens(code);
-    res.redirect('/?message=Google%20authorized.%20Recipes%20can%20now%20be%20fetched.');
-  } catch (e) {
-    res.status(400).json({ error: `Failed to exchange code: ${e.message}` });
-  }
-});
-
-app.post('/api/google/disconnect', (req, res) => {
-  try {
-    sheetsOAuth.disconnect();
-    res.json({ success: true });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
 
 // ============= INTEGRATIONS STATUS (Google + QuickBooks health) =============
 
