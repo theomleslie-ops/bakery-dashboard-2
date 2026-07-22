@@ -1594,9 +1594,9 @@
         <div className="container" style={{ padding: '20px' }}>
           <h2>Product Margins</h2>
 
-          {data.report && (
+          {data.generatedAt && (
             <div style={{ marginBottom: '20px', padding: '10px', background: '#f9f9f9', borderRadius: '4px', fontSize: '14px', color: '#666' }}>
-              Recipe data as of: {new Date(data.report.generatedAt).toLocaleString()}
+              Recipe data as of: {new Date(data.generatedAt).toLocaleString()}
             </div>
           )}
 
