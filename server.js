@@ -2099,5 +2099,5 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🍞 Bakery Dashboard API running on http://localhost:${PORT}`);
   console.log(`📋 Next: Add Square & QuickBooks API credentials to .env`);
-  console.log(`🚀 Auto-deployment via GitHub Actions is active and working`);
+  console.log(`🚀 Railway auto-deploy is live and working`);
 });
