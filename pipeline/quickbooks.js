@@ -19,9 +19,24 @@ const basicAuth = () =>
   `Basic ${Buffer.from(`${process.env.QUICKBOOKS_CLIENT_ID}:${process.env.QUICKBOOKS_CLIENT_SECRET}`).toString('base64')}`;
 
 const loadTokens = () => {
+  // Check .env first for pre-configured tokens (auto-auth, no user sign-in needed)
+  if (process.env.QUICKBOOKS_REFRESH_TOKEN && process.env.QUICKBOOKS_REALM_ID) {
+    return {
+      refresh_token: process.env.QUICKBOOKS_REFRESH_TOKEN,
+      realmId: process.env.QUICKBOOKS_REALM_ID,
+      access_token: null, // Will be fetched on first use
+      expires_at: 0, // Force immediate refresh
+      source: 'env',
+    };
+  }
+  // Fall back to tokens file
   try { return JSON.parse(fs.readFileSync(QB_TOKENS_FILE, 'utf-8')); } catch { return null; }
 };
-const saveTokens = (t) => fs.writeFileSync(QB_TOKENS_FILE, JSON.stringify(t, null, 2));
+const saveTokens = (t) => {
+  // Don't overwrite if tokens came from .env (they're managed there)
+  if (t.source === 'env') return;
+  fs.writeFileSync(QB_TOKENS_FILE, JSON.stringify(t, null, 2));
+};
 
 // Returns valid tokens (incl. realmId), refreshing the access token if it has expired.
 const getValidAccessToken = async () => {
