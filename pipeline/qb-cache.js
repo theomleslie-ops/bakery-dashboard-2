@@ -51,7 +51,6 @@ const getValidAccessToken = async () => {
   const tokens = loadTokens();
   if (!tokens || !tokens.refresh_token) {
     const err = new Error('QuickBooks not connected. Set QUICKBOOKS_REFRESH_TOKEN and QUICKBOOKS_REALM_ID in .env or visit /api/quickbooks/connect');
-    const err = new Error('QuickBooks not connected. Connect at /api/quickbooks/connect');
     err.code = 'QB_NOT_CONNECTED';
     throw err;
   }
