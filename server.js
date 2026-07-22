@@ -10,7 +10,16 @@ const cron = require('node-cron');
 require('dotenv').config();
 
 const qbCache = require('./pipeline/qb-cache');
-const { initMargins } = require('./pipeline/init-margins');
+
+// Safe lazy-load of initMargins
+const initMargins = async () => {
+  try {
+    const { initMargins: fn } = require('./pipeline/init-margins');
+    return await fn();
+  } catch (e) {
+    console.warn('initMargins unavailable:', e.message);
+  }
+};
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -1956,11 +1965,32 @@ const refreshQBWeeklyData = async () => {
   }
 };
 
-// Run on startup (after a brief delay so DB is ready)
-setTimeout(qbCache.warmupCacheOnStartup, 500); // Warmup QB cache first
-setTimeout(refreshQBWeeklyData, 1000);
-setTimeout(refreshSquareMarketCache, 1500); // Square after QB
-setTimeout(() => initMargins().catch(e => console.log('Product Margins init: ' + e.message)), 2000); // Build recipe costs if needed
+// Run on startup (after a brief delay so DB is ready) - non-blocking
+setTimeout(() => {
+  try {
+    qbCache.warmupCacheOnStartup?.();
+  } catch (e) {
+    console.log('QB cache startup skipped:', e.message);
+  }
+}, 500);
+
+setTimeout(() => {
+  try {
+    refreshQBWeeklyData?.();
+  } catch (e) {
+    console.log('QB refresh skipped:', e.message);
+  }
+}, 1000);
+
+setTimeout(() => {
+  try {
+    refreshSquareMarketCache?.();
+  } catch (e) {
+    console.log('Square cache skipped:', e.message);
+  }
+}, 1500);
+
+setTimeout(() => initMargins?.().catch(e => console.log('Margins init: ' + e.message)), 2000);
 
 // Schedule: Square cache refresh daily at 1 AM UTC
 cron.schedule('0 1 * * *', refreshSquareMarketCache, {
