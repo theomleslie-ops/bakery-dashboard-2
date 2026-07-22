@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
 const axios = require('axios');
+const cron = require('node-cron');
 require('dotenv').config();
 
 const app = express();
@@ -1248,20 +1249,27 @@ const fetchQBWeeklyRows = async (startDate, endDateExclusive) => {
 
 // Get real per-week QuickBooks P&L totals for [rangeStart, rangeEndInclusive] (both Sundays),
 // backfilling from QuickBooks into the on-disk snapshot only for weeks not already cached, and
-// always refreshing the most recent 2 weeks live.
+// refreshing the most recent 2 weeks live if QB is connected. If QB is not connected, serves from cache.
 const getQBWeeklyRows = async (rangeStart, rangeEndInclusive) => {
   const snapshot = loadQBWeeklySnapshot();
   const earliestCached = Object.keys(snapshot.weeks).sort()[0];
 
-  if (!earliestCached || rangeStart < earliestCached) {
-    const backfillEnd = earliestCached && earliestCached > rangeStart ? earliestCached : addDays(rangeEndInclusive, 7);
-    Object.assign(snapshot.weeks, await fetchQBWeeklyRows(rangeStart, backfillEnd));
+  // Only try to fetch from QB if connected
+  const isQBConnected = () => {
+    try { return !!fs.existsSync(QB_TOKENS_FILE) && JSON.parse(fs.readFileSync(QB_TOKENS_FILE, 'utf-8')).refresh_token; } catch { return false; }
+  };
+
+  if (isQBConnected()) {
+    if (!earliestCached || rangeStart < earliestCached) {
+      const backfillEnd = earliestCached && earliestCached > rangeStart ? earliestCached : addDays(rangeEndInclusive, 7);
+      Object.assign(snapshot.weeks, await fetchQBWeeklyRows(rangeStart, backfillEnd));
+    }
+
+    const liveStart = addDays(rangeEndInclusive, -7);
+    Object.assign(snapshot.weeks, await fetchQBWeeklyRows(liveStart, addDays(rangeEndInclusive, 7)));
+
+    saveQBWeeklySnapshot(snapshot);
   }
-
-  const liveStart = addDays(rangeEndInclusive, -7);
-  Object.assign(snapshot.weeks, await fetchQBWeeklyRows(liveStart, addDays(rangeEndInclusive, 7)));
-
-  saveQBWeeklySnapshot(snapshot);
 
   const rows = [];
   for (let d = rangeStart; d <= rangeEndInclusive; d = addDays(d, 7)) {
@@ -2021,6 +2029,38 @@ app.get('/eula', (req, res) => {
 <p>The application connects to a single QuickBooks Online account belonging to that business. It is not licensed or distributed as a general-purpose product for unrelated businesses to connect their own accounts. No warranty is provided; the application is used at the operator's own discretion.</p>
 </body></html>`);
 });
+
+// ============= QUICKBOOKS AUTO-REFRESH SCHEDULER =============
+// Refreshes QB P&L data every 2 weeks, so all users see cached data without needing to connect individually.
+// Runs once on startup, then on a schedule (Sundays at 12:05 AM UTC, every 2 weeks).
+
+const refreshQBWeeklyData = async () => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const currentWeekStart = getWeekStart(today, 0); // Sunday-based weeks
+    const twoWeeksAgo = addDays(currentWeekStart, -14);
+
+    await getQBWeeklyRows(twoWeeksAgo, currentWeekStart);
+    console.log(`✅ QB P&L snapshot refreshed (${twoWeeksAgo} to ${currentWeekStart})`);
+  } catch (err) {
+    if (err.code === 'QB_NOT_CONNECTED') {
+      console.log(`⏸️  QB P&L refresh skipped: QuickBooks not connected. Connect at /api/quickbooks/connect`);
+    } else {
+      console.error(`❌ QB P&L refresh failed:`, err.message);
+    }
+  }
+};
+
+// Run on startup (after a brief delay so DB is ready)
+setTimeout(refreshQBWeeklyData, 1000);
+
+// Schedule: every 2 weeks on Sunday at 12:05 AM UTC (cron: minute hour day month dayOfWeek)
+// '5 0 * * 0' = 00:05 every Sunday; then runs every 14 days
+cron.schedule('5 0 * * 0', refreshQBWeeklyData, {
+  runOnInit: false, // Already runs on startup above
+  timezone: 'UTC',
+});
+console.log(`📅 QB P&L auto-refresh scheduled: Sundays at 00:05 UTC (every 2 weeks)`);
 
 // Start server
 const PORT = process.env.PORT || 3001;
