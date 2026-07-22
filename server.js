@@ -1888,7 +1888,8 @@ app.get('/api/product-margins', async (req, res) => {
     const points = [];
     const noSales = [];              // costed, but no Square sales matched
     report.recipes.forEach((r) => {
-      if (!r.allPriced || r.costPerUnit == null) return; // handled via coverage buckets below
+      if (r.costPerUnit == null) return; // handled via coverage buckets below
+      if (r.allPriced === false) return; // explicitly unpriced
       if (nameExclusions.has(r.recipe) || sheetExclusions.has(`${r.recipe}::${r.sheet}`)) return; // skip excluded recipes
       const key = nameOverrides[r.recipe] ? String(nameOverrides[r.recipe]).toLowerCase() : matchProductToSquare(r.recipe, salesKeys);
       const s = key ? sales[key] : null;
