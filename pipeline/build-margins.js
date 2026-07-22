@@ -33,7 +33,7 @@ const main = async ({ weeks = 12 } = {}) => {
   } catch (e) {
     console.error(`\n  ✗ Failed to fetch vendor prices: ${e.message}`);
     if (e.code === 'QB_NOT_CONNECTED') {
-      console.error('    Connect QuickBooks first via the app: /api/quickbooks/connect');
+      console.error('    → Visit the dashboard and click "Connect QuickBooks" to authorize access to vendor invoices');
     }
     throw e;
   }

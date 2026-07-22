@@ -981,7 +981,7 @@ const saveQBTokens = (tokens) => saveData(QB_TOKENS_FILE, tokens);
 const getValidQBAccessToken = async () => {
   const tokens = loadQBTokens();
   if (!tokens || !tokens.refresh_token) {
-    const err = new Error('QuickBooks not connected. Visit /api/quickbooks/connect to authorize.');
+    const err = new Error('QuickBooks not connected. Click "Connect QuickBooks" in the dashboard to authorize access to vendor invoices.');
     err.code = 'QB_NOT_CONNECTED';
     throw err;
   }
@@ -1958,7 +1958,7 @@ const refreshQBWeeklyData = async () => {
     console.log(`✅ QB cache + weekly snapshot refreshed (${twoWeeksAgo} to ${currentWeekStart})`);
   } catch (err) {
     if (err.code === 'QB_NOT_CONNECTED') {
-      console.log(`⏸️  QB cache refresh skipped: QuickBooks not connected. Connect at /api/quickbooks/connect`);
+      console.log(`⏸️  QB cache refresh skipped: QuickBooks not connected. Click "Connect QuickBooks" in the dashboard to authorize.`);
     } else {
       console.error(`❌ QB cache refresh failed:`, err.message);
     }
