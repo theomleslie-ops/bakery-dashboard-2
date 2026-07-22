@@ -1,0 +1,272 @@
+{
+  "generatedAt": "2026-07-22T18:19:08.404Z",
+  "recipeCount": 38,
+  "recipes": [
+    {
+      "recipe": "Cranberry scone - british",
+      "sheet": "70_SCONES Cranberry British Original",
+      "costPerUnit": 1.35,
+      "unitsPerBatch": 4.71875,
+      "totalBatchKg": 0.755
+    },
+    {
+      "recipe": "Apples for tart",
+      "sheet": "Apple for tart Recipe Template",
+      "costPerUnit": 41.76,
+      "unitsPerBatch": 1.0000000000000002,
+      "totalBatchKg": 3.9370000000000003
+    },
+    {
+      "recipe": "Banana Bread",
+      "sheet": "Banana Bread",
+      "costPerUnit": 8.19,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 1.392
+    },
+    {
+      "recipe": "Black  Sesame Scone",
+      "sheet": "Black Sesame Scone",
+      "costPerUnit": 5.02,
+      "unitsPerBatch": 1.0000000000000002,
+      "totalBatchKg": 1.1500000000000001
+    },
+    {
+      "recipe": "BREAD PUDDING  CUSTARD",
+      "sheet": "BREAD PUDDING",
+      "costPerUnit": 12.17,
+      "unitsPerBatch": 0.9999999999999999,
+      "totalBatchKg": 3.7709999999999995
+    },
+    {
+      "recipe": "Chocolate glaze",
+      "sheet": "CAKE Chocolate glaze for pistachio cake",
+      "costPerUnit": 1075.41,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 80
+    },
+    {
+      "recipe": "Chocolate Nutella Scone British",
+      "sheet": "Chocolate Nutella Scone",
+      "costPerUnit": 1.22,
+      "unitsPerBatch": 7.186666666666666,
+      "totalBatchKg": 1.0779999999999998
+    },
+    {
+      "recipe": "Double chocolate cookies",
+      "sheet": "COOKIES double choc",
+      "costPerUnit": 2.11,
+      "unitsPerBatch": 154.78723404255322,
+      "totalBatchKg": 36.37500000000001
+    },
+    {
+      "recipe": "FRANGIPANE",
+      "sheet": "Copy of Frangipane",
+      "costPerUnit": 21.89,
+      "unitsPerBatch": 1.0000000000000002,
+      "totalBatchKg": 3.9230000000000005
+    },
+    {
+      "recipe": "Reb Bean Sesame Crisp",
+      "sheet": "Copy of Red Bean Sesame Crisp",
+      "costPerUnit": 17.43,
+      "unitsPerBatch": 0.9999999999999999,
+      "totalBatchKg": 3.8249999999999997
+    },
+    {
+      "recipe": "Cranberry  scone - british",
+      "sheet": "Cranberry  British  SCONE",
+      "costPerUnit": 1.26,
+      "unitsPerBatch": 4.60625,
+      "totalBatchKg": 0.737
+    },
+    {
+      "recipe": "CREAM CHEESE GLAZE",
+      "sheet": "CREAM CHESSE GLAZE",
+      "costPerUnit": 1.05,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 0.56
+    },
+    {
+      "recipe": "Cron",
+      "sheet": "Cron for Blueberry muffin",
+      "costPerUnit": 3.56,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 0.82
+    },
+    {
+      "recipe": "Panettone",
+      "sheet": "DOUGH panettone",
+      "costPerUnit": 109.34,
+      "unitsPerBatch": 1.000000000311217,
+      "totalBatchKg": 10.092626533140997
+    },
+    {
+      "recipe": "Poolish",
+      "sheet": "DOUGH poolish",
+      "costPerUnit": 7.32,
+      "unitsPerBatch": 0.9999999998347108,
+      "totalBatchKg": 2.0166666666666666
+    },
+    {
+      "recipe": "Lemon Curd",
+      "sheet": "Lemon curd  AH",
+      "costPerUnit": 15.73,
+      "unitsPerBatch": 0.9999999999999999,
+      "totalBatchKg": 3.2329999999999997
+    },
+    {
+      "recipe": "lemon Curd For Hazelnut scone",
+      "sheet": "lemon curd for Hazelnut scone",
+      "costPerUnit": 42.88,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 7.168
+    },
+    {
+      "recipe": "Lemon Currant British",
+      "sheet": "Lemon currants scones British",
+      "costPerUnit": 1.35,
+      "unitsPerBatch": 6,
+      "totalBatchKg": 0.96
+    },
+    {
+      "recipe": "Bran muffin",
+      "sheet": "MUFFIN bran",
+      "costPerUnit": 59.98,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 13.839
+    },
+    {
+      "recipe": "LEMON MUFFIN",
+      "sheet": "MUFFIN lemon",
+      "costPerUnit": 57.9,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 10.01
+    },
+    {
+      "recipe": "PUMPKIN MUFFIN",
+      "sheet": "MUFFIN pumpkin",
+      "costPerUnit": 0.5,
+      "unitsPerBatch": 7.881481481481483,
+      "totalBatchKg": 1.0640000000000003
+    },
+    {
+      "recipe": "Raspberry Teff Muffin",
+      "sheet": "MUFFIN teff raspberry",
+      "costPerUnit": 7.79,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 1.017
+    },
+    {
+      "recipe": "Chocolate moelleux",
+      "sheet": "OTHER chocolate moelleux",
+      "costPerUnit": 104.01,
+      "unitsPerBatch": 1.0000000000000002,
+      "totalBatchKg": 14.935000000000002
+    },
+    {
+      "recipe": "IRISH SODA BREAD",
+      "sheet": "OTHER irish soda bread",
+      "costPerUnit": 4.96,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 1.139
+    },
+    {
+      "recipe": "Orange syrup",
+      "sheet": "OTHER orange syrup",
+      "costPerUnit": 11.6,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 2.1
+    },
+    {
+      "recipe": "Volk seed mix",
+      "sheet": "OTHER seed mix for volk",
+      "costPerUnit": 2.03,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 0.23454545454545456
+    },
+    {
+      "recipe": "Seed mix",
+      "sheet": "OTHER Seed mix",
+      "costPerUnit": 14.03,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 0.75
+    },
+    {
+      "recipe": "Sunflower seed mix",
+      "sheet": "OTHER Sunflower seed mix",
+      "costPerUnit": 21.86,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 0.75
+    },
+    {
+      "recipe": "VEGGIE MIX FOR FOCACCIA",
+      "sheet": "OTHER veggie mix for focaccia",
+      "costPerUnit": 74.8,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 5.56
+    },
+    {
+      "recipe": "PATE SABLE",
+      "sheet": "PATE SABLE  Recipe Template",
+      "costPerUnit": 5.12,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 1.087
+    },
+    {
+      "recipe": "Pistachio cake",
+      "sheet": "Pistachio cake",
+      "costPerUnit": 10.54,
+      "unitsPerBatch": 0.9999999999999999,
+      "totalBatchKg": 1.9201799999999998
+    },
+    {
+      "recipe": "Pistachio glaze",
+      "sheet": "Pistachio glaze",
+      "costPerUnit": 1801.02,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 200
+    },
+    {
+      "recipe": "Pistachio mix",
+      "sheet": "PREP pistachio mix with praline paste",
+      "costPerUnit": 3.51,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 1.15
+    },
+    {
+      "recipe": "RASPBERRY COMPOTE",
+      "sheet": "PREP raspberry compote",
+      "costPerUnit": 3.19,
+      "unitsPerBatch": 1.0000000000000002,
+      "totalBatchKg": 0.4580000000000001
+    },
+    {
+      "recipe": "Pumpkin Seed Frangipane",
+      "sheet": "Pumpkin seed Frang",
+      "costPerUnit": 3.95,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 0.482
+    },
+    {
+      "recipe": "Red Bean Paste",
+      "sheet": "recipe temp",
+      "costPerUnit": 6.97,
+      "unitsPerBatch": 1,
+      "totalBatchKg": 1.5
+    },
+    {
+      "recipe": "Chocolate polenta scone - british",
+      "sheet": "SCONES Chocolate polenta British",
+      "costPerUnit": 0.88,
+      "unitsPerBatch": 4.55,
+      "totalBatchKg": 0.728
+    },
+    {
+      "recipe": "Coffee cake  Crumble",
+      "sheet": "TEFF FLOUR CRUMBS",
+      "costPerUnit": 1.63,
+      "unitsPerBatch": 1.0000000000000002,
+      "totalBatchKg": 0.35700000000000004
+    }
+  ]
+}

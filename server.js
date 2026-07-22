@@ -10,6 +10,7 @@ const cron = require('node-cron');
 require('dotenv').config();
 
 const qbCache = require('./pipeline/qb-cache');
+const { initMargins } = require('./pipeline/init-margins');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -1959,6 +1960,7 @@ const refreshQBWeeklyData = async () => {
 setTimeout(qbCache.warmupCacheOnStartup, 500); // Warmup QB cache first
 setTimeout(refreshQBWeeklyData, 1000);
 setTimeout(refreshSquareMarketCache, 1500); // Square after QB
+setTimeout(() => initMargins().catch(e => console.warn('Product Margins init failed:', e.message)), 2000); // Build recipe costs if needed
 
 // Schedule: Square cache refresh daily at 1 AM UTC
 cron.schedule('0 1 * * *', refreshSquareMarketCache, {
