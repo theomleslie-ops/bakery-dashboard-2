@@ -25,10 +25,22 @@ const getRedirectUri = () =>
   process.env.GOOGLE_REDIRECT_URI || `http://localhost:${process.env.PORT || 3001}/api/google/callback`;
 
 const loadTokens = () => {
+  // Check .env first for pre-configured tokens (auto-auth, no user sign-in needed)
+  if (process.env.GOOGLE_REFRESH_TOKEN) {
+    return {
+      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      access_token: null, // Will be fetched on first use
+      expiry_date: 0, // Force immediate refresh
+      source: 'env',
+    };
+  }
+  // Fall back to tokens file
   try { return JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf-8')); } catch { return null; }
 };
 
 const saveTokens = (tokens) => {
+  // Don't overwrite if tokens came from .env (they're managed there)
+  if (tokens.source === 'env') return;
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2));
 };
