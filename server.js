@@ -2268,6 +2268,7 @@ const fetchSquareSalesData = async () => {
     try {
       while (page < MAX_PAGES) {
         const req = {
+          location_ids: [location.squareLocationId],
           begin_time: new Date(`${oneYearAgo}T00:00:00Z`).getTime(),
           end_time: Date.now(),
           limit: 500,
@@ -2276,9 +2277,6 @@ const fetchSquareSalesData = async () => {
             filter: {
               state_filter: {
                 states: ['COMPLETED'],
-              },
-              location_filter: {
-                location_ids: [location.squareLocationId],
               },
             },
           },
