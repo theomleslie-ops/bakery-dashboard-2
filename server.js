@@ -2296,7 +2296,8 @@ const fetchSquareSalesData = async () => {
         } catch (apiErr) {
           console.error(`Square API error for location ${location.name}:`, {
             status: apiErr.response?.status,
-            data: apiErr.response?.data,
+            errors: apiErr.response?.data?.errors,
+            errorDetail: apiErr.response?.data?.errors?.[0]?.detail,
             message: apiErr.message,
           });
           throw apiErr;
