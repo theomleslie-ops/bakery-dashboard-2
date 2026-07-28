@@ -64,20 +64,32 @@ const getValidAccessToken = async () => {
   }
 
   // Refresh the access token
-  const res = await axios.post(
-    'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer',
-    new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: tokens.refresh_token,
-    }).toString(),
-    {
-      headers: {
-        Authorization: basicAuth(),
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
-      },
-    }
-  );
+  console.log('Refreshing QB access token...');
+  let res;
+  try {
+    res = await axios.post(
+      'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer',
+      new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+      }).toString(),
+      {
+        headers: {
+          Authorization: basicAuth(),
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+      }
+    );
+    console.log('✅ QB token refresh successful');
+  } catch (err) {
+    console.error('❌ QB token refresh failed:', {
+      status: err.response?.status,
+      data: err.response?.data,
+      message: err.message,
+    });
+    throw err;
+  }
 
   const updated = {
     ...tokens,
