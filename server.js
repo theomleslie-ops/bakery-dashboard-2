@@ -2708,4 +2708,22 @@ const server = app.listen(PORT, async () => {
       }
     });
   }
+
+  // Auto-rebuild product margins weekly (Sundays at 3am)
+  // Fetches vendor prices from QB + recipes from Google Drive
+  cron.schedule('0 3 * * 0', async () => {
+    console.log('🔄 Starting weekly margin rebuild...');
+    try {
+      const marginBuilder = require('./pipeline/build-margins');
+      const result = await marginBuilder.main({ weeks: 12 });
+      console.log(`✅ Margin rebuild complete: ${result.coverage.costed.length} recipes costed`);
+    } catch (err) {
+      console.error('❌ Margin rebuild failed:', err.message);
+      if (err.code === 'QB_NOT_CONNECTED') {
+        console.error('   → QuickBooks not connected, skipping margin rebuild');
+      } else if (err.code === 'GOOGLE_NOT_CONNECTED') {
+        console.error('   → Google Drive not connected, skipping margin rebuild');
+      }
+    }
+  });
 });
