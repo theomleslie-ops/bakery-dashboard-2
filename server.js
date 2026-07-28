@@ -1134,12 +1134,15 @@ app.get('/api/quickbooks/status', (req, res) => {
   const composioStatus = composioConnectors.getConnectionStatus();
   const cacheStatus = qbCache.isCachePopulated();
   const realmId = process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID;
+  const hasRefreshToken = !!(process.env.QUICKBOOKS_REFRESH_TOKEN);
   res.json({
     connected: !!(tokens && tokens.refresh_token) || composioStatus.quickbooks,
     connectedVia: composioStatus.quickbooks ? 'composio' : (tokens && tokens.refresh_token ? 'legacy' : null),
     realmId: tokens?.realmId || realmId || null,
     connectedAt: tokens?.connectedAt || null,
-    envTokensSet: !!(process.env.QUICKBOOKS_REFRESH_TOKEN && realmId),
+    envTokensSet: !!(hasRefreshToken && realmId),
+    hasRefreshToken,
+    tokensObject: tokens ? { source: tokens.source, hasRefreshToken: !!tokens.refresh_token } : null,
     cachePopulated: cacheStatus,
     cacheDir: 'data/qb-cache',
   });
