@@ -269,14 +269,20 @@
 
         function displayQBData(data) {
             const div = document.getElementById('qb-data');
-            if (!data.plReport) {
+            if (!data.report) {
                 div.innerHTML = '<p>No QB data available</p>';
                 return;
             }
 
+            const report = data.report;
+            const revenue = report.Rows?.find(r => r.Summary?.ColData?.[0]?.value === 'Total Income')?.Summary?.ColData?.[1]?.value || 'N/A';
+            const expenses = report.Rows?.find(r => r.Summary?.ColData?.[0]?.value === 'Total Expenses')?.Summary?.ColData?.[1]?.value || 'N/A';
+
             div.innerHTML = `
-                <p>P&L Report available</p>
-                <p>Balance Sheet available</p>
+                <p>📊 P&L Report (Last 30 Days)</p>
+                <p>Revenue: $${revenue}</p>
+                <p>Expenses: $${expenses}</p>
+                <p><small>Cached at: ${data.cachedAt || 'unknown'}</small></p>
             `;
         }
 

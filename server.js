@@ -2430,14 +2430,27 @@ app.get('/api/public/quickbooks/overview', async (req, res) => {
     }
 
     const cached = qbCache.loadCache('pl-30d');
-    if (!cached) {
-      return res.status(503).json({ error: 'QB data still loading, please refresh in a moment' });
+    if (cached) {
+      return res.json({
+        success: true,
+        report: cached.data,
+        cachedAt: cached.cachedAt,
+        timestamp: new Date().toISOString(),
+      });
     }
+
+    console.log('Cache miss - fetching fresh QB data');
+    const today = new Date().toISOString().split('T')[0];
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const report = await qbCache.fetchReport('ProfitAndLoss', {
+      start_date: thirtyDaysAgo,
+      end_date: today,
+    });
 
     res.json({
       success: true,
-      report: cached.data,
-      cachedAt: cached.cachedAt,
+      report,
+      cachedAt: new Date().toISOString(),
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
