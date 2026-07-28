@@ -2482,7 +2482,8 @@ const matchRecipeToSquareItem = (recipeName, squareItemName) => {
 
   if (!recipeToks.length || !squareToks.length) return false;
   const overlap = recipeToks.filter((t) => squareToks.includes(t));
-  return overlap.length / recipeToks.length >= 0.6; // at least 60% token overlap
+  // Lowered to 50% to allow fuzzy matches like "Country Round" -> "Country dough"
+  return overlap.length / recipeToks.length >= 0.5;
 };
 
 // Main product margins endpoint
@@ -2526,8 +2527,23 @@ app.get('/api/product-margins', async (req, res) => {
 
       const withMargins = [];
       for (const item of top20) {
-        const recipeKey = item.name.toLowerCase();
-        const costPerUnit = costByRecipe[recipeKey];
+        // Find best recipe match using fuzzy matching
+        let costPerUnit = null;
+        const recipes = Object.keys(costByRecipe);
+
+        // Try exact match first
+        let recipeKey = item.name.toLowerCase();
+        costPerUnit = costByRecipe[recipeKey];
+
+        // If no exact match, find best fuzzy match
+        if (!costPerUnit) {
+          for (const recipe of recipes) {
+            if (matchRecipeToSquareItem(recipe, item.name)) {
+              costPerUnit = costByRecipe[recipe];
+              break; // Use first match
+            }
+          }
+        }
 
         withMargins.push({
           name: item.name,
