@@ -1165,7 +1165,8 @@ app.get('/api/quickbooks/callback', async (req, res) => {
     let redirectTo = '/?qb=connected';
     if (state && state !== 'dashboard') {
       try {
-        redirectTo = Buffer.from(state, 'base64').toString('utf-8');
+        // State might be base64-encoded (from auto-reauth) or plain (from manual connect)
+        redirectTo = Buffer.from(decodeURIComponent(state), 'base64').toString('utf-8');
       } catch (e) {
         console.warn('Could not decode state parameter, using default redirect');
       }
@@ -1186,7 +1187,7 @@ app.get('/api/quickbooks/callback', async (req, res) => {
 app.get('/api/quickbooks/auto-reauth', (req, res) => {
   const tokens = loadQBTokens();
   const tokenError = qbCache.getTokenError();
-  const { redirectUrl } = req.query; // Where to redirect after re-auth
+  let redirectUrl = req.query.redirectUrl; // Where to redirect after re-auth
 
   console.log('🔄 Auto re-auth check initiated');
 
@@ -1198,7 +1199,7 @@ app.get('/api/quickbooks/auto-reauth', (req, res) => {
       response_type: 'code',
       scope: 'com.intuit.quickbooks.accounting',
       redirect_uri: getQBRedirectUri(),
-      state: redirectUrl ? Buffer.from(redirectUrl).toString('base64') : 'dashboard', // Store return URL
+      state: redirectUrl || 'dashboard', // Pass through the redirectUrl as state
     });
     return res.redirect(`${QB_AUTH_URL}?${params.toString()}`);
   }
@@ -1207,7 +1208,16 @@ app.get('/api/quickbooks/auto-reauth', (req, res) => {
   qbCache.clearTokenError();
 
   // Redirect back to original page or dashboard
-  const returnUrl = redirectUrl ? Buffer.from(redirectUrl, 'base64').toString('utf-8') : '/';
+  let returnUrl = '/';
+  if (redirectUrl) {
+    try {
+      // redirectUrl is base64-encoded and URL-encoded
+      returnUrl = Buffer.from(decodeURIComponent(redirectUrl), 'base64').toString('utf-8');
+    } catch (e) {
+      console.warn('Could not decode redirectUrl, using default:', e.message);
+      returnUrl = '/';
+    }
+  }
   res.redirect(returnUrl);
 });
 

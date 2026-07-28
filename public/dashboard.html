@@ -241,7 +241,7 @@
                     // Token expired - AUTO re-auth: redirect to auto-reauth endpoint
                     console.log('🔄 Token expired, triggering automatic re-authorization...');
                     document.getElementById('qb-status').textContent = '🔄 Re-authorizing...';
-                    const returnUrl = btoa(window.location.pathname + window.location.search);
+                    const returnUrl = encodeURIComponent(btoa(window.location.pathname + window.location.search));
                     window.location.href = `${API_BASE}/api/quickbooks/auto-reauth?redirectUrl=${returnUrl}`;
                 } else if (qbData.reconnectUrl) {
                     // Other auth issues - show manual reconnect button
