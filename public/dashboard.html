@@ -237,6 +237,11 @@
                 if (qbData.success && qbData.report) {
                     document.getElementById('qb-status').textContent = '✅ Connected';
                     displayQBData(qbData);
+                } else if (qbData.reconnectUrl) {
+                    // Token expired or auth failed - show reconnect prompt
+                    document.getElementById('qb-status').textContent = '⚠️ Auth expired';
+                    showQBReconnectPrompt(qbData.reconnectUrl);
+                    showError(`QB: ${qbData.error}`);
                 } else if (qbData.error && qbData.error.includes('not configured')) {
                     document.getElementById('qb-status').innerHTML = '❌ Not connected<br><small>Click button below to authorize</small>';
                     document.getElementById('qb-connect-btn').style.display = 'block';
@@ -283,6 +288,16 @@
                 <p>Revenue: $${revenue}</p>
                 <p>Expenses: $${expenses}</p>
                 <p><small>Cached at: ${data.cachedAt || 'unknown'}</small></p>
+            `;
+        }
+
+        function showQBReconnectPrompt(reconnectUrl) {
+            const div = document.getElementById('qb-data');
+            div.innerHTML = `
+                <p style="color: var(--text-light);">QB connection expired. Please reconnect to see live data.</p>
+                <a href="${reconnectUrl}" style="display: inline-block; margin-top: 1rem; padding: 0.75rem 1.5rem; background-color: var(--rust); color: white; text-decoration: none; border-radius: 4px; font-size: 0.9rem;">
+                    🔄 Reconnect QuickBooks
+                </a>
             `;
         }
 

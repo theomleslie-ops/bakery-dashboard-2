@@ -12,41 +12,83 @@ if (!fs.existsSync(QB_CACHE_DIR)) {
   fs.mkdirSync(QB_CACHE_DIR, { recursive: true });
 }
 
+const QB_ERROR_FILE = path.join(DATA_DIR, 'qb-token-error.json');
+
 const getBaseUrl = () =>
   process.env.QUICKBOOKS_ENVIRONMENT === 'sandbox'
     ? 'https://sandbox-quickbooks.api.intuit.com'
     : 'https://quickbooks.api.intuit.com';
 
+const saveTokenError = (error) => {
+  try {
+    fs.writeFileSync(QB_ERROR_FILE, JSON.stringify(error, null, 2));
+  } catch (e) {
+    console.warn('Failed to save QB token error:', e.message);
+  }
+};
+
+const getTokenError = () => {
+  try {
+    if (fs.existsSync(QB_ERROR_FILE)) {
+      return JSON.parse(fs.readFileSync(QB_ERROR_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.warn('Failed to load QB token error:', e.message);
+  }
+  return null;
+};
+
+const clearTokenError = () => {
+  try {
+    if (fs.existsSync(QB_ERROR_FILE)) {
+      fs.unlinkSync(QB_ERROR_FILE);
+    }
+  } catch (e) {
+    console.warn('Failed to clear QB token error:', e.message);
+  }
+};
+
 const basicAuth = () =>
   `Basic ${Buffer.from(`${process.env.QUICKBOOKS_CLIENT_ID}:${process.env.QUICKBOOKS_CLIENT_SECRET}`).toString('base64')}`;
 
 const loadTokens = () => {
-  // Check .env first for pre-configured tokens (no user sign-in needed)
+  // Priority 1: Load from persistent file (survives restarts/redeploys)
+  try {
+    const fileTokens = JSON.parse(fs.readFileSync(QB_TOKENS_FILE, 'utf-8'));
+    if (fileTokens && fileTokens.refresh_token) {
+      return fileTokens;
+    }
+  } catch (e) {
+    // File doesn't exist or is invalid - continue to env vars
+  }
+
+  // Priority 2: Check env vars (used for initial setup or testing)
   const refreshToken = process.env.QUICKBOOKS_REFRESH_TOKEN;
   const realmId = process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID;
 
   if (refreshToken && realmId) {
-    return {
+    // Found in env - save to file so it persists
+    const tokens = {
       refresh_token: refreshToken,
       realmId: realmId,
-      access_token: null, // Will be fetched on first use
-      expires_at: 0, // Force immediate refresh
+      access_token: null,
+      expires_at: 0,
       source: 'env',
     };
+    saveTokens(tokens);
+    return tokens;
   }
 
-  // Fall back to stored tokens file
-  try {
-    return JSON.parse(fs.readFileSync(QB_TOKENS_FILE, 'utf-8'));
-  } catch {
-    return null;
-  }
+  return null;
 };
 
 const saveTokens = (t) => {
-  // Don't overwrite if tokens came from .env (they're managed there)
-  if (t.source === 'env') return;
-  fs.writeFileSync(QB_TOKENS_FILE, JSON.stringify(t, null, 2));
+  try {
+    fs.writeFileSync(QB_TOKENS_FILE, JSON.stringify(t, null, 2));
+    console.log('✅ QB tokens persisted to file');
+  } catch (e) {
+    console.error('❌ Failed to save QB tokens to file:', e.message);
+  }
 };
 
 // Returns valid tokens (incl. realmId), refreshing the access token if expired.
@@ -82,22 +124,47 @@ const getValidAccessToken = async () => {
       }
     );
     console.log('✅ QB token refresh successful');
+    // Clear any previous error state
+    clearTokenError();
   } catch (err) {
+    const errorMsg = err.response?.data?.error_description || err.message;
+    const isExpiredToken = err.response?.data?.error === 'invalid_grant' && errorMsg.includes('Incorrect or invalid refresh token');
+
     console.error('❌ QB token refresh failed:', {
       status: err.response?.status,
       data: err.response?.data,
       message: err.message,
     });
+
+    // If refresh token is invalid/expired, save error state and throw special error
+    if (isExpiredToken) {
+      saveTokenError({
+        type: 'token_expired',
+        message: 'QuickBooks refresh token expired. Please reconnect.',
+        timestamp: new Date().toISOString(),
+      });
+      err.code = 'QB_TOKEN_EXPIRED';
+    }
+
     throw err;
   }
 
   const updated = {
     ...tokens,
     access_token: res.data.access_token,
-    refresh_token: res.data.refresh_token || tokens.refresh_token,
+    refresh_token: res.data.refresh_token || tokens.refresh_token, // QB rotates tokens, use new one if provided
     expires_at: Date.now() + res.data.expires_in * 1000,
+    realmId: tokens.realmId,
+    last_refreshed: new Date().toISOString(),
   };
+
+  // Always persist refreshed tokens - critical for long-term stability
   saveTokens(updated);
+
+  // Also update env var so it stays in sync
+  process.env.QUICKBOOKS_REFRESH_TOKEN = updated.refresh_token;
+  process.env.QUICKBOOKS_REALM_ID = updated.realmId;
+
   return updated;
 };
 
@@ -248,4 +315,6 @@ module.exports = {
   fetchReport,
   fetchAccounts,
   fetchExpenses,
+  getTokenError,
+  clearTokenError,
 };

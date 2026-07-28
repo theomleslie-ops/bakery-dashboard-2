@@ -1140,12 +1140,27 @@ app.get('/api/quickbooks/callback', async (req, res) => {
       expires_at: Date.now() + response.data.expires_in * 1000,
       realmId,
       connectedAt: new Date().toISOString(),
+      last_refreshed: new Date().toISOString(),
     };
+
+    // Save to persistent file (survives restarts and redeploys)
     saveQBTokens(tokens);
-    console.log('✅ QB tokens saved');
-    console.log('📌 ADD TO RAILWAY ENVIRONMENT:');
+
+    // Also update env vars for this session
+    process.env.QUICKBOOKS_REFRESH_TOKEN = tokens.refresh_token;
+    process.env.QUICKBOOKS_REALM_ID = realmId;
+
+    console.log('✅ QB tokens saved to file');
+    console.log('✅ QB tokens synced to environment');
+
+    // Also log for Railway environment vars (optional, but helpful)
+    console.log('📌 Optional: ADD TO RAILWAY ENVIRONMENT for backup:');
     console.log(`QUICKBOOKS_REFRESH_TOKEN=${tokens.refresh_token}`);
     console.log(`QUICKBOOKS_REALM_ID=${realmId}`);
+
+    // Clear any previous token errors
+    qbCache.clearTokenError();
+
     res.redirect('/?qb=connected');
   } catch (err) {
     console.error('❌ QB token exchange failed:', {
@@ -1162,18 +1177,41 @@ app.get('/api/quickbooks/status', (req, res) => {
   const tokens = loadQBTokens();
   const composioStatus = composioConnectors.getConnectionStatus();
   const cacheStatus = qbCache.isCachePopulated();
+  const tokenError = qbCache.getTokenError();
   const realmId = process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID;
   const hasRefreshToken = !!(process.env.QUICKBOOKS_REFRESH_TOKEN);
+
+  let tokenHealth = 'unknown';
+  let tokenExpiresIn = null;
+  if (tokens && tokens.expires_at) {
+    const msUntilExpiry = tokens.expires_at - Date.now();
+    tokenExpiresIn = Math.floor(msUntilExpiry / 1000 / 60); // minutes
+    if (msUntilExpiry > 24 * 60 * 60 * 1000) {
+      tokenHealth = 'healthy';
+    } else if (msUntilExpiry > 0) {
+      tokenHealth = 'expiring_soon';
+    } else {
+      tokenHealth = 'expired';
+    }
+  }
+
   res.json({
     connected: !!(tokens && tokens.refresh_token) || composioStatus.quickbooks,
-    connectedVia: composioStatus.quickbooks ? 'composio' : (tokens && tokens.refresh_token ? 'legacy' : null),
+    connectedVia: composioStatus.quickbooks ? 'composio' : (tokens && tokens.refresh_token ? 'file_persistent' : null),
     realmId: tokens?.realmId || realmId || null,
     connectedAt: tokens?.connectedAt || null,
     envTokensSet: !!(hasRefreshToken && realmId),
     hasRefreshToken,
-    tokensObject: tokens ? { source: tokens.source, hasRefreshToken: !!tokens.refresh_token } : null,
+    tokenHealth,
+    tokenExpiresInMinutes: tokenExpiresIn,
+    lastRefreshed: tokens?.last_refreshed || null,
+    hasTokenError: !!tokenError,
+    tokenError: tokenError?.message || null,
+    tokensSource: tokens?.source || null,
+    tokensFile: 'data/quickbooks-tokens.json',
     cachePopulated: cacheStatus,
     cacheDir: 'data/qb-cache',
+    persistenceEnabled: true,
   });
 });
 
@@ -2489,7 +2527,22 @@ app.get('/api/public/quickbooks/overview', async (req, res) => {
   try {
     const realmId = process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID;
     if (!realmId || !process.env.QUICKBOOKS_REFRESH_TOKEN) {
-      return res.status(400).json({ error: 'QuickBooks not configured' });
+      return res.status(400).json({
+        success: false,
+        error: 'QuickBooks not configured',
+        reconnectUrl: '/api/quickbooks/connect',
+      });
+    }
+
+    // Check for token errors from previous refresh attempts
+    const tokenError = qbCache.getTokenError();
+    if (tokenError) {
+      return res.status(400).json({
+        success: false,
+        error: tokenError.message,
+        errorType: tokenError.type,
+        reconnectUrl: '/api/quickbooks/connect',
+      });
     }
 
     const cached = qbCache.loadCache('pl-30d');
@@ -2519,7 +2572,12 @@ app.get('/api/public/quickbooks/overview', async (req, res) => {
     });
   } catch (err) {
     console.error('QB overview error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      errorType: err.code,
+      reconnectUrl: '/api/quickbooks/connect',
+    });
   }
 });
 
@@ -2540,9 +2598,23 @@ const server = app.listen(PORT, async () => {
     console.log('⚠️  Square not configured');
   }
 
-  const qbConfigured = process.env.QUICKBOOKS_REFRESH_TOKEN && (process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID);
+  // Check for QB tokens from file (persistent) or env vars
+  const fileTokens = loadQBTokens();
+  const envTokens = process.env.QUICKBOOKS_REFRESH_TOKEN && (process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID);
+  const qbConfigured = !!fileTokens || envTokens;
+
   if (qbConfigured) {
     console.log('✅ QuickBooks configured');
+    if (fileTokens) {
+      console.log('   📁 Tokens loaded from file (persistent storage)');
+      if (fileTokens.expires_at) {
+        const minutesUntilExpiry = Math.floor((fileTokens.expires_at - Date.now()) / 1000 / 60);
+        console.log(`   ⏰ Access token expires in ${minutesUntilExpiry} minutes`);
+      }
+    }
+    if (envTokens) {
+      console.log('   🔧 Environment variables set');
+    }
     setTimeout(() => qbCache.warmupCacheOnStartup(), 500);
   } else {
     console.log('⚠️  QuickBooks not configured');
