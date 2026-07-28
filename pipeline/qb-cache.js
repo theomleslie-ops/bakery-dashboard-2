@@ -125,7 +125,12 @@ const loadCache = (name) => {
 const fetchReport = async (reportName, params = {}) => {
   const tokens = await getValidAccessToken();
   const url = `${getBaseUrl()}/v3/company/${tokens.realmId}/reports/${reportName}`;
-  console.log(`Fetching QB report: ${reportName}`, { realmId: tokens.realmId, params });
+  console.log(`Fetching QB report: ${reportName}`, {
+    url,
+    realmId: tokens.realmId,
+    params,
+    hasAccessToken: !!tokens.access_token
+  });
   try {
     const res = await axios.get(url, {
       params,
@@ -134,10 +139,13 @@ const fetchReport = async (reportName, params = {}) => {
         Accept: 'application/json',
       },
     });
+    console.log(`✅ QB report ${reportName} fetched successfully`);
     return res.data;
   } catch (err) {
-    console.error(`QB report fetch failed:`, {
+    console.error(`❌ QB report fetch failed for ${reportName}:`, {
+      url,
       status: err.response?.status,
+      statusText: err.response?.statusText,
       data: err.response?.data,
       message: err.message,
     });
