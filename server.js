@@ -1133,12 +1133,13 @@ app.get('/api/quickbooks/status', (req, res) => {
   const tokens = loadQBTokens();
   const composioStatus = composioConnectors.getConnectionStatus();
   const cacheStatus = qbCache.isCachePopulated();
+  const realmId = process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID;
   res.json({
     connected: !!(tokens && tokens.refresh_token) || composioStatus.quickbooks,
     connectedVia: composioStatus.quickbooks ? 'composio' : (tokens && tokens.refresh_token ? 'legacy' : null),
-    realmId: tokens?.realmId || process.env.QB_REALM_ID || null,
+    realmId: tokens?.realmId || realmId || null,
     connectedAt: tokens?.connectedAt || null,
-    envTokensSet: !!(process.env.QUICKBOOKS_REFRESH_TOKEN && process.env.QB_REALM_ID),
+    envTokensSet: !!(process.env.QUICKBOOKS_REFRESH_TOKEN && realmId),
     cachePopulated: cacheStatus,
     cacheDir: 'data/qb-cache',
   });
@@ -2430,7 +2431,8 @@ app.get('/api/public/square/overview', async (req, res) => {
 // QuickBooks data endpoint
 app.get('/api/public/quickbooks/overview', async (req, res) => {
   try {
-    if (!process.env.QB_REALM_ID || !process.env.QUICKBOOKS_REFRESH_TOKEN) {
+    const realmId = process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID;
+    if (!realmId || !process.env.QUICKBOOKS_REFRESH_TOKEN) {
       return res.status(400).json({ error: 'QuickBooks not configured' });
     }
 
@@ -2481,14 +2483,15 @@ const server = app.listen(PORT, async () => {
     console.log('⚠️  Square not configured');
   }
 
-  if (process.env.QB_REALM_ID && process.env.QUICKBOOKS_REFRESH_TOKEN) {
+  const qbConfigured = process.env.QUICKBOOKS_REFRESH_TOKEN && (process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID);
+  if (qbConfigured) {
     console.log('✅ QuickBooks configured');
     setTimeout(() => qbCache.warmupCacheOnStartup(), 500);
   } else {
     console.log('⚠️  QuickBooks not configured');
   }
 
-  if (process.env.QB_REALM_ID && process.env.QUICKBOOKS_REFRESH_TOKEN) {
+  if (qbConfigured) {
     cron.schedule('*/30 * * * *', async () => {
       console.log('🔄 Scheduled QB cache refresh...');
       try {

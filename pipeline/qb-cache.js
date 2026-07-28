@@ -22,10 +22,13 @@ const basicAuth = () =>
 
 const loadTokens = () => {
   // Check .env first for pre-configured tokens (no user sign-in needed)
-  if (process.env.QUICKBOOKS_REFRESH_TOKEN && process.env.QUICKBOOKS_REALM_ID) {
+  const refreshToken = process.env.QUICKBOOKS_REFRESH_TOKEN;
+  const realmId = process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID;
+
+  if (refreshToken && realmId) {
     return {
-      refresh_token: process.env.QUICKBOOKS_REFRESH_TOKEN,
-      realmId: process.env.QUICKBOOKS_REALM_ID,
+      refresh_token: refreshToken,
+      realmId: realmId,
       access_token: null, // Will be fetched on first use
       expires_at: 0, // Force immediate refresh
       source: 'env',
