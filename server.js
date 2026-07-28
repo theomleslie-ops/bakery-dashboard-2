@@ -1119,8 +1119,8 @@ app.get('/api/quickbooks/connect', (req, res) => {
 
 // Step 2: Intuit redirects back here with a code + realmId
 app.get('/api/quickbooks/callback', async (req, res) => {
-  const { code, realmId, error } = req.query;
-  console.log('QB callback received:', { code: code ? '***' : null, realmId, error });
+  const { code, realmId, error, state } = req.query;
+  console.log('QB callback received:', { code: code ? '***' : null, realmId, error, state: state ? '***' : null });
 
   if (error) return res.status(400).send(`QuickBooks authorization failed: ${error}`);
   if (!code || !realmId) return res.status(400).send('Missing code or realmId from QuickBooks');
@@ -1161,7 +1161,16 @@ app.get('/api/quickbooks/callback', async (req, res) => {
     // Clear any previous token errors
     qbCache.clearTokenError();
 
-    res.redirect('/?qb=connected');
+    // Redirect back to where user was (or dashboard if no state)
+    let redirectTo = '/?qb=connected';
+    if (state && state !== 'dashboard') {
+      try {
+        redirectTo = Buffer.from(state, 'base64').toString('utf-8');
+      } catch (e) {
+        console.warn('Could not decode state parameter, using default redirect');
+      }
+    }
+    res.redirect(redirectTo);
   } catch (err) {
     console.error('❌ QB token exchange failed:', {
       status: err.response?.status,
@@ -1170,6 +1179,36 @@ app.get('/api/quickbooks/callback', async (req, res) => {
     });
     res.status(500).send(`Failed to connect QuickBooks: ${err.response?.data?.error_description || err.message}`);
   }
+});
+
+// Automatic re-auth: Triggered when tokens need refresh
+// Checks token health and auto-initiates OAuth if needed
+app.get('/api/quickbooks/auto-reauth', (req, res) => {
+  const tokens = loadQBTokens();
+  const tokenError = qbCache.getTokenError();
+  const { redirectUrl } = req.query; // Where to redirect after re-auth
+
+  console.log('🔄 Auto re-auth check initiated');
+
+  // If there's a token error or no tokens, start OAuth flow
+  if (tokenError || !tokens || !tokens.refresh_token) {
+    console.log('❌ Token error detected, initiating OAuth flow...');
+    const params = new URLSearchParams({
+      client_id: process.env.QUICKBOOKS_CLIENT_ID,
+      response_type: 'code',
+      scope: 'com.intuit.quickbooks.accounting',
+      redirect_uri: getQBRedirectUri(),
+      state: redirectUrl ? Buffer.from(redirectUrl).toString('base64') : 'dashboard', // Store return URL
+    });
+    return res.redirect(`${QB_AUTH_URL}?${params.toString()}`);
+  }
+
+  // Tokens look good, clear any previous errors
+  qbCache.clearTokenError();
+
+  // Redirect back to original page or dashboard
+  const returnUrl = redirectUrl ? Buffer.from(redirectUrl, 'base64').toString('utf-8') : '/';
+  res.redirect(returnUrl);
 });
 
 // Connection status
@@ -2621,12 +2660,23 @@ const server = app.listen(PORT, async () => {
   }
 
   if (qbConfigured) {
+    // Refresh cache every 30 minutes (auto-rotates tokens)
     cron.schedule('*/30 * * * *', async () => {
       console.log('🔄 Scheduled QB cache refresh...');
       try {
         await qbCache.refreshAllQBData();
       } catch (err) {
         console.error('QB cache refresh failed:', err.message);
+      }
+    });
+
+    // Check token health daily (proactive monitoring)
+    cron.schedule('0 2 * * *', () => {
+      const health = qbCache.checkTokenHealth();
+      if (!health.healthy) {
+        console.warn(`⚠️  QB token health issue: ${health.reason}`, health);
+      } else {
+        console.log('✅ QB token health check passed');
       }
     });
   }

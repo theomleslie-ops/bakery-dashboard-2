@@ -237,9 +237,15 @@
                 if (qbData.success && qbData.report) {
                     document.getElementById('qb-status').textContent = '✅ Connected';
                     displayQBData(qbData);
+                } else if (qbData.reconnectUrl && qbData.errorType === 'token_expired') {
+                    // Token expired - AUTO re-auth: redirect to auto-reauth endpoint
+                    console.log('🔄 Token expired, triggering automatic re-authorization...');
+                    document.getElementById('qb-status').textContent = '🔄 Re-authorizing...';
+                    const returnUrl = btoa(window.location.pathname + window.location.search);
+                    window.location.href = `${API_BASE}/api/quickbooks/auto-reauth?redirectUrl=${returnUrl}`;
                 } else if (qbData.reconnectUrl) {
-                    // Token expired or auth failed - show reconnect prompt
-                    document.getElementById('qb-status').textContent = '⚠️ Auth expired';
+                    // Other auth issues - show manual reconnect button
+                    document.getElementById('qb-status').textContent = '⚠️ Auth needed';
                     showQBReconnectPrompt(qbData.reconnectUrl);
                     showError(`QB: ${qbData.error}`);
                 } else if (qbData.error && qbData.error.includes('not configured')) {

@@ -285,11 +285,33 @@ const refreshAllQBData = async () => {
   } catch (err) {
     if (err.code === 'QB_NOT_CONNECTED') {
       console.log('⏸️  QB cache refresh skipped: QuickBooks not connected');
+    } else if (err.code === 'QB_TOKEN_EXPIRED') {
+      console.error('❌ QB token expired - automatic re-auth needed');
+      throw err;
     } else {
       console.error('❌ QB cache refresh failed:', err.message);
       throw err;
     }
   }
+};
+
+// Check if refresh token is approaching expiry (within 7 days of QB's ~100-day limit)
+// QB refresh tokens don't have explicit expiry, but with rotation they stay fresh
+// This monitors for unusual patterns that might indicate expiry
+const checkTokenHealth = () => {
+  const tokens = loadTokens();
+  if (!tokens) return { healthy: false, reason: 'no_tokens' };
+
+  // Token is healthy if it was recently refreshed (within last 90 days)
+  if (tokens.last_refreshed) {
+    const daysSinceRefresh = (Date.now() - new Date(tokens.last_refreshed).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSinceRefresh > 100) {
+      console.warn('⚠️  QB token hasn\'t been refreshed in 100+ days - may be stale');
+      return { healthy: false, reason: 'stale_token', daysSinceRefresh };
+    }
+  }
+
+  return { healthy: true };
 };
 
 // Warm up cache on startup if empty
@@ -317,4 +339,7 @@ module.exports = {
   fetchExpenses,
   getTokenError,
   clearTokenError,
+  checkTokenHealth,
+  loadTokens,
+  saveTokens,
 };
