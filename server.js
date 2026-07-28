@@ -2429,14 +2429,15 @@ app.get('/api/public/quickbooks/overview', async (req, res) => {
       return res.status(400).json({ error: 'QuickBooks not configured' });
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    const report = await claudeMCP.getQuickBooksReport(thirtyDaysAgo, today);
+    const cached = qbCache.loadCache('pl-30d');
+    if (!cached) {
+      return res.status(503).json({ error: 'QB data still loading, please refresh in a moment' });
+    }
 
     res.json({
       success: true,
-      report,
+      report: cached.data,
+      cachedAt: cached.cachedAt,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -2464,7 +2465,19 @@ const server = app.listen(PORT, async () => {
 
   if (process.env.QB_REALM_ID && process.env.QUICKBOOKS_REFRESH_TOKEN) {
     console.log('✅ QuickBooks configured');
+    setTimeout(() => qbCache.warmupCacheOnStartup(), 500);
   } else {
     console.log('⚠️  QuickBooks not configured');
+  }
+
+  if (process.env.QB_REALM_ID && process.env.QUICKBOOKS_REFRESH_TOKEN) {
+    cron.schedule('*/30 * * * *', async () => {
+      console.log('🔄 Scheduled QB cache refresh...');
+      try {
+        await qbCache.refreshAllQBData();
+      } catch (err) {
+        console.error('QB cache refresh failed:', err.message);
+      }
+    });
   }
 });
