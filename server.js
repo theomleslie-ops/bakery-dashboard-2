@@ -1039,6 +1039,21 @@ const qbBasicAuthHeader = () =>
   `Basic ${Buffer.from(`${process.env.QUICKBOOKS_CLIENT_ID}:${process.env.QUICKBOOKS_CLIENT_SECRET}`).toString('base64')}`;
 
 const loadQBTokens = () => {
+  // Check env vars first
+  const refreshToken = process.env.QUICKBOOKS_REFRESH_TOKEN;
+  const realmId = process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID;
+
+  if (refreshToken && realmId) {
+    return {
+      refresh_token: refreshToken,
+      realmId: realmId,
+      access_token: null,
+      expires_at: 0,
+      source: 'env',
+    };
+  }
+
+  // Fall back to stored tokens file
   try {
     return JSON.parse(fs.readFileSync(QB_TOKENS_FILE, 'utf-8'));
   } catch {
