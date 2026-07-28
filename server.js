@@ -2269,8 +2269,6 @@ const fetchSquareSalesData = async () => {
       while (page < MAX_PAGES) {
         const req = {
           location_ids: [location.squareLocationId],
-          begin_time: new Date(`${oneYearAgo}T00:00:00Z`).getTime(),
-          end_time: Date.now(),
           limit: 500,
           sort_order: 'DESC',
           query: {
@@ -2282,6 +2280,8 @@ const fetchSquareSalesData = async () => {
           },
         };
         if (cursor) req.query.cursor = cursor;
+
+        console.log(`Fetching orders for ${location.name}:`, { location_ids: req.location_ids, cursor });
 
         let res;
         try {
