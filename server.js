@@ -2256,32 +2256,36 @@ const fetchSquareSalesData = async () => {
     return cached;
   }
 
-  console.log('Fetching 1-year Square sales data...');
-  const oneYearAgo = new Date(Date.now() - 365 * 86400_000).toISOString().slice(0, 10);
+  console.log('Fetching 30-day Square sales data...');
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
   const allOrders = [];
 
   for (const location of WASTE_LOCATIONS) {
     let cursor = null;
     let page = 0;
-    const MAX_PAGES = 1000;
+    const MAX_PAGES = 10;
 
     try {
       while (page < MAX_PAGES) {
         const req = {
           location_ids: [location.squareLocationId],
-          limit: 500,
+          limit: 250,
           sort_order: 'DESC',
           query: {
             filter: {
               state_filter: {
                 states: ['COMPLETED'],
               },
+              date_time_filter: {
+                closed_at: {
+                  start_at: new Date(`${thirtyDaysAgo}T00:00:00Z`).toISOString(),
+                  end_at: new Date().toISOString(),
+                },
+              },
             },
           },
         };
         if (cursor) req.query.cursor = cursor;
-
-        console.log(`Fetching orders for ${location.name}:`, { location_ids: req.location_ids, cursor });
 
         let res;
         try {
