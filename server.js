@@ -2351,10 +2351,12 @@ const fetchSquareSalesData = async () => {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
   const allOrders = [];
 
-  for (const location of WASTE_LOCATIONS) {
+  // Fetch all locations in parallel (not sequentially)
+  const locationFetches = WASTE_LOCATIONS.map(async (location) => {
     let cursor = null;
     let page = 0;
-    const MAX_PAGES = 10;
+    const MAX_PAGES = 5; // Further reduced to ensure fast completion
+    const locationOrders = [];
 
     try {
       while (page < MAX_PAGES) {
@@ -2385,21 +2387,21 @@ const fetchSquareSalesData = async () => {
               Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
               'Content-Type': 'application/json',
             },
+            timeout: 10000, // 10s timeout per request
           });
         } catch (apiErr) {
           console.error(`Square API error for location ${location.name}:`, {
             status: apiErr.response?.status,
             errors: apiErr.response?.data?.errors,
-            errorDetail: apiErr.response?.data?.errors?.[0]?.detail,
             message: apiErr.message,
           });
-          throw apiErr;
+          return locationOrders; // Return partial data for this location
         }
 
         for (const order of (res.data.orders || [])) {
           if (order.state !== 'COMPLETED') continue;
           for (const lineItem of (order.line_items || [])) {
-            allOrders.push({
+            locationOrders.push({
               orderId: order.id,
               closedAt: order.closed_at,
               locationId: order.location_id,
@@ -2415,8 +2417,24 @@ const fetchSquareSalesData = async () => {
         page += 1;
       }
     } catch (e) {
-      console.error(`Failed to fetch orders for location ${location.name} (${location.squareLocationId}):`, e.message);
+      console.error(`Failed to fetch orders for location ${location.name}:`, e.message);
     }
+
+    return locationOrders;
+  });
+
+  // Wait for all location fetches to complete (max 30 seconds)
+  try {
+    const allLocationOrders = await Promise.race([
+      Promise.all(locationFetches),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Square data fetch timeout')), 30000)),
+    ]);
+    for (const orders of allLocationOrders) {
+      allOrders.push(...orders);
+    }
+  } catch (e) {
+    console.error('Error fetching all locations:', e.message);
+    // Continue with partial data rather than failing completely
   }
 
   const cached_data = {
