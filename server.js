@@ -1134,14 +1134,18 @@ app.get('/api/quickbooks/callback', async (req, res) => {
     );
 
     console.log('✅ QB token exchange successful, saving tokens');
-    saveQBTokens({
+    const tokens = {
       access_token: response.data.access_token,
       refresh_token: response.data.refresh_token,
       expires_at: Date.now() + response.data.expires_in * 1000,
       realmId,
       connectedAt: new Date().toISOString(),
-    });
-    console.log('✅ QB tokens saved, redirecting');
+    };
+    saveQBTokens(tokens);
+    console.log('✅ QB tokens saved');
+    console.log('📌 ADD TO RAILWAY ENVIRONMENT:');
+    console.log(`QUICKBOOKS_REFRESH_TOKEN=${tokens.refresh_token}`);
+    console.log(`QUICKBOOKS_REALM_ID=${realmId}`);
     res.redirect('/?qb=connected');
   } catch (err) {
     console.error('❌ QB token exchange failed:', {
