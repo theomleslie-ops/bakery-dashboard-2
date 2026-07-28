@@ -11,6 +11,7 @@ require('dotenv').config();
 
 const qbCache = require('./pipeline/qb-cache');
 const claudeMCP = require('./pipeline/claude-mcp');
+const composioConnectors = require('./pipeline/composio-connectors');
 
 // Safe lazy-load of initMargins
 const initMargins = async () => {
