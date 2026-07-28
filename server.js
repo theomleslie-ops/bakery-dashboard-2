@@ -1120,16 +1120,20 @@ app.get('/api/quickbooks/connect', (req, res) => {
 // Step 2: Intuit redirects back here with a code + realmId
 app.get('/api/quickbooks/callback', async (req, res) => {
   const { code, realmId, error } = req.query;
+  console.log('QB callback received:', { code: code ? '***' : null, realmId, error });
+
   if (error) return res.status(400).send(`QuickBooks authorization failed: ${error}`);
   if (!code || !realmId) return res.status(400).send('Missing code or realmId from QuickBooks');
 
   try {
+    console.log('Exchanging code for tokens...');
     const response = await axios.post(
       QB_TOKEN_URL,
       new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: getQBRedirectUri() }).toString(),
       { headers: { Authorization: qbBasicAuthHeader(), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
     );
 
+    console.log('✅ QB token exchange successful, saving tokens');
     saveQBTokens({
       access_token: response.data.access_token,
       refresh_token: response.data.refresh_token,
@@ -1137,8 +1141,14 @@ app.get('/api/quickbooks/callback', async (req, res) => {
       realmId,
       connectedAt: new Date().toISOString(),
     });
+    console.log('✅ QB tokens saved, redirecting');
     res.redirect('/?qb=connected');
   } catch (err) {
+    console.error('❌ QB token exchange failed:', {
+      status: err.response?.status,
+      data: err.response?.data,
+      message: err.message,
+    });
     res.status(500).send(`Failed to connect QuickBooks: ${err.response?.data?.error_description || err.message}`);
   }
 });
