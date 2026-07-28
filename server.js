@@ -2045,6 +2045,17 @@ app.post('/api/cache/clear', (req, res) => {
   cacheManager.timers.forEach(timer => clearTimeout(timer));
   cacheManager.timers.clear();
   composioCache.clearCache();
+
+  // Clear Square sales cache
+  try {
+    if (fs.existsSync(SQUARE_SALES_CACHE_FILE)) {
+      fs.unlinkSync(SQUARE_SALES_CACHE_FILE);
+      console.log('Cleared Square sales cache');
+    }
+  } catch (e) {
+    console.warn('Failed to clear Square sales cache:', e.message);
+  }
+
   res.json({ success: true, message: 'All caches cleared', timestamp: new Date().toISOString() });
 });
 
