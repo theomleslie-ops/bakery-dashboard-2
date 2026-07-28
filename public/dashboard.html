@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bakery Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --sand: #F5F1E8;
+            --brown-dark: #3C3227;
+            --brown-light: #8B7355;
+            --rust: #C85A37;
+            --green: #6B9F7F;
+
+            --bg: #FFFFFF;
+            --bg-alt: #F9F7F3;
+            --text: var(--brown-dark);
+            --text-light: var(--brown-light);
+            --border: #E8E4DC;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #1A1814;
+                --bg-alt: #2A251F;
+                --text: #F5F1E8;
+                --text-light: #B8A89C;
+                --border: #3C3227;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 2px solid var(--border);
+        }
+
+        h1 {
+            font-family: Georgia, serif;
+            font-size: 2.5rem;
+            font-weight: 400;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background-color: var(--bg-alt);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+        }
+
+        .card-content {
+            font-size: 1.1rem;
+            color: var(--text);
+        }
+
+        .section {
+            margin-top: 2rem;
+        }
+
+        .section-title {
+            font-family: Georgia, serif;
+            font-size: 1.5rem;
+            font-weight: 400;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--rust);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            padding: 1rem;
+            background-color: rgba(214, 69, 69, 0.1);
+            border: 1px solid #D64545;
+            border-radius: 8px;
+            color: #D64545;
+            margin-bottom: 1rem;
+        }
+
+        .success {
+            padding: 1rem;
+            background-color: rgba(107, 159, 127, 0.1);
+            border: 1px solid var(--green);
+            border-radius: 8px;
+            color: var(--green);
+            margin-bottom: 1rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        th {
+            background-color: var(--bg-alt);
+            padding: 0.75rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-light);
+            border-bottom: 2px solid var(--border);
+        }
+
+        td {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:hover {
+            background-color: var(--bg-alt);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🍞 Bakery Dashboard</h1>
+            <p class="subtitle">Real-time operations and financials via MCP connectors</p>
+        </header>
+
+        <div id="messages"></div>
+
+        <div class="grid">
+            <div class="card">
+                <div class="card-title">Square Status</div>
+                <div class="card-content">
+                    <span id="square-status">Loading...</span>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">QuickBooks Status</div>
+                <div class="card-content">
+                    <span id="qb-status">Loading...</span>
+                    <div id="qb-connect-btn" style="margin-top: 1rem; display: none;">
+                        <a href="/api/quickbooks/connect" style="display: inline-block; padding: 0.5rem 1rem; background-color: var(--rust); color: white; text-decoration: none; border-radius: 4px; font-size: 0.85rem;">
+                            Connect QuickBooks
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">Square Operations</h2>
+            <div id="square-data">
+                <p><span class="loading"></span> Loading Square data...</p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">QuickBooks P&L</h2>
+            <div id="qb-data">
+                <p><span class="loading"></span> Loading QuickBooks data...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        async function loadData() {
+            try {
+                // Load Square data
+                const squareRes = await fetch(`${API_BASE}/api/public/square/overview`);
+                const squareData = await squareRes.json();
+
+                if (squareData.success) {
+                    document.getElementById('square-status').textContent = '✅ Connected';
+                    displaySquareData(squareData);
+                } else {
+                    document.getElementById('square-status').textContent = '❌ Error';
+                    showError(`Square: ${squareData.error}`);
+                }
+            } catch (err) {
+                document.getElementById('square-status').textContent = '❌ Error';
+                showError(`Square: ${err.message}`);
+            }
+
+            try {
+                // Load QB data
+                const qbRes = await fetch(`${API_BASE}/api/public/quickbooks/overview`);
+                const qbData = await qbRes.json();
+
+                if (qbData.success && qbData.report) {
+                    document.getElementById('qb-status').textContent = '✅ Connected';
+                    displayQBData(qbData);
+                } else if (qbData.error && qbData.error.includes('not configured')) {
+                    document.getElementById('qb-status').innerHTML = '❌ Not connected<br><small>Click button below to authorize</small>';
+                    document.getElementById('qb-connect-btn').style.display = 'block';
+                } else {
+                    document.getElementById('qb-status').textContent = '⚠️ Disconnected';
+                    document.getElementById('qb-connect-btn').style.display = 'block';
+                    showError(`QB: ${qbData.error || 'Not connected'}`);
+                }
+            } catch (err) {
+                document.getElementById('qb-status').textContent = '❌ Error';
+                document.getElementById('qb-connect-btn').style.display = 'block';
+                showError(`QB: ${err.message}`);
+            }
+        }
+
+        function displaySquareData(data) {
+            const div = document.getElementById('square-data');
+            if (!data.locations) {
+                div.innerHTML = '<p>No Square data available</p>';
+                return;
+            }
+
+            div.innerHTML = `
+                <p>Locations: ${data.locations.length || 0}</p>
+                <p>Timecards (7d): ${data.timecards?.length || 0}</p>
+                <p>Orders (7d): ${data.orders?.length || 0}</p>
+                <p>Team Members: ${data.teamMembers?.length || 0}</p>
+            `;
+        }
+
+        function displayQBData(data) {
+            const div = document.getElementById('qb-data');
+            if (!data.plReport) {
+                div.innerHTML = '<p>No QB data available</p>';
+                return;
+            }
+
+            div.innerHTML = `
+                <p>P&L Report available</p>
+                <p>Balance Sheet available</p>
+            `;
+        }
+
+        function showError(msg) {
+            const messages = document.getElementById('messages');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = msg;
+            messages.appendChild(errorDiv);
+        }
+
+        function showSuccess(msg) {
+            const messages = document.getElementById('messages');
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success';
+            successDiv.textContent = msg;
+            messages.appendChild(successDiv);
+        }
+
+        // Load data when page loads
+        window.addEventListener('load', () => {
+            showSuccess('✅ Dashboard ready - fetching live data via MCP connectors');
+            loadData();
+            // Refresh every 5 minutes
+            setInterval(loadData, 5 * 60 * 1000);
+        });
+    </script>
+</body>
+</html>

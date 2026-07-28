@@ -48,7 +48,26 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(npm list *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git remote *)",
+      "Bash(pkill -f \"node -e\")",
+      "Bash(export QUICKBOOKS_CLIENT_ID=\"ABHyV7tVcYpBFDUOXUtuBYO76WP96VK2KNPazuIVxu3LGeYAjF\")",
+      "Bash(export QUICKBOOKS_CLIENT_SECRET=\"qo36ZkOzR7RyolgEiFo1aezYmooi8B0RcZ467378\")",
+      "Bash(git fetch *)",
+      "Bash(git rebase *)",
+      "Bash(git checkout *)",
+      "Bash(npm run *)",
+      "Bash(git check-ignore *)",
+      "Bash(gh auth *)",
+      "Bash(git pull *)",
+      "Bash(git ls-remote *)",
+      "Bash(npm ls *)",
+      "Bash(git merge *)",
+      "Bash(gh pr create --draft --title 'Fix: don'\\\\''t crash on startup when QB/Google unavailable' --body ' *)",
+      "Bash(grep -E \"\\\\.\\(json|csv\\)$\")",
+      "Bash(pkill -f \"node.*server.js\")",
+      "Bash(railway variable *)",
+      "Bash(gh pr *)"
     ]
   }
 }

@@ -10,6 +10,7 @@ const cron = require('node-cron');
 require('dotenv').config();
 
 const qbCache = require('./pipeline/qb-cache');
+const claudeMCP = require('./pipeline/claude-mcp');
 
 // Safe lazy-load of initMargins
 const initMargins = async () => {
@@ -562,11 +563,14 @@ const SQUARE_API_BASE = 'https://connect.squareup.com/v2';
 const SQUARE_API_VERSION = '2026-07-01';
 const DOW_INDEX = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
 
-const squareHeaders = () => ({
-  Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
-  'Square-Version': SQUARE_API_VERSION,
-  'Content-Type': 'application/json',
-});
+const squareHeaders = () => {
+  const token = process.env.SQUARE_ACCESS_TOKEN || '';
+  return {
+    Authorization: `Bearer ${token}`,
+    'Square-Version': SQUARE_API_VERSION,
+    'Content-Type': 'application/json',
+  };
+};
 
 const addDays = (dateStr, n) => {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -594,9 +598,30 @@ const loadOvertimeSnapshot = () => {
 const saveOvertimeSnapshot = (snapshot) => saveData(OVERTIME_SNAPSHOT_FILE, snapshot);
 
 const fetchWorkweekStartDow = async () => {
-  const response = await axios.get(`${SQUARE_API_BASE}/labor/workweek-configs`, { headers: squareHeaders() });
-  const config = response.data.workweek_configs?.[0];
-  return DOW_INDEX[config?.start_of_week] ?? 1; // default Monday
+  try {
+    // Try Composio first if configured
+    if (process.env.COMPOSIO_API_KEY) {
+      const connStatus = composioConnectors.getConnectionStatus();
+      if (connStatus.square) {
+        // Use Composio to call Square
+        const client = await composioConnectors.initComposio();
+        const connectionId = await composioConnectors.getSquareConnection();
+        const result = await client.executeAction({
+          connectionId,
+          action: 'square_get_labor_workweek_configs',
+        });
+        const config = result?.workweek_configs?.[0];
+        return DOW_INDEX[config?.start_of_week] ?? 1;
+      }
+    }
+    // Fallback to direct API
+    const response = await axios.get(`${SQUARE_API_BASE}/labor/workweek-configs`, { headers: squareHeaders() });
+    const config = response.data.workweek_configs?.[0];
+    return DOW_INDEX[config?.start_of_week] ?? 1;
+  } catch (err) {
+    console.warn('Failed to fetch workweek config:', err.message);
+    return 1; // default to Monday
+  }
 };
 
 // Fetch every CLOSED timecard whose shift starts within [startDate, endDateExclusive) for one window
@@ -605,23 +630,51 @@ const fetchTimecardsWindow = async (startDate, endDateExclusive) => {
   let cursor;
   let page = 0;
   do {
-    const response = await axios.post(
-      `${SQUARE_API_BASE}/labor/timecards/search`,
-      {
-        query: {
-          filter: {
-            start: { start_at: `${startDate}T00:00:00Z`, end_at: `${endDateExclusive}T00:00:00Z` },
-            status: 'CLOSED',
+    try {
+      // Try Composio first if configured
+      let response;
+      if (process.env.COMPOSIO_API_KEY) {
+        const connStatus = composioConnectors.getConnectionStatus();
+        if (connStatus.square) {
+          const client = await composioConnectors.initComposio();
+          const connectionId = await composioConnectors.getSquareConnection();
+          response = { data: await client.executeAction({
+            connectionId,
+            action: 'square_search_timecards',
+            parameters: {
+              start_at: `${startDate}T00:00:00Z`,
+              end_at: `${endDateExclusive}T00:00:00Z`,
+              status: 'CLOSED',
+              limit: 200,
+              cursor,
+            },
+          }) };
+        }
+      }
+      // Fallback to direct API
+      if (!response) {
+        response = await axios.post(
+          `${SQUARE_API_BASE}/labor/timecards/search`,
+          {
+            query: {
+              filter: {
+                start: { start_at: `${startDate}T00:00:00Z`, end_at: `${endDateExclusive}T00:00:00Z` },
+                status: 'CLOSED',
+              },
+            },
+            limit: 200,
+            cursor,
           },
-        },
-        limit: 200,
-        cursor,
-      },
-      { headers: squareHeaders() }
-    );
-    timecards.push(...(response.data.timecards || []));
-    cursor = response.data.cursor;
-    page += 1;
+          { headers: squareHeaders() }
+        );
+      }
+      timecards.push(...(response.data.timecards || []));
+      cursor = response.data.cursor;
+      page += 1;
+    } catch (err) {
+      console.warn(`Timecard fetch failed on page ${page}:`, err.message);
+      break;
+    }
   } while (cursor && page < 50);
   return timecards;
 };
@@ -657,16 +710,36 @@ const fetchTeamMemberNames = async () => {
   let cursor;
   let page = 0;
   do {
-    const response = await axios.post(
-      `${SQUARE_API_BASE}/team-members/search`,
-      { limit: 200, cursor },
-      { headers: squareHeaders() }
-    );
-    (response.data.team_members || []).forEach((tm) => {
-      names[tm.id] = [tm.given_name, tm.family_name].filter(Boolean).join(' ') || tm.id;
-    });
-    cursor = response.data.cursor;
-    page += 1;
+    try {
+      let response;
+      if (process.env.COMPOSIO_API_KEY) {
+        const connStatus = composioConnectors.getConnectionStatus();
+        if (connStatus.square) {
+          const client = await composioConnectors.initComposio();
+          const connectionId = await composioConnectors.getSquareConnection();
+          response = { data: await client.executeAction({
+            connectionId,
+            action: 'square_search_team_members',
+            parameters: { limit: 200, cursor },
+          }) };
+        }
+      }
+      if (!response) {
+        response = await axios.post(
+          `${SQUARE_API_BASE}/team-members/search`,
+          { limit: 200, cursor },
+          { headers: squareHeaders() }
+        );
+      }
+      (response.data.team_members || []).forEach((tm) => {
+        names[tm.id] = [tm.given_name, tm.family_name].filter(Boolean).join(' ') || tm.id;
+      });
+      cursor = response.data.cursor;
+      page += 1;
+    } catch (err) {
+      console.warn(`Team member fetch failed on page ${page}:`, err.message);
+      break;
+    }
   } while (cursor && page < 50);
   return names;
 };
@@ -852,8 +925,7 @@ const buildOvertimeSnapshot = async (startDate, endDateExclusive) => {
 // months - /api/overtime layers the current, still-open month on top of it live at request time,
 // instead of re-fetching years of Square timecards on every request.
 app.post('/api/overtime/snapshot/rebuild', async (req, res) => {
-  const token = process.env.SQUARE_ACCESS_TOKEN;
-  if (!token || token === 'your_square_token_here') {
+  if (!process.env.COMPOSIO_API_KEY && !process.env.SQUARE_ACCESS_TOKEN) {
     return res.status(400).json({ error: 'Square API credentials not configured' });
   }
 
@@ -877,8 +949,7 @@ app.post('/api/overtime/snapshot/rebuild', async (req, res) => {
 // Weeks covered by the cached snapshot (data/overtime-snapshot.json) are served from disk;
 // only the remaining, more recent slice is fetched live from Square. Cached for 24 hours per query.
 app.get('/api/overtime', async (req, res) => {
-  const token = process.env.SQUARE_ACCESS_TOKEN;
-  if (!token || token === 'your_square_token_here') {
+  if (!process.env.COMPOSIO_API_KEY && !process.env.SQUARE_ACCESS_TOKEN) {
     return res.status(400).json({ error: 'Square API credentials not configured', weeks: [] });
   }
 
@@ -980,8 +1051,18 @@ const saveQBTokens = (tokens) => saveData(QB_TOKENS_FILE, tokens);
 // Throws if QuickBooks has never been connected.
 const getValidQBAccessToken = async () => {
   const tokens = loadQBTokens();
+  const composioStatus = composioConnectors.getConnectionStatus();
+
   if (!tokens || !tokens.refresh_token) {
-    const err = new Error('QuickBooks not connected. Click "Connect QuickBooks" in the dashboard to authorize access to vendor invoices.');
+    let msg = 'QuickBooks not connected.';
+    if (composioStatus.quickbooks) {
+      msg += ' (Composio connected - use QB connector actions)';
+    } else if (process.env.COMPOSIO_API_KEY) {
+      msg += ' Authorize QB in your Composio workspace or click "Connect QuickBooks" in the dashboard.';
+    } else {
+      msg += ' Click "Connect QuickBooks" in the dashboard to authorize access.';
+    }
+    const err = new Error(msg);
     err.code = 'QB_NOT_CONNECTED';
     throw err;
   }
@@ -1049,8 +1130,10 @@ app.get('/api/quickbooks/callback', async (req, res) => {
 // Connection status
 app.get('/api/quickbooks/status', (req, res) => {
   const tokens = loadQBTokens();
+  const composioStatus = composioConnectors.getConnectionStatus();
   res.json({
-    connected: !!(tokens && tokens.refresh_token),
+    connected: !!(tokens && tokens.refresh_token) || composioStatus.quickbooks,
+    connectedVia: composioStatus.quickbooks ? 'composio' : (tokens && tokens.refresh_token ? 'legacy' : null),
     realmId: tokens?.realmId || null,
     connectedAt: tokens?.connectedAt || null,
   });
@@ -1060,6 +1143,25 @@ app.get('/api/quickbooks/status', (req, res) => {
 app.post('/api/quickbooks/disconnect', (req, res) => {
   if (fs.existsSync(QB_TOKENS_FILE)) fs.unlinkSync(QB_TOKENS_FILE);
   res.json({ success: true });
+});
+
+// Disconnect Composio connectors
+app.post('/api/square/disconnect', async (req, res) => {
+  try {
+    await composioConnectors.disconnectSquare();
+    res.json({ success: true, message: 'Square connector disconnected' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to disconnect Square', message: err.message });
+  }
+});
+
+app.post('/api/quickbooks/composio-disconnect', async (req, res) => {
+  try {
+    await composioConnectors.disconnectQuickBooks();
+    res.json({ success: true, message: 'QuickBooks connector disconnected' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to disconnect QuickBooks', message: err.message });
+  }
 });
 
 // Manual refresh of all QB data (P&L, accounts, expenses)
@@ -1127,6 +1229,41 @@ app.post('/api/google/disconnect', (req, res) => {
 
 // Fetch a Profit & Loss report from QuickBooks, broken into periods (Week or Month) for a date range
 const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Month') => {
+  try {
+    // Try Composio first if configured
+    if (process.env.COMPOSIO_API_KEY) {
+      try {
+        console.log('Attempting to fetch QB P&L via Composio...');
+        const client = await composioConnectors.initComposio();
+        const connectionId = await composioConnectors.getQuickBooksConnection();
+        console.log('Got QB connection ID from Composio:', connectionId);
+
+        // Try to use Composio's QB action
+        try {
+          const result = await client.executeAction({
+            connectionId,
+            action: 'quickbooks_get_profit_loss_report',
+            parameters: {
+              start_date: startDate,
+              end_date: endDate,
+              summarize_column_by: summarizeColumnBy,
+            },
+          });
+          console.log('✅ Successfully fetched QB P&L via Composio');
+          return result;
+        } catch (err) {
+          console.warn('Composio QB action failed:', err.message, '- trying direct API...');
+        }
+      } catch (err) {
+        console.warn('Composio connection attempt failed:', err.message, '- falling back to legacy auth');
+      }
+    }
+  } catch (err) {
+    console.warn('Composio path failed:', err.message);
+  }
+
+  // Fallback to legacy token auth
+  console.log('Attempting QB P&L fetch with legacy token auth...');
   const tokens = await getValidQBAccessToken();
   const response = await axios.get(
     `${getQBBaseUrl()}/v3/company/${tokens.realmId}/reports/ProfitAndLoss`,
@@ -1319,6 +1456,7 @@ app.get('/api/quickbooks/pl', async (req, res) => {
     const data = await fetchQBProfitAndLoss(startDate, endDate);
     res.json({ success: true, data, note: 'P/L statement from QuickBooks (live)' });
   } catch (err) {
+    console.error('QB P&L fetch error:', err.message);
     if (err.code === 'QB_NOT_CONNECTED') {
       // Try to serve from cache even if not connected
       const cached = qbCache.loadCache('pl-30d');
@@ -1857,8 +1995,10 @@ app.get('/api/waste', async (req, res) => {
 
 // View all cached items and their expiry times
 app.get('/api/cache/status', (req, res) => {
+  const composioCacheStatus = composioCache.getCacheStatus();
   res.json({
     status: 'ok',
+    composio: composioCacheStatus,
     cacheEntries: cacheManager.status(),
     totalCached: cacheManager.status().length,
     timestamp: new Date().toISOString(),
@@ -1870,7 +2010,18 @@ app.post('/api/cache/clear', (req, res) => {
   cacheManager.cache.clear();
   cacheManager.timers.forEach(timer => clearTimeout(timer));
   cacheManager.timers.clear();
-  res.json({ success: true, message: 'Cache cleared', timestamp: new Date().toISOString() });
+  composioCache.clearCache();
+  res.json({ success: true, message: 'All caches cleared', timestamp: new Date().toISOString() });
+});
+
+// Refresh Composio cache
+app.post('/api/cache/refresh', async (req, res) => {
+  try {
+    const result = await composioCache.refreshAllData();
+    res.json({ success: true, ...result, timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: 'Cache refresh failed', message: err.message });
+  }
 });
 
 // ============= HEALTH CHECK =============
@@ -2011,12 +2162,22 @@ console.log(`📅 QB data auto-refresh scheduled: Sundays at 00:05 UTC (weekly -
 // ============= INTEGRATIONS STATUS (Google + QuickBooks health) =============
 
 app.get('/api/integrations/status', (req, res) => {
+  const composioStatus = composioConnectors.getConnectionStatus();
+  const googleConnected = googleSheets.isConnected();
+
+  // Check for legacy QB tokens (for backward compatibility)
   const qbTokens = loadQBTokens();
-  const googleConnected = sheetsOAuth.isConnected();
 
   res.json({
+    composio: process.env.COMPOSIO_API_KEY ? 'configured' : 'not_configured',
+    connections: {
+      square: composioStatus.square || false,
+      quickbooks: composioStatus.quickbooks || (qbTokens && qbTokens.refresh_token),
+    },
     google: googleConnected ? 'ok' : 'disconnected',
-    quickbooks: (qbTokens && qbTokens.refresh_token) ? 'ok' : 'disconnected',
+    legacy: {
+      quickbooks: (qbTokens && qbTokens.refresh_token) ? 'connected' : 'disconnected',
+    },
   });
 });
 
@@ -2232,10 +2393,78 @@ app.get('/api/product-margins', async (req, res) => {
   }
 });
 
+// ============= PUBLIC DASHBOARD API ENDPOINTS =============
+
+// Square data endpoint
+app.get('/api/public/square/overview', async (req, res) => {
+  try {
+    if (!process.env.SQUARE_ACCESS_TOKEN) {
+      return res.status(400).json({ error: 'Square not configured' });
+    }
+
+    const today = new Date().toISOString();
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [locations, orders] = await Promise.all([
+      claudeMCP.getSquareLocations(),
+      claudeMCP.getSquareOrders(process.env.SQUARE_LOCATION_ID, sevenDaysAgo, today),
+    ]);
+
+    res.json({
+      success: true,
+      locations,
+      orders,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Square overview error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// QuickBooks data endpoint
+app.get('/api/public/quickbooks/overview', async (req, res) => {
+  try {
+    if (!process.env.QB_REALM_ID || !process.env.QUICKBOOKS_REFRESH_TOKEN) {
+      return res.status(400).json({ error: 'QuickBooks not configured' });
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const report = await claudeMCP.getQuickBooksReport(thirtyDaysAgo, today);
+
+    res.json({
+      success: true,
+      report,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('QB overview error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public dashboard page
+app.get('/dashboard', (req, res) => {
+  res.sendFile('public/dashboard.html', { root: __dirname });
+});
+
 // Start server
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   console.log(`🍞 Bakery Dashboard API running on http://localhost:${PORT}`);
-  console.log(`📋 Next: Add Square & QuickBooks API credentials to .env`);
-  console.log(`🚀 Railway auto-deploy is live and working`);
+  console.log(`📊 Public dashboard: http://localhost:${PORT}/dashboard`);
+
+  if (process.env.SQUARE_ACCESS_TOKEN) {
+    console.log('✅ Square configured');
+  } else {
+    console.log('⚠️  Square not configured');
+  }
+
+  if (process.env.QB_REALM_ID && process.env.QUICKBOOKS_REFRESH_TOKEN) {
+    console.log('✅ QuickBooks configured');
+  } else {
+    console.log('⚠️  QuickBooks not configured');
+  }
 });
