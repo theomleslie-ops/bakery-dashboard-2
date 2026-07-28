@@ -112,17 +112,25 @@ const loadCache = (name) => {
 // Fetch any QuickBooks Reports API report by name
 const fetchReport = async (reportName, params = {}) => {
   const tokens = await getValidAccessToken();
-  const res = await axios.get(
-    `${getBaseUrl()}/v3/company/${tokens.realmId}/reports/${reportName}`,
-    {
+  const url = `${getBaseUrl()}/v3/company/${tokens.realmId}/reports/${reportName}`;
+  console.log(`Fetching QB report: ${reportName}`, { realmId: tokens.realmId, params });
+  try {
+    const res = await axios.get(url, {
       params,
       headers: {
         Authorization: `Bearer ${tokens.access_token}`,
         Accept: 'application/json',
       },
-    }
-  );
-  return res.data;
+    });
+    return res.data;
+  } catch (err) {
+    console.error(`QB report fetch failed:`, {
+      status: err.response?.status,
+      data: err.response?.data,
+      message: err.message,
+    });
+    throw err;
+  }
 };
 
 // Fetch accounts from QB

@@ -2467,6 +2467,7 @@ app.get('/api/public/quickbooks/overview', async (req, res) => {
     console.log('Cache miss - fetching fresh QB data');
     const today = new Date().toISOString().split('T')[0];
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    console.log(`QB P&L query: ${thirtyDaysAgo} to ${today}`);
     const report = await qbCache.fetchReport('ProfitAndLoss', {
       start_date: thirtyDaysAgo,
       end_date: today,
