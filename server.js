@@ -2274,12 +2274,22 @@ const fetchSquareSalesData = async () => {
         };
         if (cursor) req.query.cursor = cursor;
 
-        const res = await axios.post(`https://connect.squareup.com/v2/orders/search`, req, {
-          headers: {
-            Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        let res;
+        try {
+          res = await axios.post(`https://connect.squareup.com/v2/orders/search`, req, {
+            headers: {
+              Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          });
+        } catch (apiErr) {
+          console.error(`Square API error for location ${location.name}:`, {
+            status: apiErr.response?.status,
+            data: apiErr.response?.data,
+            message: apiErr.message,
+          });
+          throw apiErr;
+        }
 
         for (const order of (res.data.orders || [])) {
           if (order.state !== 'COMPLETED') continue;
