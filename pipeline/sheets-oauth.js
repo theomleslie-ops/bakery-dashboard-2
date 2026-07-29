@@ -43,6 +43,10 @@ const saveTokens = (tokens) => {
   if (tokens.source === 'env') return;
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2));
+  // Also update env vars so tokens persist across deployments
+  if (tokens.refresh_token) {
+    process.env.GOOGLE_REFRESH_TOKEN = tokens.refresh_token;
+  }
 };
 
 const hasCredentials = () => !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);

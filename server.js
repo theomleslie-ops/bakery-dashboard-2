@@ -1332,6 +1332,12 @@ app.get('/api/google/callback', async (req, res) => {
   if (!code) return res.status(400).send('Missing authorization code from Google');
   try {
     await googleSheets.exchangeCodeForTokens(code);
+    const tokens = googleSheets.loadTokens();
+    if (tokens?.refresh_token) {
+      console.log('📌 Add to Railway environment for persistent backup:');
+      console.log(`GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}`);
+      process.env.GOOGLE_REFRESH_TOKEN = tokens.refresh_token;
+    }
     res.redirect('/?google=connected');
   } catch (err) {
     res.status(500).send(`Failed to connect Google: ${err.message}`);
