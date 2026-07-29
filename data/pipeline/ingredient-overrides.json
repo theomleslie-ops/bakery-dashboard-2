@@ -12,13 +12,11 @@
     { "squareItem": "Long Braid", "recipe": "Levain" },
     { "squareItem": "Cinn SWIRL", "recipe": "COFFEE CAKE" },
     { "squareItem": "Mini Banana Bread Loaf", "recipe": "Banana Bread" },
-    { "squareItem": "Almond Raspberry Muffin", "recipe": "Raspberry Teff Muffin" },
     { "squareItem": "Baguette", "recipe": "Country dough", "quantity": "750g" },
     { "squareItem": "PB Mound Cookie", "recipe": "PB cookies" },
     { "squareItem": "Berries & Cream Scone", "recipe": "Berries & Cream scone - BRITISH" },
     { "squareItem": "Epi", "recipe": "Country dough", "quantity": "750g" },
     { "squareItem": "Nutella Bun", "recipe": "Chocolate Nutella Scone British" },
-    { "squareItem": "Olive PC", "recipe": "Country olive dough with Galahad" },
-    { "squareItem": "Jalapeno & Cheddar Baton", "recipe": "VEGGIE MIX FOR FOCACCIA" }
+    { "squareItem": "Olive PC", "recipe": "Country olive dough with Galahad" }
   ]
 }
