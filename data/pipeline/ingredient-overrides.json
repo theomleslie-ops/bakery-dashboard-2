@@ -1,10 +1,10 @@
 {
   "mappings": [
-    { "squareItem": "Country Round", "recipe": "Country dough" },
+    { "squareItem": "Country Round", "recipe": "Country dough", "quantity": "1kg" },
     { "squareItem": "Breakfast Bar", "recipe": "Breakfast bars BOTTOM" },
     { "squareItem": "NO-NUT Choc Chip Cookie", "recipe": "Chocolate chips cookies (no nuts)" },
     { "squareItem": "Double Choc Chip Cookie", "recipe": "Double chocolate cookies" },
-    { "squareItem": "Country PC", "recipe": "Country dough" },
+    { "squareItem": "Country PC", "recipe": "Country dough", "quantity": "450g" },
     { "squareItem": "ORIGINAL Choc Chip Cookie", "recipe": "Original chocolate chips cookies" },
     { "squareItem": "Oatmeal Raisin Cookie", "recipe": "Oatmeal cookies" },
     { "squareItem": "Forest Scone", "recipe": "FOREST SCONES" },
@@ -13,10 +13,10 @@
     { "squareItem": "Cinn SWIRL", "recipe": "COFFEE CAKE" },
     { "squareItem": "Mini Banana Bread Loaf", "recipe": "Banana Bread" },
     { "squareItem": "Almond Raspberry Muffin", "recipe": "Raspberry Teff Muffin" },
-    { "squareItem": "Baguette", "recipe": "Levain" },
+    { "squareItem": "Baguette", "recipe": "Country dough", "quantity": "750g" },
     { "squareItem": "PB Mound Cookie", "recipe": "PB cookies" },
     { "squareItem": "Berries & Cream Scone", "recipe": "Berries & Cream scone - BRITISH" },
-    { "squareItem": "Epi", "recipe": "Fougasse dough" },
+    { "squareItem": "Epi", "recipe": "Country dough", "quantity": "750g" },
     { "squareItem": "Nutella Bun", "recipe": "Chocolate Nutella Scone British" },
     { "squareItem": "Olive PC", "recipe": "Country olive dough with Galahad" },
     { "squareItem": "Jalapeno & Cheddar Baton", "recipe": "VEGGIE MIX FOR FOCACCIA" }
