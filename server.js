@@ -1027,6 +1027,35 @@ const QB_TOKENS_FILE = path.join(DATA_DIR, 'quickbooks-tokens.json');
 const QB_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2';
 const QB_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 
+let qbRefreshJobsStarted = false;
+
+// Start QB auto-refresh jobs (called on startup and after auth)
+const startQBRefreshJobs = () => {
+  if (qbRefreshJobsStarted) return; // Prevent duplicate jobs
+  qbRefreshJobsStarted = true;
+  console.log('🔄 Starting QB auto-refresh jobs...');
+
+  // Refresh cache every 30 minutes (auto-rotates tokens)
+  cron.schedule('*/30 * * * *', async () => {
+    console.log('🔄 Scheduled QB cache refresh...');
+    try {
+      await qbCache.refreshAllQBData();
+    } catch (err) {
+      console.error('QB cache refresh failed:', err.message);
+    }
+  });
+
+  // Check token health daily (proactive monitoring)
+  cron.schedule('0 2 * * *', () => {
+    const health = qbCache.checkTokenHealth();
+    if (!health.healthy) {
+      console.warn(`⚠️  QB token health issue: ${health.reason}`, health);
+    } else {
+      console.log('✅ QB token health check passed');
+    }
+  });
+};
+
 const getQBBaseUrl = () =>
   process.env.QUICKBOOKS_ENVIRONMENT === 'sandbox'
     ? 'https://sandbox-quickbooks.api.intuit.com'
@@ -1160,6 +1189,9 @@ app.get('/api/quickbooks/callback', async (req, res) => {
 
     // Clear any previous token errors
     qbCache.clearTokenError();
+
+    // Start auto-refresh jobs if not already started
+    startQBRefreshJobs();
 
     // Redirect back to where user was (or dashboard if no state)
     let redirectTo = '/?qb=connected';
@@ -2777,25 +2809,7 @@ const server = app.listen(PORT, async () => {
   }
 
   if (qbConfigured) {
-    // Refresh cache every 30 minutes (auto-rotates tokens)
-    cron.schedule('*/30 * * * *', async () => {
-      console.log('🔄 Scheduled QB cache refresh...');
-      try {
-        await qbCache.refreshAllQBData();
-      } catch (err) {
-        console.error('QB cache refresh failed:', err.message);
-      }
-    });
-
-    // Check token health daily (proactive monitoring)
-    cron.schedule('0 2 * * *', () => {
-      const health = qbCache.checkTokenHealth();
-      if (!health.healthy) {
-        console.warn(`⚠️  QB token health issue: ${health.reason}`, health);
-      } else {
-        console.log('✅ QB token health check passed');
-      }
-    });
+    startQBRefreshJobs();
   }
 
   // Auto-rebuild product margins weekly (Sundays at 3am)
