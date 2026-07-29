@@ -1112,7 +1112,7 @@ app.get('/api/quickbooks/connect', (req, res) => {
     response_type: 'code',
     scope: 'com.intuit.quickbooks.accounting',
     redirect_uri: getQBRedirectUri(),
-    state: Math.random().toString(36).slice(2),
+    state: 'connect', // Plain marker for direct connection flow
   });
   res.redirect(`${QB_AUTH_URL}?${params.toString()}`);
 });
@@ -1163,9 +1163,9 @@ app.get('/api/quickbooks/callback', async (req, res) => {
 
     // Redirect back to where user was (or dashboard if no state)
     let redirectTo = '/?qb=connected';
-    if (state && state !== 'dashboard') {
+    if (state && state !== 'connect' && state !== 'dashboard') {
       try {
-        // State might be base64-encoded (from auto-reauth) or plain (from manual connect)
+        // State is base64-encoded URL from auto-reauth flow
         redirectTo = Buffer.from(decodeURIComponent(state), 'base64').toString('utf-8');
       } catch (e) {
         console.warn('Could not decode state parameter, using default redirect');
@@ -2571,7 +2571,8 @@ app.get('/api/product-margins', async (req, res) => {
           revenue: Math.round(item.revenue * 100) / 100,
           quantity: Math.round(item.qty * 100) / 100,
           avgPrice: Math.round(item.avgPrice * 100) / 100,
-          cogs: costPerUnit != null ? Math.round(item.qty * costPerUnit * 100) / 100 : null,
+          cogs: costPerUnit != null ? Math.round(costPerUnit * 100) / 100 : null,
+          totalCogs: costPerUnit != null ? Math.round(item.qty * costPerUnit * 100) / 100 : null,
           costPerUnit,
           margin$: costPerUnit != null ? Math.round((item.revenue - item.qty * costPerUnit) * 100) / 100 : null,
           marginPct: costPerUnit != null ? Math.round((1 - item.qty * costPerUnit / item.revenue) * 10000) / 100 : null,
