@@ -18,7 +18,17 @@ const basicAuth = () =>
   `Basic ${Buffer.from(`${process.env.QUICKBOOKS_CLIENT_ID}:${process.env.QUICKBOOKS_CLIENT_SECRET}`).toString('base64')}`;
 
 const loadTokens = () => {
-  // Check .env first for pre-configured tokens (auto-auth, no user sign-in needed)
+  // Priority 1: Check persistent tokens file first (from OAuth authorization, always fresh)
+  try {
+    const fileTokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf-8'));
+    if (fileTokens && fileTokens.refresh_token) {
+      return fileTokens;
+    }
+  } catch (e) {
+    // File doesn't exist or is invalid - continue to env vars
+  }
+
+  // Priority 2: Fall back to .env vars (for initial setup)
   if (process.env.QUICKBOOKS_REFRESH_TOKEN && process.env.QUICKBOOKS_REALM_ID) {
     return {
       refresh_token: process.env.QUICKBOOKS_REFRESH_TOKEN,
@@ -28,8 +38,8 @@ const loadTokens = () => {
       source: 'env',
     };
   }
-  // Fall back to tokens file
-  try { return JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf-8')); } catch { return null; }
+
+  return null;
 };
 
 const saveTokens = (t) => {
