@@ -9,3 +9,5 @@ data/*
 !data/pipeline/
 !data/pipeline/recipe-exclusions.json
 !data/pipeline/ingredient-overrides.json
+!data/google-tokens.json
+!data/quickbooks-tokens.json
