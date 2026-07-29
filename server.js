@@ -1120,7 +1120,7 @@ app.get('/api/quickbooks/connect', (req, res) => {
 // Step 2: Intuit redirects back here with a code + realmId
 app.get('/api/quickbooks/callback', async (req, res) => {
   const { code, realmId, error, state } = req.query;
-  console.log('QB callback received:', { code: code ? '***' : null, realmId, error, state: state ? '***' : null });
+  console.log('QB callback received:', { code: code ? '***' : null, realmId, error, state });
 
   if (error) return res.status(400).send(`QuickBooks authorization failed: ${error}`);
   if (!code || !realmId) return res.status(400).send('Missing code or realmId from QuickBooks');
@@ -1166,11 +1166,14 @@ app.get('/api/quickbooks/callback', async (req, res) => {
     if (state && state !== 'connect' && state !== 'dashboard') {
       try {
         // State is base64-encoded URL from auto-reauth flow
+        console.log('Attempting to decode state:', state);
         redirectTo = Buffer.from(decodeURIComponent(state), 'base64').toString('utf-8');
+        console.log('Decoded redirectTo:', redirectTo);
       } catch (e) {
-        console.warn('Could not decode state parameter, using default redirect');
+        console.warn('Could not decode state parameter, using default redirect:', e.message);
       }
     }
+    console.log('✓ Redirecting to:', redirectTo);
     res.redirect(redirectTo);
   } catch (err) {
     console.error('❌ QB token exchange failed:', {
