@@ -2569,17 +2569,19 @@ app.get('/api/product-margins', async (req, res) => {
           }
         }
 
+        const marginPerUnit = costPerUnit != null ? item.avgPrice - costPerUnit : null;
+        const marginPctPerUnit = costPerUnit != null ? Math.round((1 - costPerUnit / item.avgPrice) * 10000) / 100 : null;
+        const hasNegativeMargin = marginPerUnit != null && marginPerUnit < 0;
+
         withMargins.push({
           name: item.name,
           revenue: Math.round(item.revenue * 100) / 100,
           quantity: Math.round(item.qty * 100) / 100,
           avgPrice: Math.round(item.avgPrice * 100) / 100,
           cogs: costPerUnit != null ? Math.round(costPerUnit * 100) / 100 : null,
-          totalCogs: costPerUnit != null ? Math.round(item.qty * costPerUnit * 100) / 100 : null,
-          costPerUnit,
-          margin$: costPerUnit != null ? Math.round((item.revenue - item.qty * costPerUnit) * 100) / 100 : null,
-          marginPct: costPerUnit != null ? Math.round((1 - item.qty * costPerUnit / item.revenue) * 10000) / 100 : null,
-          status: costPerUnit != null ? 'costed' : 'needs-cost',
+          margin$: marginPerUnit != null ? Math.round(marginPerUnit * 100) / 100 : null,
+          marginPct: marginPctPerUnit,
+          status: hasNegativeMargin ? 'error-negative-margin' : (costPerUnit != null ? 'costed' : 'needs-cost'),
           matchedRecipe: matchedRecipe,
         });
       }
