@@ -2187,6 +2187,21 @@ app.post('/api/rebuild-margins', async (req, res) => {
   }
 });
 
+// Debug: Get recipe details
+app.get('/api/debug/recipe/:name', async (req, res) => {
+  try {
+    const { pullRecipes } = require('./pipeline/recipes');
+    const recipeData = await pullRecipes('Recipe LSB', {});
+    const recipe = recipeData.recipes.find(r => r.recipe.toLowerCase() === req.params.name.toLowerCase());
+    if (!recipe) {
+      return res.status(404).json({ error: `Recipe "${req.params.name}" not found` });
+    }
+    res.json(recipe);
+  } catch (err) {
+    res.status(500).json({ error: err.message, code: err.code });
+  }
+});
+
 // ============= HEALTH CHECK =============
 
 app.get('/api/health', (req, res) => {
