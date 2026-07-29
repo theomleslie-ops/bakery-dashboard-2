@@ -2501,6 +2501,16 @@ app.get('/api/product-margins', async (req, res) => {
       costByRecipe[r.recipe.toLowerCase()] = r.costPerUnit;
     }
 
+    // Load manual recipe overrides
+    const overridesFile = path.join(DATA_DIR, 'pipeline', 'ingredient-overrides.json');
+    const overrides = {};
+    if (fs.existsSync(overridesFile)) {
+      const overridesData = JSON.parse(fs.readFileSync(overridesFile, 'utf-8'));
+      for (const mapping of overridesData.mappings || []) {
+        overrides[mapping.squareItem] = mapping.recipe;
+      }
+    }
+
     // Try to fetch Square data, fallback to empty if not available
     let salesData = { fetchedAt: new Date().toISOString(), orders: [] };
     try {
@@ -2527,19 +2537,30 @@ app.get('/api/product-margins', async (req, res) => {
 
       const withMargins = [];
       for (const item of top20) {
-        // Find best recipe match using fuzzy matching
+        // Find best recipe match using manual overrides first, then fuzzy matching
         let costPerUnit = null;
+        let matchedRecipe = null;
         const recipes = Object.keys(costByRecipe);
 
-        // Try exact match first
-        let recipeKey = item.name.toLowerCase();
-        costPerUnit = costByRecipe[recipeKey];
+        // Priority 1: Check manual overrides
+        if (overrides[item.name]) {
+          matchedRecipe = overrides[item.name];
+          costPerUnit = costByRecipe[matchedRecipe.toLowerCase()];
+        }
 
-        // If no exact match, find best fuzzy match
+        // Priority 2: Try exact match
+        if (!costPerUnit) {
+          let recipeKey = item.name.toLowerCase();
+          costPerUnit = costByRecipe[recipeKey];
+          if (costPerUnit) matchedRecipe = recipeKey;
+        }
+
+        // Priority 3: Find best fuzzy match
         if (!costPerUnit) {
           for (const recipe of recipes) {
             if (matchRecipeToSquareItem(recipe, item.name)) {
               costPerUnit = costByRecipe[recipe];
+              matchedRecipe = recipe;
               break; // Use first match
             }
           }
@@ -2555,6 +2576,7 @@ app.get('/api/product-margins', async (req, res) => {
           margin$: costPerUnit != null ? Math.round((item.revenue - item.qty * costPerUnit) * 100) / 100 : null,
           marginPct: costPerUnit != null ? Math.round((1 - item.qty * costPerUnit / item.revenue) * 10000) / 100 : null,
           status: costPerUnit != null ? 'costed' : 'needs-cost',
+          matchedRecipe: matchedRecipe,
         });
       }
 
