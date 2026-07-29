@@ -2163,6 +2163,30 @@ app.post('/api/cache/refresh', async (req, res) => {
   }
 });
 
+// Rebuild product margins on demand
+app.post('/api/rebuild-margins', async (req, res) => {
+  try {
+    console.log('🔄 Manual margin rebuild triggered...');
+    const { main } = require('./pipeline/build-margins');
+    const result = await main({ weeks: 12 });
+    console.log(`✅ Margin rebuild complete: ${result.coverage.costed.length} recipes costed`);
+    res.json({
+      success: true,
+      costed: result.coverage.costed.length,
+      needsAttention: result.coverage.needsAttention.length,
+      excluded: result.coverage.excluded.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('❌ Margin rebuild failed:', err.message);
+    res.status(500).json({
+      error: 'Margin rebuild failed',
+      message: err.message,
+      code: err.code,
+    });
+  }
+});
+
 // ============= HEALTH CHECK =============
 
 app.get('/api/health', (req, res) => {
