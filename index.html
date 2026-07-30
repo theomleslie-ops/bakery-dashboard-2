@@ -1790,7 +1790,8 @@
           setError('Failed to load cash flow data: ' + err.message);
         }
       };
-      const maxValue = Math.max(...data.map(d => Math.abs(d.cashFlow)), 1);
+      const maxAbsValue = Math.max(...data.map(d => Math.abs(d.cashFlow)), 1);
+      const maxValue = niceMax(maxAbsValue);
       const getDateLabel = (dateStr) => dateStr ? new Date(dateStr + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
       const formatYAxis = (val) => `$${fmtMoneyShort(val)}`;
 
