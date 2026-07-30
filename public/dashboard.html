@@ -265,8 +265,9 @@
             }
 
             const report = data.report;
-            const revenue = report.Rows?.find(r => r.Summary?.ColData?.[0]?.value === 'Total Income')?.Summary?.ColData?.[1]?.value || 'N/A';
-            const expenses = report.Rows?.find(r => r.Summary?.ColData?.[0]?.value === 'Total Expenses')?.Summary?.ColData?.[1]?.value || 'N/A';
+            const rows = report.Rows?.Row || [];
+            const revenue = rows.find(r => r.Summary?.ColData?.[0]?.value === 'Total Income')?.Summary?.ColData?.[1]?.value || 'N/A';
+            const expenses = rows.find(r => r.Summary?.ColData?.[0]?.value === 'Total Expenses')?.Summary?.ColData?.[1]?.value || 'N/A';
 
             div.innerHTML = `
                 <p>📊 P&L Report (Last 30 Days)</p>
