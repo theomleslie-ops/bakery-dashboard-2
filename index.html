@@ -1423,6 +1423,7 @@
     function MarketSelectMenu({ markets, selected, setSelected, colorOf, totalRevenue }) {
       const [open, setOpen] = useState(false);
       const [topN, setTopN] = useState(8);
+      const [bottomN, setBottomN] = useState(null);
       const menuRef = useRef(null);
 
       useEffect(() => {
@@ -1442,16 +1443,23 @@
       };
 
       return (
-        <div ref={menuRef} style={{ position: 'relative', display: 'inline-block' }}>
+        <div ref={menuRef} style={{ position: 'relative', display: 'inline-block', zIndex: 100 }}>
           <button onClick={() => setOpen(o => !o)}>Select Markets ({selected.size}) {open ? '▴' : '▾'}</button>
           {open && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', width: '340px', maxWidth: '90vw', maxHeight: '440px', overflowY: 'auto', background: 'var(--chart-surface)', border: '1px solid var(--chart-grid)', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 20, padding: '10px' }}>
+            <div style={{ position: 'fixed', maxHeight: '60vh', overflowY: 'auto', background: 'var(--chart-surface)', border: '1px solid var(--chart-grid)', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 1000, padding: '10px', width: '340px', maxWidth: '90vw' }}>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--chart-grid)' }}>
                 <button onClick={() => setSelected(new Set(markets.map(m => m.name)))}>Select All</button>
                 <button onClick={() => setSelected(new Set())}>Select None</button>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: 'var(--chart-ink)', marginLeft: 'auto' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: 'var(--chart-ink)' }}>
                   Top
-                  <select value={topN} onChange={(e) => { const n = parseInt(e.target.value, 10); setTopN(n); setSelected(new Set(markets.slice(0, n).map(m => m.name))); }}>
+                  <select value={topN} onChange={(e) => { const n = parseInt(e.target.value, 10); setTopN(n); setBottomN(null); setSelected(new Set(markets.slice(0, n).map(m => m.name))); }}>
+                    {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: 'var(--chart-ink)' }}>
+                  Bottom
+                  <select value={bottomN || ''} onChange={(e) => { const n = e.target.value ? parseInt(e.target.value, 10) : null; setBottomN(n); setTopN(8); if (n) setSelected(new Set(markets.slice(-n).map(m => m.name))); }}>
+                    <option value="">None</option>
                     {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </label>
