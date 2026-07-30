@@ -1560,7 +1560,7 @@
           {status === 'error' && <div className="error">{error}</div>}
           {status === 'empty' && <div className="empty">No market sales data available.</div>}
           {status === 'ready' && (
-            <div className="chart-container">
+            <div className="chart-container" style={{ marginRight: '360px' }}>
               <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
               <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={colorOf} />
             </div>
