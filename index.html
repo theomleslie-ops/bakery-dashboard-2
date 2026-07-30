@@ -1420,8 +1420,7 @@
 
     const MARKET_TOP_N_OPTIONS = [5, 8, 10, 15, 20, 25];
 
-    function MarketSelectMenu({ markets, selected, setSelected, colorOf, totalRevenue }) {
-      const [open, setOpen] = useState(false);
+    function MarketSelectMenu({ markets, selected, setSelected, colorOf, totalRevenue, open, setOpen }) {
       const [topN, setTopN] = useState(8);
       const [bottomN, setBottomN] = useState(null);
       const menuRef = useRef(null);
@@ -1432,7 +1431,7 @@
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-      }, []);
+      }, [setOpen]);
 
       const toggle = (name) => {
         setSelected(prev => {
@@ -1488,6 +1487,7 @@
       const [selected, setSelected] = useState(new Set());
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
+      const [menuOpen, setMenuOpen] = useState(false);
       // windowWeeks = how many weeks are shown on screen. offsetWeeks = how far back from the most
       // recent week the right edge sits (0 = showing through the current week).
       const [windowWeeks, setWindowWeeks] = useState(26);
@@ -1553,14 +1553,14 @@
               <button onClick={goNewer} disabled={status !== 'ready' || clampedOffset <= 0} title="Later">▶</button>
             </div>
             {status === 'ready' && (
-              <MarketSelectMenu markets={markets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} />
+              <MarketSelectMenu markets={markets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} open={menuOpen} setOpen={setMenuOpen} />
             )}
           </div>
           {status === 'loading' && <div className="loading">Loading market sales data from Square… the first load can take several minutes (up to 3 years of history across ~50 locations); results are cached after that.</div>}
           {status === 'error' && <div className="error">{error}</div>}
           {status === 'empty' && <div className="empty">No market sales data available.</div>}
           {status === 'ready' && (
-            <div className="chart-container" style={{ marginRight: '360px' }}>
+            <div className="chart-container" style={{ marginRight: menuOpen ? '360px' : '0px', transition: 'margin-right 0.2s ease' }}>
               <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
               <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={colorOf} />
             </div>
