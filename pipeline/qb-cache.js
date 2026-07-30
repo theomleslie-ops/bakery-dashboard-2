@@ -91,7 +91,7 @@ const loadCache = (name) => {
 // Fetch any QuickBooks Reports API report by name
 const fetchReport = async (reportName, params = {}) => {
   const tokens = await getValidAccessToken();
-  const url = `${getBaseUrl()}/v3/company/${tokens.realmId}/reports/${reportName}`;
+  const url = `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/${reportName}`;
   console.log(`Fetching QB report: ${reportName}`, {
     url,
     realmId: tokens.realmId,
@@ -123,7 +123,7 @@ const fetchReport = async (reportName, params = {}) => {
 // Fetch accounts from QB
 const fetchAccounts = async () => {
   const tokens = await getValidAccessToken();
-  const res = await axios.get(`${getBaseUrl()}/v3/company/${tokens.realmId}/query`, {
+  const res = await axios.get(`${qbClient.baseUrl()}/v3/company/${tokens.realmId}/query`, {
     params: { query: 'SELECT * FROM Account' },
     headers: {
       Authorization: `Bearer ${tokens.access_token}`,
@@ -136,7 +136,7 @@ const fetchAccounts = async () => {
 // Fetch expenses from QB
 const fetchExpenses = async () => {
   const tokens = await getValidAccessToken();
-  const res = await axios.get(`${getBaseUrl()}/v3/company/${tokens.realmId}/query`, {
+  const res = await axios.get(`${qbClient.baseUrl()}/v3/company/${tokens.realmId}/query`, {
     params: { query: "SELECT * FROM Account WHERE AccountType='Expense'" },
     headers: {
       Authorization: `Bearer ${tokens.access_token}`,
