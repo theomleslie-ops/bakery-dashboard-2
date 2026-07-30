@@ -184,11 +184,6 @@
                 <div class="card-title">QuickBooks Status</div>
                 <div class="card-content">
                     <span id="qb-status">Loading...</span>
-                    <div id="qb-connect-btn" style="margin-top: 1rem; display: none;">
-                        <a href="/api/quickbooks/connect" style="display: inline-block; padding: 0.5rem 1rem; background-color: var(--rust); color: white; text-decoration: none; border-radius: 4px; font-size: 0.85rem;">
-                            Connect QuickBooks
-                        </a>
-                    </div>
                 </div>
             </div>
         </div>
@@ -237,23 +232,8 @@
                 if (qbData.success && qbData.report) {
                     document.getElementById('qb-status').textContent = '✅ Connected';
                     displayQBData(qbData);
-                } else if (qbData.reconnectUrl && qbData.errorType === 'token_expired') {
-                    // Token expired - AUTO re-auth: redirect to auto-reauth endpoint
-                    console.log('🔄 Token expired, triggering automatic re-authorization...');
-                    document.getElementById('qb-status').textContent = '🔄 Re-authorizing...';
-                    const returnUrl = encodeURIComponent(btoa(window.location.pathname + window.location.search));
-                    window.location.href = `${API_BASE}/api/quickbooks/auto-reauth?redirectUrl=${returnUrl}`;
-                } else if (qbData.reconnectUrl) {
-                    // Other auth issues - show manual reconnect button
-                    document.getElementById('qb-status').textContent = '⚠️ Auth needed';
-                    showQBReconnectPrompt(qbData.reconnectUrl);
-                    showError(`QB: ${qbData.error}`);
-                } else if (qbData.error && qbData.error.includes('not configured')) {
-                    document.getElementById('qb-status').innerHTML = '❌ Not connected<br><small>Click button below to authorize</small>';
-                    document.getElementById('qb-connect-btn').style.display = 'block';
                 } else {
-                    document.getElementById('qb-status').textContent = '⚠️ Disconnected';
-                    document.getElementById('qb-connect-btn').style.display = 'block';
+                    document.getElementById('qb-status').textContent = '❌ Error';
                     showError(`QB: ${qbData.error || 'Not connected'}`);
                 }
             } catch (err) {
@@ -294,16 +274,6 @@
                 <p>Revenue: $${revenue}</p>
                 <p>Expenses: $${expenses}</p>
                 <p><small>Cached at: ${data.cachedAt || 'unknown'}</small></p>
-            `;
-        }
-
-        function showQBReconnectPrompt(reconnectUrl) {
-            const div = document.getElementById('qb-data');
-            div.innerHTML = `
-                <p style="color: var(--text-light);">QB connection expired. Please reconnect to see live data.</p>
-                <a href="${reconnectUrl}" style="display: inline-block; margin-top: 1rem; padding: 0.75rem 1.5rem; background-color: var(--rust); color: white; text-decoration: none; border-radius: 4px; font-size: 0.9rem;">
-                    🔄 Reconnect QuickBooks
-                </a>
             `;
         }
 

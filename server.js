@@ -9,6 +9,7 @@ const axios = require('axios');
 const cron = require('node-cron');
 require('dotenv').config();
 
+const qbClient = require('./pipeline/qb-client');
 const qbCache = require('./pipeline/qb-cache');
 const claudeMCP = require('./pipeline/claude-mcp');
 const composioConnectors = require('./pipeline/composio-connectors');
@@ -1023,9 +1024,7 @@ app.get('/api/overtime', async (req, res) => {
 
 // ============= QUICKBOOKS OAUTH 2.0 =============
 
-const QB_TOKENS_FILE = path.join(DATA_DIR, 'quickbooks-tokens.json');
 const QB_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2';
-const QB_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 
 let qbRefreshJobsStarted = false;
 
@@ -1056,79 +1055,30 @@ const startQBRefreshJobs = () => {
   });
 };
 
-const getQBBaseUrl = () =>
-  process.env.QUICKBOOKS_ENVIRONMENT === 'sandbox'
-    ? 'https://sandbox-quickbooks.api.intuit.com'
-    : 'https://quickbooks.api.intuit.com';
-
 const getQBRedirectUri = () =>
   process.env.QUICKBOOKS_REDIRECT_URI || `http://localhost:${PORT}/api/quickbooks/callback`;
 
-const qbBasicAuthHeader = () =>
-  `Basic ${Buffer.from(`${process.env.QUICKBOOKS_CLIENT_ID}:${process.env.QUICKBOOKS_CLIENT_SECRET}`).toString('base64')}`;
-
-const loadQBTokens = () => {
-  // Check env vars first
-  const refreshToken = process.env.QUICKBOOKS_REFRESH_TOKEN;
-  const realmId = process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID;
-
-  if (refreshToken && realmId) {
-    return {
-      refresh_token: refreshToken,
-      realmId: realmId,
-      access_token: null,
-      expires_at: 0,
-      source: 'env',
-    };
-  }
-
-  // Fall back to stored tokens file
-  try {
-    return JSON.parse(fs.readFileSync(QB_TOKENS_FILE, 'utf-8'));
-  } catch {
-    return null;
-  }
-};
-
-const saveQBTokens = (tokens) => saveData(QB_TOKENS_FILE, tokens);
-
-// Returns a valid access token + realmId, refreshing if the access token has expired.
-// Throws if QuickBooks has never been connected.
+// Use qbClient for token loading (canonical source)
 const getValidQBAccessToken = async () => {
-  const tokens = loadQBTokens();
   const composioStatus = composioConnectors.getConnectionStatus();
-
-  if (!tokens || !tokens.refresh_token) {
-    let msg = 'QuickBooks not connected.';
-    if (composioStatus.quickbooks) {
-      msg += ' (Composio connected - use QB connector actions)';
-    } else if (process.env.COMPOSIO_API_KEY) {
-      msg += ' Authorize QB in your Composio workspace or click "Connect QuickBooks" in the dashboard.';
-    } else {
-      msg += ' Click "Connect QuickBooks" in the dashboard to authorize access.';
+  try {
+    return await qbClient.getValidTokens();
+  } catch (err) {
+    if (err.code === 'QB_NOT_CONNECTED') {
+      let msg = 'QuickBooks not connected.';
+      if (composioStatus.quickbooks) {
+        msg += ' (Composio connected - use QB connector actions)';
+      } else if (process.env.COMPOSIO_API_KEY) {
+        msg += ' Authorize QB in your Composio workspace or visit /api/quickbooks/connect.';
+      } else {
+        msg += ' Visit /api/quickbooks/connect to authorize access.';
+      }
+      const authErr = new Error(msg);
+      authErr.code = 'QB_NOT_CONNECTED';
+      throw authErr;
     }
-    const err = new Error(msg);
-    err.code = 'QB_NOT_CONNECTED';
     throw err;
   }
-
-  const isExpired = !tokens.expires_at || Date.now() > tokens.expires_at - 60_000;
-  if (!isExpired) return tokens;
-
-  const response = await axios.post(
-    QB_TOKEN_URL,
-    new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokens.refresh_token }).toString(),
-    { headers: { Authorization: qbBasicAuthHeader(), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
-  );
-
-  const updated = {
-    ...tokens,
-    access_token: response.data.access_token,
-    refresh_token: response.data.refresh_token || tokens.refresh_token,
-    expires_at: Date.now() + response.data.expires_in * 1000,
-  };
-  saveQBTokens(updated);
-  return updated;
 };
 
 // Step 1: redirect the user to Intuit's consent screen
@@ -1156,36 +1106,13 @@ app.get('/api/quickbooks/callback', async (req, res) => {
 
   try {
     console.log('Exchanging code for tokens...');
-    const response = await axios.post(
-      QB_TOKEN_URL,
-      new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: getQBRedirectUri() }).toString(),
-      { headers: { Authorization: qbBasicAuthHeader(), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
-    );
+    const tokens = await qbClient.exchangeCodeForTokens(code, realmId);
 
-    console.log('✅ QB token exchange successful, saving tokens');
-    const tokens = {
-      access_token: response.data.access_token,
-      refresh_token: response.data.refresh_token,
-      expires_at: Date.now() + response.data.expires_in * 1000,
-      realmId,
-      connectedAt: new Date().toISOString(),
-      last_refreshed: new Date().toISOString(),
-    };
-
-    // Save to persistent file (survives restarts and redeploys)
-    saveQBTokens(tokens);
+    console.log('✅ QB token exchange successful, tokens saved to persistent storage');
 
     // Also update env vars for this session
     process.env.QUICKBOOKS_REFRESH_TOKEN = tokens.refresh_token;
     process.env.QUICKBOOKS_REALM_ID = realmId;
-
-    console.log('✅ QB tokens saved to file');
-    console.log('✅ QB tokens synced to environment');
-
-    // Also log for Railway environment vars (optional, but helpful)
-    console.log('📌 Optional: ADD TO RAILWAY ENVIRONMENT for backup:');
-    console.log(`QUICKBOOKS_REFRESH_TOKEN=${tokens.refresh_token}`);
-    console.log(`QUICKBOOKS_REALM_ID=${realmId}`);
 
     // Clear any previous token errors
     qbCache.clearTokenError();
@@ -1220,7 +1147,7 @@ app.get('/api/quickbooks/callback', async (req, res) => {
 // Automatic re-auth: Triggered when tokens need refresh
 // Checks token health and auto-initiates OAuth if needed
 app.get('/api/quickbooks/auto-reauth', (req, res) => {
-  const tokens = loadQBTokens();
+  const tokens = qbClient.loadTokens();
   const tokenError = qbCache.getTokenError();
   let redirectUrl = req.query.redirectUrl; // Where to redirect after re-auth
 
@@ -1258,7 +1185,7 @@ app.get('/api/quickbooks/auto-reauth', (req, res) => {
 
 // Connection status
 app.get('/api/quickbooks/status', (req, res) => {
-  const tokens = loadQBTokens();
+  const tokens = qbClient.loadTokens();
   const composioStatus = composioConnectors.getConnectionStatus();
   const cacheStatus = qbCache.isCachePopulated();
   const tokenError = qbCache.getTokenError();
@@ -1301,7 +1228,7 @@ app.get('/api/quickbooks/status', (req, res) => {
 
 // Disconnect (forget stored tokens)
 app.post('/api/quickbooks/disconnect', (req, res) => {
-  if (fs.existsSync(QB_TOKENS_FILE)) fs.unlinkSync(QB_TOKENS_FILE);
+  qbClient.disconnect();
   res.json({ success: true });
 });
 
@@ -1577,7 +1504,7 @@ const getQBWeeklyRows = async (rangeStart, rangeEndInclusive) => {
 
   // Only try to fetch from QB if connected
   const isQBConnected = () => {
-    try { return !!fs.existsSync(QB_TOKENS_FILE) && JSON.parse(fs.readFileSync(QB_TOKENS_FILE, 'utf-8')).refresh_token; } catch { return false; }
+    try { const t = qbClient.loadTokens(); return !!(t && t.refresh_token); } catch { return false; }
   };
 
   if (isQBConnected()) {
@@ -2269,7 +2196,7 @@ app.get('/privacy', (req, res) => {
 
 // Intuit sends users here when they disconnect the app from within QuickBooks
 app.get('/disconnected', (req, res) => {
-  if (fs.existsSync(QB_TOKENS_FILE)) fs.unlinkSync(QB_TOKENS_FILE);
+  qbClient.disconnect();
   res.type('html').send(`<!DOCTYPE html><html><head><title>Disconnected</title></head><body style="font-family: sans-serif; max-width: 700px; margin: 40px auto; line-height: 1.6;">
 <h1>QuickBooks disconnected</h1>
 <p>This dashboard no longer has access to your QuickBooks data. <a href="/api/quickbooks/connect">Reconnect</a> at any time.</p>
@@ -2382,7 +2309,7 @@ app.get('/api/integrations/status', (req, res) => {
   const googleConnected = googleSheets.isConnected();
 
   // Check for legacy QB tokens (for backward compatibility)
-  const qbTokens = loadQBTokens();
+  const qbTokens = qbClient.loadTokens();
 
   res.json({
     composio: process.env.COMPOSIO_API_KEY ? 'configured' : 'not_configured',
@@ -2787,7 +2714,7 @@ const server = app.listen(PORT, async () => {
   }
 
   // Check for QB tokens from file (persistent) or env vars
-  const fileTokens = loadQBTokens();
+  const fileTokens = qbClient.loadTokens();
   const envTokens = process.env.QUICKBOOKS_REFRESH_TOKEN && (process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID);
   const qbConfigured = !!fileTokens || envTokens;
 
