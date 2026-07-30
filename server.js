@@ -1359,7 +1359,7 @@ const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Mon
   console.log('Attempting QB P&L fetch with legacy token auth...');
   const tokens = await getValidQBAccessToken();
   const response = await axios.get(
-    `${getQBBaseUrl()}/v3/company/${tokens.realmId}/reports/ProfitAndLoss`,
+    `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/ProfitAndLoss`,
     {
       params: { start_date: startDate, end_date: endDate, summarize_column_by: summarizeColumnBy },
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
