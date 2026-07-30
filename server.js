@@ -2640,11 +2640,11 @@ app.get('/api/public/square/overview', async (req, res) => {
 // QuickBooks data endpoint
 app.get('/api/public/quickbooks/overview', async (req, res) => {
   try {
-    const realmId = process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID;
-    if (!realmId || !process.env.QUICKBOOKS_REFRESH_TOKEN) {
+    const tokens = qbClient.loadTokens();
+    if (!tokens || !tokens.refresh_token) {
       return res.status(400).json({
         success: false,
-        error: 'QuickBooks not configured',
+        error: 'QuickBooks not connected',
         reconnectUrl: '/api/quickbooks/connect',
       });
     }
