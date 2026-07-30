@@ -1767,6 +1767,99 @@
       );
     }
 
+    function CashFlowDashboard() {
+      const [data, setData] = useState([]);
+      const [error, setError] = useState('');
+      const [weeksRange, setWeeksRange] = useState(16);
+      useEffect(() => { fetchCashFlowData(); }, [weeksRange]);
+      const fetchCashFlowData = async () => {
+        try {
+          const baseUrl = window.location.origin;
+          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}`);
+          const result = await response.json();
+          setData((result.periodData || []).map(w => ({ month: w.monthKey, cashFlow: (w.revenue || 0) - (w.cogs || 0) - (w.opex || 0) - (w.labor || 0) })));
+        } catch (err) {
+          setError('Failed to load cash flow data: ' + err.message);
+        }
+      };
+      const maxValue = Math.max(...data.map(d => Math.abs(d.cashFlow)), 1);
+      const getDateLabel = (dateStr) => dateStr ? new Date(dateStr + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+      const formatYAxis = (val) => `$${fmtMoneyShort(val)}`;
+
+      return (
+        <div className="container">
+          <header>
+            <h1>💰 Weekly Cash Flow</h1>
+            <p className="subtitle">Net cash flow after revenue, COGS, operating expenses, and labor</p>
+          </header>
+          {error && <div className="error">{error}</div>}
+          <div className="controls">
+            <div className="view-toggle">
+              {WEEK_COUNT_OPTIONS.map(opt => (
+                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
+              ))}
+            </div>
+          </div>
+          {!error && data.length === 0 && (
+            <div className="empty">
+              No cash flow data available. Check back shortly while data is being cached.
+            </div>
+          )}
+          {data.length > 0 && (
+            <div className="chart-container">
+              <div className="chart-title">Weekly Cash Flow ($)</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '12px', height: '2px', background: '#10b981' }}></div>
+                  <span style={{ fontSize: '12px', color: '#5a4a3a' }}>Cash Flow</span>
+                </div>
+              </div>
+              <svg style={{ width: '100%', height: '450px' }} viewBox="0 0 850 450" preserveAspectRatio="xMidYMid meet">
+                {/* Grid lines */}
+                {[0, 1, 2, 3, 4].map(i => (
+                  <line key={`grid-${i}`} x1="80" y1={30 + i * 60} x2="820" y2={30 + i * 60} stroke="#e1e0d9" strokeDasharray="4" />
+                ))}
+                {/* Y-axis labels */}
+                {[0, 1, 2, 3, 4].map(i => {
+                  const sign = i < 2 ? 1 : -1;
+                  const val = maxValue * (4 - i) / 4 * sign;
+                  return <text key={`y-label-${i}`} x="70" y={35 + i * 60} textAnchor="end" fontSize="11" fill="#8b6c57">{formatYAxis(val)}</text>;
+                })}
+                {/* Axes */}
+                <line x1="80" y1="30" x2="80" y2="300" stroke="#000" strokeWidth="1" />
+                <line x1="80" y1="300" x2="820" y2="300" stroke="#000" strokeWidth="1" />
+                {/* Zero line */}
+                <line x1="80" y1="300" x2="820" y2="300" stroke="#d4b5a0" strokeWidth="1" strokeDasharray="2" />
+                {/* X-axis labels (dates) */}
+                {data.map((d, i) => {
+                  const x = 80 + (i / (data.length - 1 || 1)) * 740;
+                  return (
+                    <text key={`x-label-${i}`} x={x} y="370" textAnchor="middle" fontSize="12" fill="#5a4a3a">
+                      {getDateLabel(d.month)}
+                    </text>
+                  );
+                })}
+                {/* Cash flow line */}
+                {data.map((d, i) => {
+                  const x = 80 + (i / (data.length - 1 || 1)) * 740;
+                  const y = 300 - (d.cashFlow / maxValue) * 270;
+                  const color = d.cashFlow >= 0 ? '#10b981' : '#ef4444';
+                  return <circle key={`cf-${i}`} cx={x} cy={y} r="3" fill={color} />;
+                })}
+                {data.length > 1 && (
+                  <polyline points={data.map((d, i) => {
+                    const x = 80 + (i / (data.length - 1)) * 740;
+                    const y = 300 - (d.cashFlow / maxValue) * 270;
+                    return `${x},${y}`;
+                  }).join(' ')} stroke="#10b981" strokeWidth="2" fill="none" />
+                )}
+              </svg>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function MainApp() {
       const [activeTab, setActiveTab] = useState('dashboard');
       return (
@@ -1776,6 +1869,7 @@
               <div className="tabs">
                 <button className={`tab-button ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>Financial Dashboard</button>
                 <button className={`tab-button ${activeTab === 'quickbooks' ? 'active' : ''}`} onClick={() => setActiveTab('quickbooks')}>QuickBooks P&L</button>
+                <button className={`tab-button ${activeTab === 'cashflow' ? 'active' : ''}`} onClick={() => setActiveTab('cashflow')}>Cash Flow</button>
                 <button className={`tab-button ${activeTab === 'overtime' ? 'active' : ''}`} onClick={() => setActiveTab('overtime')}>Overtime Report</button>
                 <button className={`tab-button ${activeTab === 'prime-cost' ? 'active' : ''}`} onClick={() => setActiveTab('prime-cost')}>Prime Cost</button>
                 <button className={`tab-button ${activeTab === 'pl-channel' ? 'active' : ''}`} onClick={() => setActiveTab('pl-channel')}>P&L by Channel</button>
@@ -1787,6 +1881,7 @@
           </div>
           <div className={`tab-content ${activeTab === 'dashboard' ? 'active' : ''}`}><DashboardContent /></div>
           <div className={`tab-content ${activeTab === 'quickbooks' ? 'active' : ''}`}><QBDashboard /></div>
+          <div className={`tab-content ${activeTab === 'cashflow' ? 'active' : ''}`}><CashFlowDashboard /></div>
           <div className={`tab-content ${activeTab === 'overtime' ? 'active' : ''}`}><OvertimeContent /></div>
           <div className={`tab-content ${activeTab === 'prime-cost' ? 'active' : ''}`}><PrimeCostDashboard /></div>
           <div className={`tab-content ${activeTab === 'pl-channel' ? 'active' : ''}`}><PLByChannelDashboard /></div>
