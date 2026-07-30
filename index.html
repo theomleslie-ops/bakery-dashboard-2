@@ -1650,6 +1650,77 @@
       );
     }
 
+    function QBDashboard() {
+      const [data, setData] = useState(null);
+      const [error, setError] = useState('');
+      const [status, setStatus] = useState('loading');
+      useEffect(() => {
+        const fetchQBData = async () => {
+          try {
+            const baseUrl = window.location.origin;
+            const response = await fetch(`${baseUrl}/api/public/quickbooks/overview`);
+            const result = await response.json();
+            if (result.success && result.report) {
+              const rows = result.report.Rows?.Row || [];
+              const revenue = rows.find(r => r.Summary?.ColData?.[0]?.value === 'Total Income')?.Summary?.ColData?.[1]?.value || 'N/A';
+              const expenses = rows.find(r => r.Summary?.ColData?.[0]?.value === 'Total Expenses')?.Summary?.ColData?.[1]?.value || 'N/A';
+              const netIncome = rows.find(r => r.Summary?.ColData?.[0]?.value === 'Net Income')?.Summary?.ColData?.[1]?.value || 'N/A';
+              setData({ revenue: parseFloat(revenue) || 0, expenses: parseFloat(expenses) || 0, netIncome: parseFloat(netIncome) || 0, cachedAt: result.cachedAt });
+              setStatus('loaded');
+            } else {
+              setError(result.error || 'Failed to load QB data');
+              setStatus('error');
+            }
+          } catch (err) {
+            setError('Failed to fetch QB data: ' + err.message);
+            setStatus('error');
+          }
+        };
+        fetchQBData();
+      }, []);
+      return (
+        <div className="container">
+          <header>
+            <h1>📈 QuickBooks P&L</h1>
+            <p className="subtitle">Profit and Loss from QuickBooks Online (Last 30 Days)</p>
+          </header>
+          {error && <div className="error">{error}</div>}
+          {status === 'loading' && <div className="loading">Loading QuickBooks data…</div>}
+          {status === 'error' && <div className="empty">Unable to load QuickBooks data. Please check your connection.</div>}
+          {status === 'loaded' && data && (
+            <div>
+              <div className="metrics">
+                <div className="metric-card">
+                  <div className="metric-label">Revenue</div>
+                  <div className="metric-value">{fmtMoneyShort(data.revenue)}</div>
+                  <div className="metric-sub">{fmtMoney(data.revenue)}</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Expenses</div>
+                  <div className="metric-value">{fmtMoneyShort(data.expenses)}</div>
+                  <div className="metric-sub">{fmtMoney(data.expenses)}</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Net Income</div>
+                  <div className="metric-value" style={{ color: data.netIncome >= 0 ? '#3f8361' : '#ef4444' }}>{fmtMoneyShort(data.netIncome)}</div>
+                  <div className="metric-sub">{fmtMoney(data.netIncome)}</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Profit Margin</div>
+                  <div className="metric-value" style={{ color: (data.netIncome / data.revenue * 100) >= 0 ? '#3f8361' : '#ef4444' }}>{((data.netIncome / data.revenue) * 100).toFixed(1)}%</div>
+                  <div className="metric-sub">Net Income ÷ Revenue</div>
+                </div>
+              </div>
+              <div className="panel">
+                <div className="panel-title">Data Source</div>
+                <div className="panel-hint">Last updated: {data.cachedAt ? new Date(data.cachedAt).toLocaleString() : 'unknown'}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function MainApp() {
       const [activeTab, setActiveTab] = useState('dashboard');
       return (
@@ -1658,6 +1729,7 @@
             <div className="container">
               <div className="tabs">
                 <button className={`tab-button ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>Financial Dashboard</button>
+                <button className={`tab-button ${activeTab === 'quickbooks' ? 'active' : ''}`} onClick={() => setActiveTab('quickbooks')}>QuickBooks P&L</button>
                 <button className={`tab-button ${activeTab === 'overtime' ? 'active' : ''}`} onClick={() => setActiveTab('overtime')}>Overtime Report</button>
                 <button className={`tab-button ${activeTab === 'prime-cost' ? 'active' : ''}`} onClick={() => setActiveTab('prime-cost')}>Prime Cost</button>
                 <button className={`tab-button ${activeTab === 'pl-channel' ? 'active' : ''}`} onClick={() => setActiveTab('pl-channel')}>P&L by Channel</button>
@@ -1668,6 +1740,7 @@
             </div>
           </div>
           <div className={`tab-content ${activeTab === 'dashboard' ? 'active' : ''}`}><DashboardContent /></div>
+          <div className={`tab-content ${activeTab === 'quickbooks' ? 'active' : ''}`}><QBDashboard /></div>
           <div className={`tab-content ${activeTab === 'overtime' ? 'active' : ''}`}><OvertimeContent /></div>
           <div className={`tab-content ${activeTab === 'prime-cost' ? 'active' : ''}`}><PrimeCostDashboard /></div>
           <div className={`tab-content ${activeTab === 'pl-channel' ? 'active' : ''}`}><PLByChannelDashboard /></div>

@@ -2175,7 +2175,7 @@ app.get('/api/health', (req, res) => {
 
 // Serve dashboard
 app.get('/', (req, res) => {
-  res.redirect('/dashboard');
+  res.sendFile('index.html', { root: __dirname });
 });
 
 // Serve overtime report
