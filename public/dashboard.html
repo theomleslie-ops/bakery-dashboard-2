@@ -238,7 +238,6 @@
                 }
             } catch (err) {
                 document.getElementById('qb-status').textContent = '❌ Error';
-                document.getElementById('qb-connect-btn').style.display = 'block';
                 showError(`QB: ${err.message}`);
             }
         }
