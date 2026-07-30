@@ -1651,70 +1651,97 @@
     }
 
     function QBDashboard() {
-      const [data, setData] = useState(null);
+      const [data, setData] = useState([]);
       const [error, setError] = useState('');
-      const [status, setStatus] = useState('loading');
-      useEffect(() => {
-        const fetchQBData = async () => {
-          try {
-            const baseUrl = window.location.origin;
-            const response = await fetch(`${baseUrl}/api/public/quickbooks/overview`);
-            const result = await response.json();
-            if (result.success && result.report) {
-              const rows = result.report.Rows?.Row || [];
-              const revenue = rows.find(r => r.Summary?.ColData?.[0]?.value === 'Total Income')?.Summary?.ColData?.[1]?.value || 'N/A';
-              const expenses = rows.find(r => r.Summary?.ColData?.[0]?.value === 'Total Expenses')?.Summary?.ColData?.[1]?.value || 'N/A';
-              const netIncome = rows.find(r => r.Summary?.ColData?.[0]?.value === 'Net Income')?.Summary?.ColData?.[1]?.value || 'N/A';
-              setData({ revenue: parseFloat(revenue) || 0, expenses: parseFloat(expenses) || 0, netIncome: parseFloat(netIncome) || 0, cachedAt: result.cachedAt });
-              setStatus('loaded');
-            } else {
-              setError(result.error || 'Failed to load QB data');
-              setStatus('error');
-            }
-          } catch (err) {
-            setError('Failed to fetch QB data: ' + err.message);
-            setStatus('error');
-          }
-        };
-        fetchQBData();
-      }, []);
+      const [weeksRange, setWeeksRange] = useState(16);
+      useEffect(() => { fetchQBData(); }, [weeksRange]);
+      const fetchQBData = async () => {
+        try {
+          const baseUrl = window.location.origin;
+          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}`);
+          const result = await response.json();
+          setData((result.periodData || []).map(w => ({ month: w.monthKey, revenue: w.cogs !== undefined ? w.baseWage + w.cogs : 0, cogs: w.cogs || 0 })));
+        } catch (err) {
+          setError('Failed to load QB data: ' + err.message);
+        }
+      };
       return (
         <div className="container">
           <header>
-            <h1>📈 QuickBooks P&L</h1>
-            <p className="subtitle">Profit and Loss from QuickBooks Online (Last 30 Days)</p>
+            <h1>📈 QuickBooks Revenue & COGS</h1>
+            <p className="subtitle">Revenue and Cost of Goods Sold, every 2 weeks</p>
           </header>
           {error && <div className="error">{error}</div>}
-          {status === 'loading' && <div className="loading">Loading QuickBooks data…</div>}
-          {status === 'error' && <div className="empty">Unable to load QuickBooks data. Please check your connection.</div>}
-          {status === 'loaded' && data && (
-            <div>
-              <div className="metrics">
-                <div className="metric-card">
-                  <div className="metric-label">Revenue</div>
-                  <div className="metric-value">{fmtMoneyShort(data.revenue)}</div>
-                  <div className="metric-sub">{fmtMoney(data.revenue)}</div>
+          <div className="controls">
+            <div className="view-toggle">
+              {WEEK_COUNT_OPTIONS.map(opt => (
+                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
+              ))}
+            </div>
+          </div>
+          {!error && data.length === 0 && (
+            <div className="empty">
+              No QuickBooks data available. Check back shortly while data is being cached.
+            </div>
+          )}
+          {data.length > 0 && (
+            <div className="chart-container">
+              <div className="chart-title">Revenue and COGS, every 2 weeks ($)</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '12px', height: '2px', background: '#3f8361' }}></div>
+                  <span style={{ fontSize: '12px', color: '#5a4a3a' }}>Revenue</span>
                 </div>
-                <div className="metric-card">
-                  <div className="metric-label">Expenses</div>
-                  <div className="metric-value">{fmtMoneyShort(data.expenses)}</div>
-                  <div className="metric-sub">{fmtMoney(data.expenses)}</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Net Income</div>
-                  <div className="metric-value" style={{ color: data.netIncome >= 0 ? '#3f8361' : '#ef4444' }}>{fmtMoneyShort(data.netIncome)}</div>
-                  <div className="metric-sub">{fmtMoney(data.netIncome)}</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Profit Margin</div>
-                  <div className="metric-value" style={{ color: (data.netIncome / data.revenue * 100) >= 0 ? '#3f8361' : '#ef4444' }}>{((data.netIncome / data.revenue) * 100).toFixed(1)}%</div>
-                  <div className="metric-sub">Net Income ÷ Revenue</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '12px', height: '2px', background: '#c05621' }}></div>
+                  <span style={{ fontSize: '12px', color: '#5a4a3a' }}>COGS</span>
                 </div>
               </div>
-              <div className="panel">
-                <div className="panel-title">Data Source</div>
-                <div className="panel-hint">Last updated: {data.cachedAt ? new Date(data.cachedAt).toLocaleString() : 'unknown'}</div>
-              </div>
+              <svg style={{ width: '100%', height: '300px', border: '1px solid #e1e0d9', borderRadius: '4px' }} viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                  <linearGradient id="revGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style={{ stopColor: '#3f8361', stopOpacity: 0.1 }} />
+                    <stop offset="100%" style={{ stopColor: '#3f8361', stopOpacity: 0 }} />
+                  </linearGradient>
+                </defs>
+                {/* Grid lines */}
+                {[0, 1, 2, 3, 4].map(i => (
+                  <line key={`grid-${i}`} x1="60" y1={30 + i * 60} x2="790" y2={30 + i * 60} stroke="#e1e0d9" strokeDasharray="4" />
+                ))}
+                {/* Axes */}
+                <line x1="60" y1="30" x2="60" y2="270" stroke="#000" strokeWidth="1" />
+                <line x1="60" y1="270" x2="790" y2="270" stroke="#000" strokeWidth="1" />
+                {/* Revenue line */}
+                {data.map((d, i) => {
+                  const maxRevenue = Math.max(...data.map(x => x.revenue), 1);
+                  const x = 60 + (i / (data.length - 1 || 1)) * 730;
+                  const y = 270 - (d.revenue / maxRevenue) * 240;
+                  return <circle key={`rev-${i}`} cx={x} cy={y} r="3" fill="#3f8361" />;
+                })}
+                {data.length > 1 && (
+                  <polyline points={data.map((d, i) => {
+                    const maxRevenue = Math.max(...data.map(x => x.revenue), 1);
+                    const x = 60 + (i / (data.length - 1)) * 730;
+                    const y = 270 - (d.revenue / maxRevenue) * 240;
+                    return `${x},${y}`;
+                  }).join(' ')} stroke="#3f8361" strokeWidth="2" fill="none" />
+                )}
+                {/* COGS line */}
+                {data.map((d, i) => {
+                  const maxCogs = Math.max(...data.map(x => x.cogs), 1);
+                  const x = 60 + (i / (data.length - 1 || 1)) * 730;
+                  const y = 270 - (d.cogs / maxCogs) * 240;
+                  return <circle key={`cogs-${i}`} cx={x} cy={y} r="3" fill="#c05621" />;
+                })}
+                {data.length > 1 && (
+                  <polyline points={data.map((d, i) => {
+                    const maxCogs = Math.max(...data.map(x => x.cogs), 1);
+                    const x = 60 + (i / (data.length - 1)) * 730;
+                    const y = 270 - (d.cogs / maxCogs) * 240;
+                    return `${x},${y}`;
+                  }).join(' ')} stroke="#c05621" strokeWidth="2" fill="none" />
+                )}
+              </svg>
             </div>
           )}
         </div>
