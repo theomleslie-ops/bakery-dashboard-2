@@ -43,10 +43,14 @@ const loadTokens = () => {
 };
 
 const saveTokens = (t) => {
-  // Don't overwrite if tokens came from .env (they're managed there)
-  if (t.source === 'env') return;
+  // Always save to persistent file, even if sourced from env. Once rotated/refreshed,
+  // drop the 'source: env' tag so subsequent loads never fall back to stale env vars.
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(TOKENS_FILE, JSON.stringify(t, null, 2));
+  const toSave = { ...t };
+  if (toSave.source === 'env') {
+    toSave.source = 'oauth';
+  }
+  fs.writeFileSync(TOKENS_FILE, JSON.stringify(toSave, null, 2));
 };
 
 // Returns valid tokens (with realmId), refreshing the access token if within 60s of expiry.
@@ -123,13 +127,50 @@ const findVendorByName = async (namePattern) => {
   return vendors.length > 0 ? vendors[0] : null;
 };
 
+const hasCredentials = () => !!(process.env.QUICKBOOKS_CLIENT_ID && process.env.QUICKBOOKS_CLIENT_SECRET);
+
+const disconnect = () => {
+  try {
+    if (fs.existsSync(TOKENS_FILE)) fs.unlinkSync(TOKENS_FILE);
+  } catch (e) {
+    console.warn('Failed to disconnect QB:', e.message);
+  }
+};
+
+const exchangeCodeForTokens = async (code, realmId) => {
+  if (!hasCredentials()) {
+    throw new Error('QB app credentials not configured (QUICKBOOKS_CLIENT_ID / QUICKBOOKS_CLIENT_SECRET)');
+  }
+  const redirectUri = process.env.QUICKBOOKS_REDIRECT_URI || `http://localhost:${process.env.PORT || 3001}/api/quickbooks/callback`;
+  const res = await axios.post(
+    TOKEN_URL,
+    new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri }).toString(),
+    { headers: { Authorization: basicAuth(), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
+  );
+  const tokens = {
+    access_token: res.data.access_token,
+    refresh_token: res.data.refresh_token,
+    expires_at: Date.now() + res.data.expires_in * 1000,
+    realmId,
+    connectedAt: new Date().toISOString(),
+    last_refreshed: new Date().toISOString(),
+    source: 'oauth',
+  };
+  saveTokens(tokens);
+  return tokens;
+};
+
 module.exports = {
   getValidTokens,
   query,
   baseUrl,
   loadTokens,
+  saveTokens,
   listBills,
   downloadInvoicePdf,
   extractPdfText,
   findVendorByName,
+  hasCredentials,
+  disconnect,
+  exchangeCodeForTokens,
 };
