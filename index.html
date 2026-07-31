@@ -253,6 +253,7 @@
       { weeks: 156, label: '3 Years' },
     ];
     const MARKET_MAX_WEEKS = 520;
+    const SQUARE_DATA_MAX_WEEKS = 156;
 
     function DashboardContent() {
       const [data, setData] = useState([]);
@@ -264,7 +265,8 @@
       const fetchData = async () => {
         try {
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}`);
+          const limitedWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
+          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${limitedWeeks}`);
           const result = await response.json();
           setData((result.periodData || []).map(w => ({ ...w, month: w.label })));
           setPeriodSource(result.periodSource || '');
