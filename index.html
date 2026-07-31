@@ -253,7 +253,7 @@
       { weeks: 156, label: '3 Years' },
     ];
     const MARKET_MAX_WEEKS = 520;
-    const SQUARE_DATA_MAX_WEEKS = 156;
+    const SQUARE_DATA_MAX_WEEKS = 260;
 
     function DashboardContent() {
       const [data, setData] = useState([]);
@@ -474,7 +474,7 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/overtime?weeks=156`);
+          const response = await fetch(`${baseUrl}/api/overtime?weeks=${SQUARE_DATA_MAX_WEEKS}`);
           const result = await response.json();
           if (result.error) { setError(result.error); setStatus('error'); return; }
           const rawWeeks = result.weeks || [];
@@ -673,7 +673,8 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}`);
+          const limitedWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
+          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${limitedWeeks}`);
           const dashData = await response.json();
           if (!dashData.periodData) {
             throw new Error('Missing financial data from server');
