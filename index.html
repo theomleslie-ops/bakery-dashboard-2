@@ -1779,11 +1779,13 @@
       const [data, setData] = useState([]);
       const [error, setError] = useState('');
       const [weeksRange, setWeeksRange] = useState(16);
-      useEffect(() => { fetchCashFlowData(); }, [weeksRange]);
+      const [offset, setOffset] = useState(0);
+      const [hoveredIndex, setHoveredIndex] = useState(null);
+      useEffect(() => { fetchCashFlowData(); }, [weeksRange, offset]);
       const fetchCashFlowData = async () => {
         try {
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}`);
+          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}&offset=${offset}`);
           const result = await response.json();
           setData((result.periodData || []).map(w => ({ month: w.monthKey, cashFlow: (w.revenue || 0) - (w.cogs || 0) - (w.opex || 0) - (w.labor || 0) })));
         } catch (err) {
@@ -1793,9 +1795,9 @@
       const maxAbsValue = Math.max(...data.map(d => Math.abs(d.cashFlow)), 1);
       const maxValue = niceMax(maxAbsValue * 1.1);
       const getDateLabel = (dateStr) => dateStr ? new Date(dateStr + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
-      const formatYAxis = (val) => val === 0 ? '$0' : `$${fmtMoneyShort(val)}`;
-      const plotHeight = 300;
-      const centerY = 200;
+      const formatYAxis = (val) => val === 0 ? '$0' : fmtMoneyShort(val);
+      const plotHeight = 350;
+      const centerY = 225;
       const pixelsPerUnit = plotHeight / (2 * maxValue);
 
       return (
@@ -1806,10 +1808,14 @@
           </header>
           {error && <div className="error">{error}</div>}
           <div className="controls">
-            <div className="view-toggle">
-              {WEEK_COUNT_OPTIONS.map(opt => (
-                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
-              ))}
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <button onClick={() => setOffset(offset - weeksRange)} style={{ padding: '8px 12px' }}>← Previous</button>
+              <div className="view-toggle">
+                {WEEK_COUNT_OPTIONS.map(opt => (
+                  <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => { setWeeksRange(opt.weeks); setOffset(0); }}>{opt.label}</button>
+                ))}
+              </div>
+              <button onClick={() => setOffset(offset + weeksRange)} style={{ padding: '8px 12px' }}>Next →</button>
             </div>
           </div>
           {!error && data.length === 0 && (
@@ -1818,7 +1824,7 @@
             </div>
           )}
           {data.length > 0 && (
-            <div className="chart-container">
+            <div className="chart-container" style={{ minHeight: '700px' }}>
               <div className="chart-title">Weekly Cash Flow ($)</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1826,16 +1832,16 @@
                   <span style={{ fontSize: '12px', color: '#5a4a3a' }}>Cash Flow</span>
                 </div>
               </div>
-              <svg style={{ width: '100%', height: '500px' }} viewBox="0 0 850 500" preserveAspectRatio="xMidYMid meet">
+              <svg style={{ width: '100%', height: '600px' }} viewBox="0 0 900 550" preserveAspectRatio="xMidYMid meet">
                 {/* Grid lines - positive side */}
                 {[1, 2, 3, 4].map(i => {
                   const yPos = centerY - (i / 4) * plotHeight / 2;
-                  return <line key={`grid-pos-${i}`} x1="80" y1={yPos} x2="820" y2={yPos} stroke="#e1e0d9" strokeDasharray="4" />;
+                  return <line key={`grid-pos-${i}`} x1="80" y1={yPos} x2="850" y2={yPos} stroke="#e1e0d9" strokeDasharray="4" />;
                 })}
                 {/* Grid lines - negative side */}
                 {[1, 2, 3, 4].map(i => {
                   const yPos = centerY + (i / 4) * plotHeight / 2;
-                  return <line key={`grid-neg-${i}`} x1="80" y1={yPos} x2="820" y2={yPos} stroke="#e1e0d9" strokeDasharray="4" />;
+                  return <line key={`grid-neg-${i}`} x1="80" y1={yPos} x2="850" y2={yPos} stroke="#e1e0d9" strokeDasharray="4" />;
                 })}
                 {/* Y-axis labels - positive */}
                 {[0, 1, 2, 3, 4].map(i => {
@@ -1850,30 +1856,40 @@
                   return <text key={`y-label-neg-${i}`} x="70" y={yPos + 4} textAnchor="end" fontSize="11" fill="#8b6c57">{formatYAxis(val)}</text>;
                 })}
                 {/* Axes */}
-                <line x1="80" y1="50" x2="80" y2="350" stroke="#000" strokeWidth="1" />
-                <line x1="80" y1="200" x2="820" y2="200" stroke="#000" strokeWidth="1" />
+                <line x1="80" y1="50" x2="80" y2="400" stroke="#000" strokeWidth="1" />
+                <line x1="80" y1={centerY} x2="850" y2={centerY} stroke="#000" strokeWidth="1" />
                 {/* Zero line */}
-                <line x1="80" y1="200" x2="820" y2="200" stroke="#d4b5a0" strokeWidth="1" strokeDasharray="2" />
+                <line x1="80" y1={centerY} x2="850" y2={centerY} stroke="#d4b5a0" strokeWidth="1" strokeDasharray="2" />
                 {/* X-axis labels (dates) - show every nth date */}
                 {data.map((d, i) => {
                   if (i % Math.ceil(data.length / 8) !== 0 && i !== data.length - 1) return null;
-                  const x = 80 + (i / (data.length - 1 || 1)) * 740;
+                  const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   return (
-                    <text key={`x-label-${i}`} x={x} y="390" textAnchor="middle" fontSize="12" fill="#5a4a3a">
+                    <text key={`x-label-${i}`} x={x} y="440" textAnchor="middle" fontSize="12" fill="#5a4a3a">
                       {getDateLabel(d.month)}
                     </text>
                   );
                 })}
                 {/* Cash flow line */}
                 {data.map((d, i) => {
-                  const x = 80 + (i / (data.length - 1 || 1)) * 740;
+                  const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   const y = centerY - (d.cashFlow * pixelsPerUnit);
                   const color = d.cashFlow >= 0 ? '#10b981' : '#ef4444';
-                  return <circle key={`cf-${i}`} cx={x} cy={y} r="5" fill={color} />;
+                  return (
+                    <g key={`cf-${i}`} onMouseEnter={() => setHoveredIndex(i)} onMouseLeave={() => setHoveredIndex(null)} style={{ cursor: 'pointer' }}>
+                      <circle cx={x} cy={y} r="6" fill={color} />
+                      {hoveredIndex === i && (
+                        <g>
+                          <rect x={x - 45} y={y - 35} width="90" height="30" rx="4" fill="#2c2416" opacity="0.9" />
+                          <text x={x} y={y - 12} textAnchor="middle" fontSize="13" fill="white" fontWeight="600">{fmtMoneyShort(d.cashFlow)}</text>
+                        </g>
+                      )}
+                    </g>
+                  );
                 })}
                 {data.length > 1 && (
                   <polyline points={data.map((d, i) => {
-                    const x = 80 + (i / (data.length - 1)) * 740;
+                    const x = 80 + (i / (data.length - 1)) * 770;
                     const y = centerY - (d.cashFlow * pixelsPerUnit);
                     return `${x},${y}`;
                   }).join(' ')} stroke="#10b981" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />

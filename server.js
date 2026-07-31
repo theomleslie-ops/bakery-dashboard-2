@@ -1694,10 +1694,12 @@ app.get('/api/dashboard', async (req, res) => {
     let periodSource = 'QuickBooks not connected';
     try {
       const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 16, 52);
+      const offsetWeeks = parseInt(req.query.offset, 10) || 0;
       const todayStr = new Date().toISOString().slice(0, 10);
       const currentWeekStart = getWeekStart(todayStr, 0);
-      const rangeStart = addDays(currentWeekStart, -7 * (weeksBack - 1));
-      const weeklyRows = await getQBWeeklyRows(rangeStart, currentWeekStart);
+      const weekEndForOffset = addDays(currentWeekStart, -7 * offsetWeeks);
+      const rangeStart = addDays(weekEndForOffset, -7 * (weeksBack - 1));
+      const weeklyRows = await getQBWeeklyRows(rangeStart, weekEndForOffset);
       periodData = pairIntoBiweekly(weeklyRows);
       periodSource = 'QuickBooks (cached + live, every 2 weeks)';
     } catch (err) {
