@@ -2517,6 +2517,9 @@ const matchRecipeToSquareItem = (recipeName, squareItemName) => {
 // Main product margins endpoint
 app.get('/api/product-margins', async (req, res) => {
   try {
+    // Clear any caching - force fresh calculation
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+
     // Load recipe costs
     const recipeCostsFile = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
     if (!fs.existsSync(recipeCostsFile)) {
