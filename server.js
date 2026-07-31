@@ -2498,10 +2498,10 @@ const rankProductsByRevenue = (sales, n = 20) => {
 // Normalize quote characters for consistent matching (handles curly, straight, and other variants)
 const normalizeQuotes = (str) => {
   return str
-    .replace(/[""]/g, '"')    // Curly double quotes → straight
-    .replace(/['']/g, "'")    // Curly single quotes → straight
-    .replace(/[«»]/g, '"')    // Guillemets → straight
-    .replace(/[‟]/g, '"');    // Double high-reversed → straight
+    .replace(/[“”]/g, '"')    // Curly double quotes → straight
+    .replace(/[‘’]/g, "'")   // Curly single quotes → straight
+    .replace(/[«»]/g, '"')   // Guillemets → straight
+    .replace(/[‟]/g, '"');        // Double high-reversed → straight
 };
 
 const matchRecipeToSquareItem = (recipeName, squareItemName) => {
