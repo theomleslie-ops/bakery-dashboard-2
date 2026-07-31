@@ -1698,7 +1698,7 @@ app.get('/api/dashboard', async (req, res) => {
       const todayStr = new Date().toISOString().slice(0, 10);
       const currentWeekStart = getWeekStart(todayStr, 0);
       const weekEndForOffset = addDays(currentWeekStart, -7 * offsetWeeks);
-      const rangeStart = addDays(weekEndForOffset, -7 * (weeksBack - 1));
+      const rangeStart = addDays(weekEndForOffset, -7 * weeksBack);
       const weeklyRows = await getQBWeeklyRows(rangeStart, weekEndForOffset);
       const snapshot = loadQBWeeklySnapshot();
 
