@@ -1662,14 +1662,15 @@
       const [data, setData] = useState([]);
       const [error, setError] = useState('');
       const [weeksRange, setWeeksRange] = useState(16);
+      const [offset, setOffset] = useState(0);
       const [viewMode, setViewMode] = useState('dollars');
-      useEffect(() => { fetchQBData(); }, [weeksRange]);
+      useEffect(() => { fetchQBData(); }, [weeksRange, offset]);
       const fetchQBData = async () => {
         try {
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}`);
+          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}&offset=${offset}`);
           const result = await response.json();
-          setData((result.periodData || []).map(w => ({ month: w.monthKey, revenue: w.revenue || 0, cogs: w.cogs || 0 })));
+          setData((result.periodData || []).map(w => ({ month: w.startDate || w.label, revenue: w.revenue || 0, cogs: w.cogs || 0 })));
         } catch (err) {
           setError('Failed to load QB data: ' + err.message);
         }
@@ -1680,97 +1681,110 @@
       const getDateLabel = (dateStr) => dateStr ? new Date(dateStr + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
 
       return (
-        <div className="container">
-          <header>
-            <h1>📈 QuickBooks Revenue & COGS</h1>
-            <p className="subtitle">Revenue and Cost of Goods Sold, every 2 weeks</p>
-          </header>
-          {error && <div className="error">{error}</div>}
-          <div className="controls">
-            <div className="view-toggle">
-              {WEEK_COUNT_OPTIONS.map(opt => (
-                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
-              ))}
+        <div>
+          <div style={{ background: '#f5f1ed', borderBottom: '2px solid #d4b5a0', paddingTop: '20px', paddingBottom: '20px' }}>
+            <div className="container">
+              <header style={{ marginBottom: '0px', paddingBottom: '0px', borderBottom: 'none' }}>
+                <h1 style={{ marginBottom: '8px' }}>📈 QuickBooks Revenue & COGS</h1>
+                <p className="subtitle">Revenue and Cost of Goods Sold, every 2 weeks</p>
+              </header>
             </div>
-            {data.length > 0 && (
-              <div className="view-toggle">
-                <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
-                <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
+          </div>
+          <div className="container">
+            {error && <div className="error" style={{ marginTop: '20px' }}>{error}</div>}
+            <div className="controls" style={{ marginTop: '30px', marginBottom: '30px' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <button onClick={() => setOffset(offset - weeksRange)} style={{ padding: '8px 12px' }}>← Previous</button>
+                  <div className="view-toggle">
+                    {WEEK_COUNT_OPTIONS.map(opt => (
+                      <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => { setWeeksRange(opt.weeks); setOffset(0); }}>{opt.label}</button>
+                    ))}
+                  </div>
+                  <button onClick={() => setOffset(offset + weeksRange)} style={{ padding: '8px 12px' }}>Next →</button>
+                </div>
+                {data.length > 0 && (
+                  <div className="view-toggle">
+                    <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
+                    <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
+                  </div>
+                )}
+              </div>
+            </div>
+            {!error && data.length === 0 && (
+              <div className="empty">
+                No QuickBooks data available. Check back shortly while data is being cached.
               </div>
             )}
-          </div>
-          {!error && data.length === 0 && (
-            <div className="empty">
-              No QuickBooks data available. Check back shortly while data is being cached.
-            </div>
-          )}
-          {data.length > 0 && (
-            <div className="chart-container">
-              <div className="chart-title">Revenue and COGS, every 2 weeks ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '12px', height: '2px', background: '#3f8361' }}></div>
-                  <span style={{ fontSize: '12px', color: '#5a4a3a' }}>Revenue</span>
+            {data.length > 0 && (
+              <div className="chart-container" style={{ minHeight: '750px' }}>
+                <div className="chart-title">Revenue and COGS, every 2 weeks ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
+                <div className="legend" style={{ marginBottom: '24px' }}>
+                  <div className="legend-item">
+                    <div style={{ width: '12px', height: '3px', background: '#3f8361' }} className="swatch"></div>
+                    <span>Revenue</span>
+                  </div>
+                  <div className="legend-item">
+                    <div style={{ width: '12px', height: '3px', background: '#c05621' }} className="swatch"></div>
+                    <span>COGS</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '12px', height: '2px', background: '#c05621' }}></div>
-                  <span style={{ fontSize: '12px', color: '#5a4a3a' }}>COGS</span>
-                </div>
-              </div>
-              <svg style={{ width: '100%', height: '450px' }} viewBox="0 0 850 450" preserveAspectRatio="xMidYMid meet">
+                <svg style={{ width: '100%', height: '650px' }} viewBox="0 0 900 580" preserveAspectRatio="xMidYMid meet">
                 {/* Grid lines */}
                 {[0, 1, 2, 3, 4].map(i => (
-                  <line key={`grid-${i}`} x1="80" y1={30 + i * 60} x2="820" y2={30 + i * 60} stroke="#e1e0d9" strokeDasharray="4" />
+                  <line key={`grid-${i}`} x1="80" y1={50 + i * 70} x2="850" y2={50 + i * 70} stroke="#e1e0d9" strokeDasharray="4" />
                 ))}
                 {/* Y-axis labels */}
                 {[0, 1, 2, 3, 4].map(i => (
-                  <text key={`y-label-${i}`} x="70" y={35 + i * 60} textAnchor="end" fontSize="11" fill="#8b6c57">{formatYAxis(maxValue * (4 - i) / 4)}</text>
+                  <text key={`y-label-${i}`} x="70" y={55 + i * 70} textAnchor="end" fontSize="11" fill="#8b6c57">{formatYAxis(maxValue * (4 - i) / 4)}</text>
                 ))}
                 {/* Axes */}
-                <line x1="80" y1="30" x2="80" y2="300" stroke="#000" strokeWidth="1" />
-                <line x1="80" y1="300" x2="820" y2="300" stroke="#000" strokeWidth="1" />
-                {/* X-axis labels (dates) */}
+                <line x1="80" y1="50" x2="80" y2="350" stroke="#000" strokeWidth="1" />
+                <line x1="80" y1="350" x2="850" y2="350" stroke="#000" strokeWidth="1" />
+                {/* X-axis labels (dates) - show every nth date */}
                 {data.map((d, i) => {
-                  const x = 80 + (i / (data.length - 1 || 1)) * 740;
+                  if (i % Math.ceil(data.length / 8) !== 0 && i !== data.length - 1) return null;
+                  const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   return (
-                    <text key={`x-label-${i}`} x={x} y="370" textAnchor="middle" fontSize="12" fill="#5a4a3a">
+                    <text key={`x-label-${i}`} x={x} y="500" textAnchor="middle" fontSize="12" fill="#5a4a3a">
                       {getDateLabel(d.month)}
                     </text>
                   );
                 })}
                 {/* Revenue line */}
                 {data.map((d, i) => {
-                  const x = 80 + (i / (data.length - 1 || 1)) * 740;
+                  const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   const displayVal = getDisplayValue(d.revenue, d.revenue);
-                  const y = 300 - (displayVal / maxValue) * 270;
-                  return <circle key={`rev-${i}`} cx={x} cy={y} r="3" fill="#3f8361" />;
+                  const y = 350 - (displayVal / maxValue) * 300;
+                  return <circle key={`rev-${i}`} cx={x} cy={y} r="4" fill="#3f8361" />;
                 })}
                 {data.length > 1 && (
                   <polyline points={data.map((d, i) => {
-                    const x = 80 + (i / (data.length - 1)) * 740;
+                    const x = 80 + (i / (data.length - 1)) * 770;
                     const displayVal = getDisplayValue(d.revenue, d.revenue);
-                    const y = 300 - (displayVal / maxValue) * 270;
+                    const y = 350 - (displayVal / maxValue) * 300;
                     return `${x},${y}`;
-                  }).join(' ')} stroke="#3f8361" strokeWidth="2" fill="none" />
+                  }).join(' ')} stroke="#3f8361" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                 )}
                 {/* COGS line */}
                 {data.map((d, i) => {
-                  const x = 80 + (i / (data.length - 1 || 1)) * 740;
+                  const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   const displayVal = getDisplayValue(d.cogs, d.revenue);
-                  const y = 300 - (displayVal / maxValue) * 270;
-                  return <circle key={`cogs-${i}`} cx={x} cy={y} r="3" fill="#c05621" />;
+                  const y = 350 - (displayVal / maxValue) * 300;
+                  return <circle key={`cogs-${i}`} cx={x} cy={y} r="4" fill="#c05621" />;
                 })}
                 {data.length > 1 && (
                   <polyline points={data.map((d, i) => {
-                    const x = 80 + (i / (data.length - 1)) * 740;
+                    const x = 80 + (i / (data.length - 1)) * 770;
                     const displayVal = getDisplayValue(d.cogs, d.revenue);
-                    const y = 300 - (displayVal / maxValue) * 270;
+                    const y = 350 - (displayVal / maxValue) * 300;
                     return `${x},${y}`;
-                  }).join(' ')} stroke="#c05621" strokeWidth="2" fill="none" />
+                  }).join(' ')} stroke="#c05621" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                 )}
               </svg>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       );
     }
