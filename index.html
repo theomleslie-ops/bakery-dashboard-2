@@ -1791,9 +1791,11 @@
         }
       };
       const maxAbsValue = Math.max(...data.map(d => Math.abs(d.cashFlow)), 1);
-      const maxValue = niceMax(maxAbsValue);
+      const minValue = Math.min(...data.map(d => d.cashFlow), 0);
+      const range = Math.max(Math.abs(maxAbsValue), Math.abs(minValue));
+      const maxValue = niceMax(range * 1.1);
       const getDateLabel = (dateStr) => dateStr ? new Date(dateStr + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
-      const formatYAxis = (val) => `$${fmtMoneyShort(val)}`;
+      const formatYAxis = (val) => val === 0 ? '$0' : `$${fmtMoneyShort(val)}`;
 
       return (
         <div className="container">
@@ -1839,6 +1841,16 @@
                 <line x1="80" y1="300" x2="820" y2="300" stroke="#000" strokeWidth="1" />
                 {/* Zero line */}
                 <line x1="80" y1="300" x2="820" y2="300" stroke="#d4b5a0" strokeWidth="1" strokeDasharray="2" />
+                {/* X-axis labels (dates) */}
+                {data.map((d, i) => {
+                  if (i % Math.ceil(data.length / 8) !== 0 && i !== data.length - 1) return null;
+                  const x = 80 + (i / (data.length - 1 || 1)) * 740;
+                  return (
+                    <text key={`x-label-${i}`} x={x} y="335" textAnchor="middle" fontSize="12" fill="#5a4a3a">
+                      {getDateLabel(d.month)}
+                    </text>
+                  );
+                })}
                 {/* X-axis labels (dates) */}
                 {data.map((d, i) => {
                   const x = 80 + (i / (data.length - 1 || 1)) * 740;
