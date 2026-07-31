@@ -1448,30 +1448,30 @@ const parseQBPeriodPL = (report) => {
 // recent period is always a full, comparable 2-week pair.
 const pairIntoBiweekly = (weeklyRowsWithDates) => {
   const periods = [];
-  let start = 0;
-  if (weeklyRowsWithDates.length % 2 === 1) {
-    const { row: a, date: dateA } = weeklyRowsWithDates[0];
-    periods.push({ ...a, startDate: dateA });
-    start = 1;
-  }
-  for (let i = start; i < weeklyRowsWithDates.length; i += 2) {
+  let i = 0;
+  while (i < weeklyRowsWithDates.length) {
     const { row: a, date: dateA } = weeklyRowsWithDates[i];
-    const rowB = weeklyRowsWithDates[i + 1];
-    if (!rowB) {
+    const nextItem = weeklyRowsWithDates[i + 1];
+
+    // Check if next week exists and is exactly 7 days after this one (consecutive)
+    if (nextItem && addDays(dateA, 7) === nextItem.date) {
+      const { row: b, date: dateB } = nextItem;
+      periods.push({
+        label: a.label,
+        fullLabel: `${a.fullLabel} + ${b.fullLabel}`,
+        revenue: round2(a.revenue + b.revenue),
+        cogs: round2(a.cogs + b.cogs),
+        opex: round2(a.opex + b.opex),
+        labor: round2(a.labor + b.labor),
+        pl: round2(a.pl + b.pl),
+        startDate: dateA,
+      });
+      i += 2;
+    } else {
+      // Gap detected or last week - keep as single period
       periods.push({ ...a, startDate: dateA });
-      break;
+      i += 1;
     }
-    const { row: b } = rowB;
-    periods.push({
-      label: a.label,
-      fullLabel: `${a.fullLabel} + ${b.fullLabel}`,
-      revenue: round2(a.revenue + b.revenue),
-      cogs: round2(a.cogs + b.cogs),
-      opex: round2(a.opex + b.opex),
-      labor: round2(a.labor + b.labor),
-      pl: round2(a.pl + b.pl),
-      startDate: dateA,
-    });
   }
   return periods;
 };
