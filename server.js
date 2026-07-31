@@ -2495,6 +2495,9 @@ const rankProductsByRevenue = (sales, n = 20) => {
 };
 
 // Match recipe to Square item name
+// Normalize quote characters for consistent matching
+const normalizeQuotes = (str) => str.replace(/[""'']/g, '"');
+
 const matchRecipeToSquareItem = (recipeName, squareItemName) => {
   const recipeToks = matcher.tokenize(recipeName);
   const squareToks = matcher.tokenize(squareItemName);
@@ -2520,13 +2523,13 @@ app.get('/api/product-margins', async (req, res) => {
       costByRecipe[r.recipe.toLowerCase()] = r.costPerUnit;
     }
 
-    // Load manual recipe overrides
+    // Load manual recipe overrides (normalize quotes for consistent matching)
     const overridesFile = path.join(DATA_DIR, 'pipeline', 'ingredient-overrides.json');
     const overrides = {};
     if (fs.existsSync(overridesFile)) {
       const overridesData = JSON.parse(fs.readFileSync(overridesFile, 'utf-8'));
       for (const mapping of overridesData.mappings || []) {
-        overrides[mapping.squareItem] = mapping.recipe;
+        overrides[normalizeQuotes(mapping.squareItem)] = mapping.recipe;
       }
     }
 
@@ -2561,9 +2564,10 @@ app.get('/api/product-margins', async (req, res) => {
         let matchedRecipe = null;
         const recipes = Object.keys(costByRecipe);
 
-        // Priority 1: Check manual overrides
-        if (overrides[item.name]) {
-          matchedRecipe = overrides[item.name];
+        // Priority 1: Check manual overrides (normalize quotes)
+        const normalizedItemName = normalizeQuotes(item.name);
+        if (overrides[normalizedItemName]) {
+          matchedRecipe = overrides[normalizedItemName];
           costPerUnit = costByRecipe[matchedRecipe.toLowerCase()];
         }
 
