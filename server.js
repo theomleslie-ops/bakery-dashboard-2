@@ -2620,6 +2620,59 @@ app.get('/api/product-margins', async (req, res) => {
   }
 });
 
+// Rebuild product margins from Google Sheets + QB invoices
+// GET /api/rebuild-margins
+app.get('/api/rebuild-margins', async (req, res) => {
+  try {
+    const sheetsOAuth = require('./pipeline/sheets-oauth');
+    const qbClient = require('./pipeline/qb-client');
+    const buildMargins = require('./pipeline/build-margins');
+
+    // Check if Google is connected
+    if (!sheetsOAuth.isConnected()) {
+      return res.status(400).json({
+        error: 'Google not authenticated',
+        message: 'Visit /api/google/connect to authorize access to recipe sheets',
+        status: 'google_not_connected',
+      });
+    }
+
+    // Check if QB is connected
+    let qbConnected = false;
+    try {
+      const tokens = qbClient.loadTokens();
+      qbConnected = !!(tokens && tokens.refresh_token);
+    } catch {}
+
+    if (!qbConnected) {
+      return res.status(400).json({
+        error: 'QuickBooks not authenticated',
+        message: 'Visit /api/quickbooks/connect to authorize access to vendor invoices',
+        status: 'qb_not_connected',
+      });
+    }
+
+    // Trigger the margins build
+    console.log('🔄 Rebuilding product margins from Google Sheets + QB…');
+    const result = await buildMargins.main({ weeks: 12 });
+
+    res.json({
+      success: true,
+      message: 'Product margins rebuilt successfully',
+      recipeCosts: result.recipeCosts,
+      coverage: result.coverage,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Rebuild margins error:', err.message);
+    res.status(500).json({
+      error: 'Rebuild failed',
+      message: err.message,
+      code: err.code,
+    });
+  }
+});
+
 // ============= PUBLIC DASHBOARD API ENDPOINTS =============
 
 // Square data endpoint
