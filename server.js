@@ -2578,6 +2578,9 @@ app.get('/api/product-margins', async (req, res) => {
         if (overrides[normalizedItemName]) {
           matchedRecipe = overrides[normalizedItemName];
           costPerUnit = costByRecipe[matchedRecipe.toLowerCase()];
+          console.log(`✓ Override match for "${item.name}" → "${matchedRecipe}" = $${costPerUnit}`);
+        } else if (item.name === 'Chocolate Sourdough "Scone"' || item.name.includes('Sourdough')) {
+          console.log(`✗ Override FAILED for "${item.name}", normalized: "${normalizedItemName}", available keys: ${Object.keys(overrides).slice(0, 3).join(', ')}...`);
         }
 
         // Priority 2: Try exact match
