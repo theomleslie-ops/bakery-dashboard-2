@@ -1812,8 +1812,8 @@
       const maxValue = niceMax(maxAbsValue * 1.1);
       const getDateLabel = (dateStr) => dateStr ? new Date(dateStr + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
       const formatYAxis = (val) => val === 0 ? '$0' : fmtMoneyShort(val);
-      const plotHeight = 500;
-      const centerY = 320;
+      const plotHeight = 520;
+      const centerY = 310;
       const pixelsPerUnit = plotHeight / (2 * maxValue);
 
       const dateRangeStr = data.length > 0 ? (() => {
@@ -1886,7 +1886,7 @@
                   return <text key={`y-label-neg-${i}`} x="70" y={yPos + 4} textAnchor="end" fontSize="11" fill="#8b6c57">{formatYAxis(val)}</text>;
                 })}
                 {/* Axes */}
-                <line x1="80" y1="50" x2="80" y2="520" stroke="#000" strokeWidth="1" />
+                <line x1="80" y1="50" x2="80" y2="545" stroke="#000" strokeWidth="1" />
                 <line x1="80" y1={centerY} x2="850" y2={centerY} stroke="#000" strokeWidth="1" />
                 {/* Zero line */}
                 <line x1="80" y1={centerY} x2="850" y2={centerY} stroke="#d4b5a0" strokeWidth="1" strokeDasharray="2" />
@@ -1895,7 +1895,7 @@
                   if (i % Math.ceil(data.length / 8) !== 0 && i !== data.length - 1) return null;
                   const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   return (
-                    <text key={`x-label-${i}`} x={x} y="430" textAnchor="middle" fontSize="12" fill="#5a4a3a">
+                    <text key={`x-label-${i}`} x={x} y="380" textAnchor="middle" fontSize="12" fill="#5a4a3a">
                       {getDateLabel(d.month)}
                     </text>
                   );
