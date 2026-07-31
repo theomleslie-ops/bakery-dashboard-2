@@ -2621,12 +2621,26 @@ app.get('/api/product-margins', async (req, res) => {
 });
 
 // Rebuild product margins from Google Sheets + QB invoices
-// GET /api/rebuild-margins
+// GET /api/rebuild-margins (returns immediately, build runs in background)
+// GET /api/rebuild-margins/status (check build status)
+const REBUILD_STATUS_FILE = path.join(DATA_DIR, 'rebuild-margins-status.json');
+const saveRebuildStatus = (status) => {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(REBUILD_STATUS_FILE, JSON.stringify(status, null, 2));
+};
+const getRebuildStatus = () => {
+  try {
+    if (fs.existsSync(REBUILD_STATUS_FILE)) {
+      return JSON.parse(fs.readFileSync(REBUILD_STATUS_FILE, 'utf-8'));
+    }
+  } catch {}
+  return { status: 'idle' };
+};
+
 app.get('/api/rebuild-margins', async (req, res) => {
   try {
     const sheetsOAuth = require('./pipeline/sheets-oauth');
     const qbClient = require('./pipeline/qb-client');
-    const buildMargins = require('./pipeline/build-margins');
 
     // Check if Google is connected
     if (!sheetsOAuth.isConnected()) {
@@ -2652,25 +2666,60 @@ app.get('/api/rebuild-margins', async (req, res) => {
       });
     }
 
-    // Trigger the margins build
-    console.log('🔄 Rebuilding product margins from Google Sheets + QB…');
-    const result = await buildMargins.main({ weeks: 12 });
+    // Check if already building
+    const currentStatus = getRebuildStatus();
+    if (currentStatus.status === 'building') {
+      return res.json({
+        status: 'already_building',
+        message: 'Build already in progress',
+        startedAt: currentStatus.startedAt,
+      });
+    }
 
+    // Start build in background
+    saveRebuildStatus({ status: 'building', startedAt: new Date().toISOString() });
     res.json({
-      success: true,
-      message: 'Product margins rebuilt successfully',
-      recipeCosts: result.recipeCosts,
-      coverage: result.coverage,
-      generatedAt: new Date().toISOString(),
+      status: 'building_started',
+      message: 'Product margins rebuild started. Check /api/rebuild-margins/status for progress.',
+      checkUrl: '/api/rebuild-margins/status',
     });
+
+    // Run build in background (don't await)
+    (async () => {
+      try {
+        const buildMargins = require('./pipeline/build-margins');
+        console.log('🔄 Rebuilding product margins from Google Sheets + QB…');
+        const result = await buildMargins.main({ weeks: 12 });
+        saveRebuildStatus({
+          status: 'complete',
+          completedAt: new Date().toISOString(),
+          recipeCount: result.recipeCosts.recipeCount,
+          costed: result.coverage.costed.length,
+          needsAttention: result.coverage.needsAttention.length,
+        });
+        console.log('✅ Product margins rebuild complete');
+      } catch (err) {
+        console.error('Rebuild margins error:', err.message);
+        saveRebuildStatus({
+          status: 'error',
+          error: err.message,
+          code: err.code,
+          failedAt: new Date().toISOString(),
+        });
+      }
+    })();
   } catch (err) {
-    console.error('Rebuild margins error:', err.message);
+    console.error('Rebuild margins startup error:', err.message);
     res.status(500).json({
-      error: 'Rebuild failed',
+      error: 'Rebuild startup failed',
       message: err.message,
-      code: err.code,
     });
   }
+});
+
+app.get('/api/rebuild-margins/status', (req, res) => {
+  const status = getRebuildStatus();
+  res.json(status);
 });
 
 // ============= PUBLIC DASHBOARD API ENDPOINTS =============
