@@ -1948,7 +1948,7 @@ app.get('/api/market-performance', async (req, res) => {
     return res.status(400).json({ error: 'Square API credentials not configured', weekStarts: [], markets: [] });
   }
 
-  const weekCount = Math.min(Math.max(parseInt(req.query.weeks, 10) || 52, 1), 156);
+  const weekCount = Math.min(Math.max(parseInt(req.query.weeks, 10) || 52, 1), 260);
   const cacheKey = `market_perf_${weekCount}`;
   const cached = cacheManager.get(cacheKey);
   if (cached) return res.json({ ...cached, cached: true });
