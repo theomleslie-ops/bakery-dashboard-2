@@ -1446,17 +1446,22 @@ const parseQBPeriodPL = (report) => {
 // Pair consecutive real weekly periods into 2-week totals - summed, never averaged. Any odd
 // leftover week is kept as its own lone period at the oldest end of the range, so the most
 // recent period is always a full, comparable 2-week pair.
-const pairIntoBiweekly = (weeklyRows) => {
+const pairIntoBiweekly = (weeklyRowsWithDates) => {
   const periods = [];
   let start = 0;
-  if (weeklyRows.length % 2 === 1) {
-    periods.push(weeklyRows[0]);
+  if (weeklyRowsWithDates.length % 2 === 1) {
+    const { row: a, date: dateA } = weeklyRowsWithDates[0];
+    periods.push({ ...a, startDate: dateA });
     start = 1;
   }
-  for (let i = start; i < weeklyRows.length; i += 2) {
-    const a = weeklyRows[i];
-    const b = weeklyRows[i + 1];
-    if (!b) { periods.push(a); break; }
+  for (let i = start; i < weeklyRowsWithDates.length; i += 2) {
+    const { row: a, date: dateA } = weeklyRowsWithDates[i];
+    const rowB = weeklyRowsWithDates[i + 1];
+    if (!rowB) {
+      periods.push({ ...a, startDate: dateA });
+      break;
+    }
+    const { row: b } = rowB;
     periods.push({
       label: a.label,
       fullLabel: `${a.fullLabel} + ${b.fullLabel}`,
@@ -1465,6 +1470,7 @@ const pairIntoBiweekly = (weeklyRows) => {
       opex: round2(a.opex + b.opex),
       labor: round2(a.labor + b.labor),
       pl: round2(a.pl + b.pl),
+      startDate: dateA,
     });
   }
   return periods;
@@ -1498,6 +1504,7 @@ const fetchQBWeeklyRows = async (startDate, endDateExclusive) => {
 // Get real per-week QuickBooks P&L totals for [rangeStart, rangeEndInclusive] (both Sundays),
 // backfilling from QuickBooks into the on-disk snapshot only for weeks not already cached, and
 // refreshing the most recent 2 weeks live if QB is connected. If QB is not connected, serves from cache.
+// Returns array of {row, date} objects to preserve week correspondence for pairing.
 const getQBWeeklyRows = async (rangeStart, rangeEndInclusive) => {
   const snapshot = loadQBWeeklySnapshot();
   const earliestCached = Object.keys(snapshot.weeks).sort()[0];
@@ -1521,7 +1528,7 @@ const getQBWeeklyRows = async (rangeStart, rangeEndInclusive) => {
 
   const rows = [];
   for (let d = rangeStart; d <= rangeEndInclusive; d = addDays(d, 7)) {
-    if (snapshot.weeks[d]) rows.push(snapshot.weeks[d]);
+    if (snapshot.weeks[d]) rows.push({ row: snapshot.weeks[d], date: d });
   }
   return rows;
 };
@@ -1700,19 +1707,9 @@ app.get('/api/dashboard', async (req, res) => {
       const weekEndForOffset = addDays(currentWeekStart, -7 * offsetWeeks);
       const rangeStart = addDays(weekEndForOffset, -7 * weeksBack);
       const weeklyRows = await getQBWeeklyRows(rangeStart, weekEndForOffset);
-      const snapshot = loadQBWeeklySnapshot();
 
       const pairedData = pairIntoBiweekly(weeklyRows);
-
-      // Add date info from snapshot keys for frontend display
-      periodData = [];
-      let idx = 0;
-      const weekDates = Object.keys(snapshot.weeks).filter(d => d >= rangeStart && d <= weekEndForOffset).sort();
-
-      for (let i = 0; i < weekDates.length && idx < pairedData.length; i += 2, idx++) {
-        const period = pairedData[idx];
-        periodData.push({ ...period, startDate: weekDates[i] });
-      }
+      periodData = pairedData;
 
       periodSource = 'QuickBooks (cached + live, every 2 weeks)';
     } catch (err) {
