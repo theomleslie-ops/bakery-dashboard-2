@@ -310,7 +310,7 @@
     const round2 = (n) => Math.round(n * 100) / 100;
     const fmtHours = (h) => `${h.toFixed(1)}h`;
     const fmtMoney = (v) => `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const fmtMoneyShort = (v) => { if (v >= 1000) return `$${Math.round(v / 1000).toLocaleString()}k`; return `$${Math.round(v)}`; };
+    const fmtMoneyShort = (v) => { if (Math.abs(v) >= 1000) return `$${Math.round(v / 1000).toLocaleString()}k`; return `$${Math.round(v).toLocaleString()}`; };
     const fmtQty = (v) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
     const pct = (part, whole) => (whole > 0 ? `${((part / whole) * 100).toFixed(1)}%` : '0%');
     const fmtMonthLabel = (monthKey) => { const [y, m] = monthKey.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }); };
@@ -1677,7 +1677,7 @@
       };
       const maxValue = viewMode === 'dollars' ? Math.max(...data.map(d => Math.max(d.revenue, d.cogs)), 1) : 100;
       const getDisplayValue = (val, revenue) => viewMode === 'dollars' ? val : (revenue > 0 ? (val / revenue) * 100 : 0);
-      const formatYAxis = (val) => viewMode === 'dollars' ? `$${fmtMoneyShort(val)}` : `${val.toFixed(0)}%`;
+      const formatYAxis = (val) => viewMode === 'dollars' ? fmtMoneyShort(val) : `${val.toFixed(0)}%`;
       const getDateLabel = (dateStr) => dateStr ? new Date(dateStr + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
 
       return (
@@ -1717,7 +1717,7 @@
               </div>
             )}
             {data.length > 0 && (
-              <div className="chart-container" style={{ minHeight: '750px' }}>
+              <div className="chart-container" style={{ minHeight: '900px' }}>
                 <div className="chart-title">Revenue and COGS, every 2 weeks ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
                 <div className="legend" style={{ marginBottom: '24px' }}>
                   <div className="legend-item">
@@ -1729,24 +1729,26 @@
                     <span>COGS</span>
                   </div>
                 </div>
-                <svg style={{ width: '100%', height: '650px' }} viewBox="0 0 900 580" preserveAspectRatio="xMidYMid meet">
+                <svg style={{ width: '100%', height: '800px' }} viewBox="0 0 900 700" preserveAspectRatio="xMidYMid meet">
                 {/* Grid lines */}
-                {[0, 1, 2, 3, 4].map(i => (
-                  <line key={`grid-${i}`} x1="80" y1={50 + i * 70} x2="850" y2={50 + i * 70} stroke="#e1e0d9" strokeDasharray="4" />
-                ))}
+                {[0, 1, 2, 3, 4].map(i => {
+                  const yPos = 50 + i * 80;
+                  return <line key={`grid-${i}`} x1="80" y1={yPos} x2="850" y2={yPos} stroke="#e1e0d9" strokeDasharray="4" />;
+                })}
                 {/* Y-axis labels */}
-                {[0, 1, 2, 3, 4].map(i => (
-                  <text key={`y-label-${i}`} x="70" y={55 + i * 70} textAnchor="end" fontSize="11" fill="#8b6c57">{formatYAxis(maxValue * (4 - i) / 4)}</text>
-                ))}
+                {[0, 1, 2, 3, 4].map(i => {
+                  const yPos = 55 + i * 80;
+                  return <text key={`y-label-${i}`} x="70" y={yPos} textAnchor="end" fontSize="11" fill="#8b6c57">{formatYAxis(maxValue * (4 - i) / 4)}</text>;
+                })}
                 {/* Axes */}
-                <line x1="80" y1="50" x2="80" y2="350" stroke="#000" strokeWidth="1" />
-                <line x1="80" y1="350" x2="850" y2="350" stroke="#000" strokeWidth="1" />
+                <line x1="80" y1="50" x2="80" y2="370" stroke="#000" strokeWidth="1" />
+                <line x1="80" y1="370" x2="850" y2="370" stroke="#000" strokeWidth="1" />
                 {/* X-axis labels (dates) - show every nth date */}
                 {data.map((d, i) => {
                   if (i % Math.ceil(data.length / 8) !== 0 && i !== data.length - 1) return null;
                   const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   return (
-                    <text key={`x-label-${i}`} x={x} y="500" textAnchor="middle" fontSize="12" fill="#5a4a3a">
+                    <text key={`x-label-${i}`} x={x} y="535" textAnchor="middle" fontSize="12" fill="#5a4a3a">
                       {getDateLabel(d.month)}
                     </text>
                   );
@@ -1755,14 +1757,14 @@
                 {data.map((d, i) => {
                   const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   const displayVal = getDisplayValue(d.revenue, d.revenue);
-                  const y = 350 - (displayVal / maxValue) * 300;
+                  const y = 370 - (displayVal / maxValue) * 320;
                   return <circle key={`rev-${i}`} cx={x} cy={y} r="4" fill="#3f8361" />;
                 })}
                 {data.length > 1 && (
                   <polyline points={data.map((d, i) => {
                     const x = 80 + (i / (data.length - 1)) * 770;
                     const displayVal = getDisplayValue(d.revenue, d.revenue);
-                    const y = 350 - (displayVal / maxValue) * 300;
+                    const y = 370 - (displayVal / maxValue) * 320;
                     return `${x},${y}`;
                   }).join(' ')} stroke="#3f8361" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                 )}
@@ -1770,14 +1772,14 @@
                 {data.map((d, i) => {
                   const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   const displayVal = getDisplayValue(d.cogs, d.revenue);
-                  const y = 350 - (displayVal / maxValue) * 300;
+                  const y = 370 - (displayVal / maxValue) * 320;
                   return <circle key={`cogs-${i}`} cx={x} cy={y} r="4" fill="#c05621" />;
                 })}
                 {data.length > 1 && (
                   <polyline points={data.map((d, i) => {
                     const x = 80 + (i / (data.length - 1)) * 770;
                     const displayVal = getDisplayValue(d.cogs, d.revenue);
-                    const y = 350 - (displayVal / maxValue) * 300;
+                    const y = 370 - (displayVal / maxValue) * 320;
                     return `${x},${y}`;
                   }).join(' ')} stroke="#c05621" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                 )}
@@ -1810,8 +1812,8 @@
       const maxValue = niceMax(maxAbsValue * 1.1);
       const getDateLabel = (dateStr) => dateStr ? new Date(dateStr + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
       const formatYAxis = (val) => val === 0 ? '$0' : fmtMoneyShort(val);
-      const plotHeight = 350;
-      const centerY = 225;
+      const plotHeight = 420;
+      const centerY = 280;
       const pixelsPerUnit = plotHeight / (2 * maxValue);
 
       const dateRangeStr = data.length > 0 ? (() => {
@@ -1850,7 +1852,7 @@
               </div>
             )}
             {data.length > 0 && (
-              <div className="chart-container" style={{ minHeight: '750px' }}>
+              <div className="chart-container" style={{ minHeight: '900px' }}>
                 <div className="chart-title">Cash Flow, every 2 weeks ($)</div>
                 <p style={{ fontSize: '13px', color: '#8b6c57', margin: '4px 0 16px 0' }}>{dateRangeStr}</p>
 
@@ -1860,7 +1862,7 @@
                     <span>Cash Flow</span>
                   </div>
                 </div>
-              <svg style={{ width: '100%', height: '650px' }} viewBox="0 0 900 580" preserveAspectRatio="xMidYMid meet">
+              <svg style={{ width: '100%', height: '800px' }} viewBox="0 0 900 700" preserveAspectRatio="xMidYMid meet">
                 {/* Grid lines - positive side */}
                 {[1, 2, 3, 4].map(i => {
                   const yPos = centerY - (i / 4) * plotHeight / 2;
@@ -1893,7 +1895,7 @@
                   if (i % Math.ceil(data.length / 8) !== 0 && i !== data.length - 1) return null;
                   const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   return (
-                    <text key={`x-label-${i}`} x={x} y="500" textAnchor="middle" fontSize="12" fill="#5a4a3a">
+                    <text key={`x-label-${i}`} x={x} y="560" textAnchor="middle" fontSize="12" fill="#5a4a3a">
                       {getDateLabel(d.month)}
                     </text>
                   );
