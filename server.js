@@ -1700,7 +1700,20 @@ app.get('/api/dashboard', async (req, res) => {
       const weekEndForOffset = addDays(currentWeekStart, -7 * offsetWeeks);
       const rangeStart = addDays(weekEndForOffset, -7 * (weeksBack - 1));
       const weeklyRows = await getQBWeeklyRows(rangeStart, weekEndForOffset);
-      periodData = pairIntoBiweekly(weeklyRows);
+      const snapshot = loadQBWeeklySnapshot();
+
+      const pairedData = pairIntoBiweekly(weeklyRows);
+
+      // Add date info from snapshot keys for frontend display
+      periodData = [];
+      let idx = 0;
+      const weekDates = Object.keys(snapshot.weeks).filter(d => d >= rangeStart && d <= weekEndForOffset).sort();
+
+      for (let i = 0; i < weekDates.length && idx < pairedData.length; i += 2, idx++) {
+        const period = pairedData[idx];
+        periodData.push({ ...period, startDate: weekDates[i] });
+      }
+
       periodSource = 'QuickBooks (cached + live, every 2 weeks)';
     } catch (err) {
       if (err.code !== 'QB_NOT_CONNECTED') {

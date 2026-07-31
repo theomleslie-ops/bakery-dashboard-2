@@ -1787,7 +1787,7 @@
           const baseUrl = window.location.origin;
           const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}&offset=${offset}`);
           const result = await response.json();
-          setData((result.periodData || []).map(w => ({ month: w.monthKey, cashFlow: (w.revenue || 0) - (w.cogs || 0) - (w.opex || 0) - (w.labor || 0) })));
+          setData((result.periodData || []).map(w => ({ month: w.startDate || w.label, cashFlow: (w.revenue || 0) - (w.cogs || 0) - (w.opex || 0) - (w.labor || 0) })));
         } catch (err) {
           setError('Failed to load cash flow data: ' + err.message);
         }
