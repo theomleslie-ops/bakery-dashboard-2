@@ -2738,28 +2738,22 @@ app.get('/api/rebuild-margins/status', (req, res) => {
   res.json(status);
 });
 
-// Cash balance trend - fetches historical cash balances from QB Balance Sheet
-// and combines with calculated cash flow to show running balance over time
+// Cash balance trend - fetches Statement of Cash Flows from QB
 app.get('/api/cash-balance', async (req, res) => {
   try {
     const qbClient = require('./pipeline/qb-client');
     const tokens = await qbClient.getValidTokens();
 
     // Fetch current Balance Sheet to get today's cash balance
-    console.log('Fetching QB Balance Sheet for cash balance data...');
+    console.log('Fetching QB Balance Sheet for current cash balance...');
     const today = new Date().toISOString().split('T')[0];
-    const response = await axios.get(
+    const balanceSheetRes = await axios.get(
       `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
       {
-        params: {
-          as_of_date: today,
-        },
+        params: { as_of_date: today },
         headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
       }
     );
-
-    const report = response.data;
-    console.log(`✅ QB Balance Sheet fetched`);
 
     // Find cash accounts in the report
     const findCashTotal = (rows) => {
@@ -2778,46 +2772,80 @@ app.get('/api/cash-balance', async (req, res) => {
       return null;
     };
 
-    const currentCash = findCashTotal(report.Rows?.Row) || 0;
+    const currentCash = findCashTotal(balanceSheetRes.data.Rows?.Row) || 0;
+    console.log(`✅ Current cash balance: $${currentCash}`);
 
-    // Fetch weekly P&L data to calculate historical cash flows
-    const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 52, 260);
-    const todayStr = today;
-    const currentWeekStart = getWeekStart(todayStr, 0);
-    const rangeStart = addDays(currentWeekStart, -7 * weeksBack);
+    // Fetch Statement of Cash Flows report
+    console.log('Fetching QB Statement of Cash Flows...');
+    const monthsBack = Math.min(parseInt(req.query.months, 10) || 12, 60);
+    const endDate = today;
+    const startDate = addDays(new Date(endDate), -30 * monthsBack).toISOString().split('T')[0];
 
-    const snapshot = loadQBWeeklySnapshot();
+    const cashFlowRes = await axios.get(
+      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
+      {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+          summarize_column_by: 'Month',
+        },
+        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+      }
+    );
 
-    // Calculate running cash balance from current cash, working backwards through periods
+    const cashFlowReport = cashFlowRes.data;
+    console.log(`✅ Statement of Cash Flows fetched`);
+
+    // Parse the cash flow report to extract net cash flow for each period
+    // Look for "Net Cash Provided by Operating Activities" or similar line
+    const findNetCashFlow = (rows) => {
+      const flows = [];
+      if (!rows) return flows;
+
+      for (const row of rows) {
+        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+        // Look for net income, operating cash flow, or net change in cash
+        if (label.toUpperCase().includes('NET INCOME') ||
+            label.toUpperCase().includes('NET CASH PROVIDED') ||
+            label.toUpperCase().includes('NET CHANGE IN CASH')) {
+          // Extract values for each column (each month)
+          const cols = row.Summary?.ColData || row.ColData || [];
+          return cols.slice(1).map(c => parseFloat(c.value) || 0); // Skip label column
+        }
+        if (row.Rows?.Row) {
+          const found = findNetCashFlow(row.Rows.Row);
+          if (found.length > 0) return found;
+        }
+      }
+      return flows;
+    };
+
+    const netCashFlows = findNetCashFlow(cashFlowReport.Rows?.Row) || [];
+    const columns = cashFlowReport.Columns?.Column || [];
+    const monthLabels = columns.slice(1).map(c => c.ColTitle || c.ColName).filter(c => c !== 'Total');
+
+    // Build running balance from oldest to newest month
     const balances = [];
     let runningBalance = currentCash;
 
-    // Get all weeks in range, sorted oldest to newest
-    const weekDates = Object.keys(snapshot.weeks)
-      .filter(d => d >= rangeStart && d <= currentWeekStart)
-      .sort();
-
-    // Build balance history from oldest to newest week
-    const weekBalances = [];
-    for (const date of weekDates) {
-      const week = snapshot.weeks[date];
-      if (week) {
-        // Record current balance at start of this week
-        weekBalances.push({ date, balance: runningBalance });
-        // Cash flow for this week = revenue - cogs - opex - labor
-        const weekCashFlow = (week.revenue || 0) - (week.cogs || 0) - (week.opex || 0) - (week.labor || 0);
-        // Add cash flow to get balance at end of week (start of next week)
-        runningBalance += weekCashFlow;
-      }
+    // Work backwards through months to get starting balance
+    for (let i = monthLabels.length - 1; i >= 0; i--) {
+      runningBalance -= (netCashFlows[i] || 0);
     }
 
-    // Return in chronological order
-    balances.push(...weekBalances);
+    // Now work forward to build balance history
+    for (let i = 0; i < monthLabels.length; i++) {
+      balances.push({
+        date: monthLabels[i],
+        balance: round2(runningBalance),
+      });
+      runningBalance += (netCashFlows[i] || 0);
+    }
 
     res.json({
       success: true,
       currentCash: round2(currentCash),
-      balances: balances.map(b => ({ date: b.date, balance: round2(b.balance) })),
+      balances,
       generatedAt: new Date().toISOString(),
     });
   } catch (err) {
