@@ -2786,29 +2786,33 @@ app.get('/api/cash-balance', async (req, res) => {
     const currentWeekStart = getWeekStart(todayStr, 0);
     const rangeStart = addDays(currentWeekStart, -7 * weeksBack);
 
-    const weeklyRows = await getQBWeeklyRows(rangeStart, currentWeekStart);
     const snapshot = loadQBWeeklySnapshot();
 
     // Calculate running cash balance from current cash, working backwards through periods
     const balances = [];
     let runningBalance = currentCash;
 
-    // Get all weeks in range, sorted newest to oldest
+    // Get all weeks in range, sorted oldest to newest
     const weekDates = Object.keys(snapshot.weeks)
       .filter(d => d >= rangeStart && d <= currentWeekStart)
-      .sort()
-      .reverse();
+      .sort();
 
-    // Build balance history working backwards
+    // Build balance history from oldest to newest week
+    const weekBalances = [];
     for (const date of weekDates) {
       const week = snapshot.weeks[date];
       if (week) {
+        // Record current balance at start of this week
+        weekBalances.push({ date, balance: runningBalance });
         // Cash flow for this week = revenue - cogs - opex - labor
         const weekCashFlow = (week.revenue || 0) - (week.cogs || 0) - (week.opex || 0) - (week.labor || 0);
-        balances.unshift({ date, balance: runningBalance, cashFlow: weekCashFlow });
-        runningBalance -= weekCashFlow;
+        // Add cash flow to get balance at end of week (start of next week)
+        runningBalance += weekCashFlow;
       }
     }
+
+    // Return in chronological order
+    balances.push(...weekBalances);
 
     res.json({
       success: true,
