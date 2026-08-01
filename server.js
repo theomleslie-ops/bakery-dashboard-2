@@ -2777,9 +2777,10 @@ app.get('/api/cash-balance', async (req, res) => {
 
     // Fetch Statement of Cash Flows report
     console.log('Fetching QB Statement of Cash Flows...');
-    const monthsBack = Math.min(parseInt(req.query.months, 10) || 12, 60);
+    const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 52, 260);
+    const monthsBack = Math.ceil(weeksBack / 4.33);
     const endDate = today;
-    const startDate = addDays(new Date(endDate), -30 * monthsBack).toISOString().split('T')[0];
+    const startDate = addDays(new Date(endDate), -7 * weeksBack).toISOString().split('T')[0];
 
     const cashFlowRes = await axios.get(
       `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
@@ -2824,6 +2825,21 @@ app.get('/api/cash-balance', async (req, res) => {
     const columns = cashFlowReport.Columns?.Column || [];
     const monthLabels = columns.slice(1).map(c => c.ColTitle || c.ColName).filter(c => c !== 'Total');
 
+    // Parse month labels and generate proper dates
+    const monthDates = monthLabels.map(label => {
+      // QB columns typically come as "Jan 2026", "Feb 2026", etc.
+      const match = label.match(/(\w+)\s+(\d{4})/);
+      if (match) {
+        const monthName = match[1];
+        const year = match[2];
+        const monthIndex = new Date(`${monthName} 1, ${year}`).getMonth();
+        // Use first day of month as date
+        return new Date(parseInt(year), monthIndex, 1).toISOString().slice(0, 10);
+      }
+      // Fallback: assume label is already a date string
+      return label;
+    });
+
     // Build running balance from oldest to newest month
     const balances = [];
     let runningBalance = currentCash;
@@ -2836,7 +2852,7 @@ app.get('/api/cash-balance', async (req, res) => {
     // Now work forward to build balance history
     for (let i = 0; i < monthLabels.length; i++) {
       balances.push({
-        date: monthLabels[i],
+        date: monthDates[i],
         balance: round2(runningBalance),
       });
       runningBalance += (netCashFlows[i] || 0);
