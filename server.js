@@ -2738,6 +2738,93 @@ app.get('/api/rebuild-margins/status', (req, res) => {
   res.json(status);
 });
 
+// Cash balance trend - fetches historical cash balances from QB Balance Sheet
+// and combines with calculated cash flow to show running balance over time
+app.get('/api/cash-balance', async (req, res) => {
+  try {
+    const qbClient = require('./pipeline/qb-client');
+    const tokens = await qbClient.getValidTokens();
+
+    // Fetch current Balance Sheet to get today's cash balance
+    console.log('Fetching QB Balance Sheet for cash balance data...');
+    const today = new Date().toISOString().split('T')[0];
+    const response = await axios.get(
+      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
+      {
+        params: {
+          as_of_date: today,
+        },
+        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+      }
+    );
+
+    const report = response.data;
+    console.log(`✅ QB Balance Sheet fetched`);
+
+    // Find cash accounts in the report
+    const findCashTotal = (rows) => {
+      if (!rows) return null;
+      for (const row of rows) {
+        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+        if (label.toUpperCase().includes('CASH') || label.toUpperCase().includes('BANK')) {
+          const val = row.Summary?.ColData?.[1]?.value || row.ColData?.[1]?.value;
+          if (val) return parseFloat(val);
+        }
+        if (row.Rows?.Row) {
+          const found = findCashTotal(row.Rows.Row);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const currentCash = findCashTotal(report.Rows?.Row) || 0;
+
+    // Fetch weekly P&L data to calculate historical cash flows
+    const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 52, 260);
+    const todayStr = today;
+    const currentWeekStart = getWeekStart(todayStr, 0);
+    const rangeStart = addDays(currentWeekStart, -7 * weeksBack);
+
+    const weeklyRows = await getQBWeeklyRows(rangeStart, currentWeekStart);
+    const snapshot = loadQBWeeklySnapshot();
+
+    // Calculate running cash balance from current cash, working backwards through periods
+    const balances = [];
+    let runningBalance = currentCash;
+
+    // Get all weeks in range, sorted newest to oldest
+    const weekDates = Object.keys(snapshot.weeks)
+      .filter(d => d >= rangeStart && d <= currentWeekStart)
+      .sort()
+      .reverse();
+
+    // Build balance history working backwards
+    for (const date of weekDates) {
+      const week = snapshot.weeks[date];
+      if (week) {
+        // Cash flow for this week = revenue - cogs - opex - labor
+        const weekCashFlow = (week.revenue || 0) - (week.cogs || 0) - (week.opex || 0) - (week.labor || 0);
+        balances.unshift({ date, balance: runningBalance, cashFlow: weekCashFlow });
+        runningBalance -= weekCashFlow;
+      }
+    }
+
+    res.json({
+      success: true,
+      currentCash: round2(currentCash),
+      balances: balances.map(b => ({ date: b.date, balance: round2(b.balance) })),
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Cash balance fetch error:', err.message);
+    res.status(500).json({
+      error: 'Failed to fetch cash balance data',
+      message: err.message,
+    });
+  }
+});
+
 // ============= PUBLIC DASHBOARD API ENDPOINTS =============
 
 // Square data endpoint
