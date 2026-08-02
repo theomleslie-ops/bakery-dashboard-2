@@ -2763,19 +2763,6 @@ app.get('/api/cash-balance', async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Fetch current Balance Sheet to get today's cash balance
-    console.log('Fetching QB Balance Sheet for current cash balance...');
-    const balanceSheetRes = await axios.get(
-      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
-      {
-        params: { as_of_date: today },
-        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
-      }
-    );
-
-    const currentCash = findCashTotal(balanceSheetRes.data.Rows?.Row) || 0;
-    console.log(`✅ Current cash balance: $${currentCash}`);
-
     // Load monthly financial data to calculate historical cash balances
     console.log('Loading monthly financial data...');
     const monthlyFinancial = loadData(MONTHLY_FINANCIAL_FILE) || {};
@@ -2807,16 +2794,64 @@ app.get('/api/cash-balance', async (req, res) => {
       console.log(`First month: ${months[0].name} ${months[0].year}, Last month: ${months[months.length - 1].name} ${months[months.length - 1].year}`);
     }
 
-    // Calculate cash balance for each month by working backwards from current balance
+    // Fetch balance as of the last day of the last available month (more accurate anchor point)
+    let anchorBalance = 0;
+    let anchorDate = today;
+
+    if (months.length > 0) {
+      const lastMonth = months[months.length - 1];
+      const monthIndex = MONTH_NAMES.indexOf(lastMonth.name);
+      const lastDayOfMonth = new Date(lastMonth.year, monthIndex + 1, 0);
+      anchorDate = lastDayOfMonth.toISOString().split('T')[0];
+
+      console.log(`Fetching QB Balance Sheet as of last data month (${anchorDate})...`);
+      try {
+        const anchorBsRes = await axios.get(
+          `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
+          {
+            params: { as_of_date: anchorDate },
+            headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+          }
+        );
+        anchorBalance = findCashTotal(anchorBsRes.data.Rows?.Row) || 0;
+        console.log(`✅ Cash balance as of ${anchorDate}: $${anchorBalance}`);
+      } catch (err) {
+        console.warn(`Failed to fetch balance as of ${anchorDate}, using today's balance instead`);
+        anchorBalance = 0; // Will use today's balance as fallback
+      }
+    }
+
+    // Fetch current Balance Sheet to get today's cash balance (use as fallback or if data is recent)
+    console.log('Fetching QB Balance Sheet for current cash balance...');
+    const balanceSheetRes = await axios.get(
+      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
+      {
+        params: { as_of_date: today },
+        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+      }
+    );
+
+    const currentCash = findCashTotal(balanceSheetRes.data.Rows?.Row) || 0;
+    console.log(`✅ Current cash balance as of ${today}: $${currentCash}`);
+
+    // Use anchor balance if available, otherwise fall back to current
+    const startingBalance = anchorBalance > 0 ? anchorBalance : currentCash;
+    console.log(`Using starting balance of $${startingBalance} for calculation`);
+
+    // Calculate cash balance for each month by working backwards
     const balances = [];
-    let runningBalance = currentCash;
+
+    // Start from the anchor balance (either end of last data month or today)
+    let runningBalance = startingBalance;
 
     // Work backwards through months to calculate ending balance for each
     for (let i = months.length - 1; i >= 0; i--) {
       const monthData = months[i];
       const pl = monthData.pl || 0;
 
-      // Subtract this month's P&L to get the balance at the start of this month
+      // The P&L represents the change during the month
+      // To get the balance at END of month working backwards from a later point,
+      // we subtract the monthly P&L (if positive profit, earlier balance was lower)
       runningBalance -= pl;
 
       // Get the last day of this month
@@ -2831,13 +2866,24 @@ app.get('/api/cash-balance', async (req, res) => {
         date: dateStr,
         balance: round2(runningBalance),
       });
+
+      console.log(`  ${dateStr}: calculated balance $${round2(runningBalance)} (after subtracting P&L of $${pl})`);
     }
 
-    // Ensure today's balance is included as the final point
-    balances.push({
-      date: today,
-      balance: round2(currentCash),
-    });
+    // Add today's balance if it's different from the last calculated month
+    if (months.length > 0) {
+      const lastMonth = months[months.length - 1];
+      const monthIndex = MONTH_NAMES.indexOf(lastMonth.name);
+      const lastDayOfMonth = new Date(lastMonth.year, monthIndex + 1, 0);
+      const lastDataStr = lastDayOfMonth.toISOString().split('T')[0];
+
+      if (today !== lastDataStr) {
+        balances.push({
+          date: today,
+          balance: round2(currentCash),
+        });
+      }
+    }
 
     console.log(`✅ Calculated ${balances.length} month-end cash balances`);
 
