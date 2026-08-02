@@ -2823,41 +2823,58 @@ app.get('/api/cash-balance', async (req, res) => {
 
     const netCashFlows = findNetCashFlow(cashFlowReport.Rows?.Row) || [];
     const columns = cashFlowReport.Columns?.Column || [];
-    const monthLabels = columns.slice(1).map(c => c.ColTitle || c.ColName).filter(c => c !== 'Total');
 
-    // Parse month labels and generate proper dates
-    const monthDates = monthLabels.map(label => {
-      // QB columns typically come as "Jan 2026", "Feb 2026", etc.
-      const match = label.match(/(\w+)\s+(\d{4})/);
-      if (match) {
-        const monthName = match[1];
-        const year = match[2];
-        const monthIndex = new Date(`${monthName} 1, ${year}`).getMonth();
-        // Use first day of month as date
-        return new Date(parseInt(year), monthIndex, 1).toISOString().slice(0, 10);
-      }
-      // Fallback: assume label is already a date string
-      return label;
-    });
+    console.log('Column count:', columns.length);
+    console.log('First few columns:', columns.slice(0, 3).map(c => ({ ColTitle: c.ColTitle, ColName: c.ColName })));
+    console.log('Net cash flows count:', netCashFlows.length);
+
+    // Generate dates by starting from startDate and adding months
+    // This is more reliable than parsing QB's column labels
+    const monthDates = [];
+    const parseDate = (dateStr) => {
+      const [year, month, day] = dateStr.split('-');
+      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    };
+
+    let currentDate = parseDate(startDate);
+    for (let i = 0; i < netCashFlows.length; i++) {
+      monthDates.push(currentDate.toISOString().slice(0, 10));
+      // Move to first day of next month
+      currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+    }
+
+    console.log('Generated month dates:', monthDates.slice(0, 3));
+
+    // Validate data consistency
+    if (monthDates.length !== netCashFlows.length) {
+      console.error(`Date/flow mismatch: ${monthDates.length} dates but ${netCashFlows.length} flows`);
+    }
 
     // Build running balance from oldest to newest month
     const balances = [];
     let runningBalance = currentCash;
 
     // Work backwards through months to get starting balance
-    for (let i = monthLabels.length - 1; i >= 0; i--) {
+    const dataCount = Math.min(monthDates.length, netCashFlows.length);
+    for (let i = dataCount - 1; i >= 0; i--) {
       runningBalance -= (netCashFlows[i] || 0);
     }
 
     // Now work forward to build balance history
-    for (let i = 0; i < monthLabels.length; i++) {
+    for (let i = 0; i < dataCount; i++) {
+      const date = monthDates[i];
+      if (!date || date === 'Invalid Date') {
+        console.error(`Invalid date at index ${i}: ${monthDates[i]}`);
+        continue;
+      }
       balances.push({
-        date: monthDates[i],
+        date: date,
         balance: round2(runningBalance),
       });
       runningBalance += (netCashFlows[i] || 0);
     }
 
+    console.log(`✅ Built ${balances.length} balance records`);
     res.json({
       success: true,
       currentCash: round2(currentCash),
