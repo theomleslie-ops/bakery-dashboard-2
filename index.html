@@ -1860,7 +1860,9 @@
           <div className="metrics">
             <div className="metric-card">
               <div className="metric-label">Current Cash Balance</div>
-              <div className="metric-value">${(currentCash / 1000).toFixed(1)}k</div>
+              <div className="metric-value">
+                {currentCash >= 1000000 ? `$${(currentCash / 1000000).toFixed(1)}M` : `$${(currentCash / 1000).toFixed(1)}k`}
+              </div>
             </div>
           </div>
           <div className="chart-container">
@@ -1871,10 +1873,19 @@
                 {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
                   const val = chartMin + (chartRange * pct);
                   const y = getY(val);
+                  const formatAxisLabel = (num) => {
+                    const abs = Math.abs(num);
+                    if (abs >= 1000000) {
+                      return '$' + (num / 1000000).toFixed(1) + 'M';
+                    } else if (abs >= 1000) {
+                      return '$' + (num / 1000).toFixed(0) + 'k';
+                    }
+                    return '$' + num.toFixed(0);
+                  };
                   return (
                     <g key={`grid${i}`}>
                       <line x1="60" y1={y} x2="950" y2={y} stroke="#e0e0e0" strokeWidth="1" strokeDasharray="4" />
-                      <text x="50" y={y + 4} textAnchor="end" fontSize="12" fill="#666">${(val / 1000).toFixed(0)}k</text>
+                      <text x="50" y={y + 4} textAnchor="end" fontSize="12" fill="#666">{formatAxisLabel(val)}</text>
                     </g>
                   );
                 })}
