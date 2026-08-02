@@ -2827,6 +2827,11 @@ app.get('/api/cash-balance', async (req, res) => {
     console.log('Column count:', columns.length);
     console.log('First few columns:', columns.slice(0, 3).map(c => ({ ColTitle: c.ColTitle, ColName: c.ColName })));
     console.log('Net cash flows count:', netCashFlows.length);
+    console.log('CashFlow Report structure:', {
+      hasColumns: !!cashFlowReport.Columns,
+      hasRows: !!cashFlowReport.Rows,
+      firstRow: cashFlowReport.Rows?.Row?.[0]?.ColData?.[0]?.value,
+    });
 
     // Generate dates by starting from startDate and adding months
     // This is more reliable than parsing QB's column labels
@@ -2880,6 +2885,15 @@ app.get('/api/cash-balance', async (req, res) => {
       currentCash: round2(currentCash),
       balances,
       generatedAt: new Date().toISOString(),
+      _debug: {
+        columnCount: columns.length,
+        netCashFlowCount: netCashFlows.length,
+        dateCount: monthDates.length,
+        balanceCount: balances.length,
+        sampleDates: monthDates.slice(0, 3),
+        sampleFlows: netCashFlows.slice(0, 3),
+        reportKeys: Object.keys(cashFlowReport).slice(0, 10),
+      }
     });
   } catch (err) {
     console.error('Cash balance fetch error:', err.message);
