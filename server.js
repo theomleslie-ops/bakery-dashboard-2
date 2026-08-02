@@ -2803,27 +2803,44 @@ app.get('/api/cash-balance', async (req, res) => {
     const columns = cfReport.Columns?.Column || [];
     console.log(`CashFlow has ${columns.length} columns: ${columns.map(c => c.ColTitle).join(', ')}`);
 
-    // Find rows with "Cash at End" label - check all root and nested rows
+    // Find the cash end row - it could have label "CASH AT END", be a summary row, or be nested
     let cashEndRow = null;
     const rows = cfReport.Rows?.Row || [];
 
-    // First check root rows
+    // Helper to check if a row has substantial numeric values in month columns
+    const hasMonthlyValues = (row) => {
+      const vals = row.ColData || row.Summary?.ColData || [];
+      // Check if at least half the month columns have numeric values (skip first empty and last total column)
+      const monthVals = vals.slice(1, -1);
+      const numericCount = monthVals.filter(v => parseFloat(v?.value) !== 0).length;
+      return numericCount > monthVals.length * 0.4;  // At least 40% have non-zero values
+    };
+
+    // First check root rows for "Cash at End" label or rows with numeric data
     for (const row of rows) {
       const label = (row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '').toUpperCase();
-      if (label.includes('CASH') && label.includes('END')) {
+      if (label.includes('CASH') && (label.includes('END') || label.includes('ENDING'))) {
         cashEndRow = row;
+        console.log(`Found "Cash at End" row: "${label}"`);
+        break;
+      }
+      // If label is UNKNOWN or generic, check if it has numeric data (might be the ending balance)
+      if (label === 'UNKNOWN' && hasMonthlyValues(row)) {
+        cashEndRow = row;
+        console.log(`Found potential cash end row with numeric data: "${label}"`);
         break;
       }
     }
 
-    // If not found in root, search nested rows (drill down through activity categories)
+    // If not found in root, search nested rows
     if (!cashEndRow) {
       for (const row of rows) {
         if (row.Rows?.Row) {
           for (const nestedRow of row.Rows.Row) {
             const label = (nestedRow.Header?.ColData?.[0]?.value || nestedRow.ColData?.[0]?.value || '').toUpperCase();
-            if (label.includes('CASH') && label.includes('END')) {
+            if (label.includes('CASH') && (label.includes('END') || label.includes('ENDING'))) {
               cashEndRow = nestedRow;
+              console.log(`Found nested "Cash at End" row: "${label}"`);
               break;
             }
           }
@@ -2833,7 +2850,6 @@ app.get('/api/cash-balance', async (req, res) => {
     }
 
     if (cashEndRow) {
-      console.log('Found cash end row');
       const cashValues = cashEndRow.ColData || cashEndRow.Summary?.ColData || [];
 
       // Map each month column to its end-of-month date and cash balance
@@ -2849,9 +2865,9 @@ app.get('/api/cash-balance', async (req, res) => {
         });
       });
 
-      console.log(`Found ${balances.length} months of cash balance data`);
+      console.log(`Extracted ${balances.length} months of cash balance data`);
     } else {
-      console.warn('Could not find "Cash at End" row in QB CashFlow report');
+      console.warn('Could not find "Cash at End" row in QB CashFlow report - will fall back to today only');
     }
 
     // If we couldn't get monthly data from CashFlow, fall back to just today's balance
