@@ -2866,6 +2866,7 @@ app.get('/api/cash-balance', async (req, res) => {
     }
 
     // Now work forward to build balance history
+    console.log(`Filtering dates: today=${today}, dataCount=${dataCount}`);
     for (let i = 0; i < dataCount; i++) {
       const date = monthDates[i];
       if (!date || date === 'Invalid Date') {
@@ -2873,7 +2874,11 @@ app.get('/api/cash-balance', async (req, res) => {
         continue;
       }
       // Only include dates up to today to avoid showing future projections
-      if (date <= today) {
+      const isIncluded = date <= today;
+      if (i < 3 || i === dataCount - 1) {
+        console.log(`Date ${i}: ${date} <= ${today} = ${isIncluded}`);
+      }
+      if (isIncluded) {
         balances.push({
           date: date,
           balance: round2(runningBalance),
@@ -2893,6 +2898,9 @@ app.get('/api/cash-balance', async (req, res) => {
         netCashFlowCount: netCashFlows.length,
         dateCount: monthDates.length,
         balanceCount: balances.length,
+        today: today,
+        lastDate: monthDates[monthDates.length - 1],
+        lastBalance: balances[balances.length - 1],
         sampleDates: monthDates.slice(0, 3),
         sampleFlows: netCashFlows.slice(0, 3),
         reportKeys: Object.keys(cashFlowReport).slice(0, 10),
