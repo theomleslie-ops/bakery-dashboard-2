@@ -2835,14 +2835,22 @@ app.get('/api/cash-balance', async (req, res) => {
     const cashEndBalances = findCashBalances(cashFlowReport.Rows?.Row) || [];
     const columns = cashFlowReport.Columns?.Column || [];
 
+    const allRootRows = cashFlowReport.Rows?.Row?.map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'NO LABEL') || [];
+    const allNestedRows = [];
+    cashFlowReport.Rows?.Row?.forEach(r => {
+      if (r.Rows?.Row) {
+        r.Rows.Row.forEach(nr => {
+          allNestedRows.push(nr.Header?.ColData?.[0]?.value || nr.ColData?.[0]?.value || 'NO LABEL');
+        });
+      }
+    });
+
     console.log('QB CashFlow Report Debug:');
     console.log('  Requested date range:', startDate, 'to', endDate);
     console.log('  Column count:', columns.length);
-    console.log('  All columns:', columns.map((c, i) => `${i}: ${c.ColTitle || c.ColName}`));
     console.log('  Cash end balances count:', cashEndBalances.length);
-    console.log('  All cash end balances:', cashEndBalances);
-    console.log('  Row count:', cashFlowReport.Rows?.Row?.length || 0);
-    console.log('  All row labels:', cashFlowReport.Rows?.Row?.map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'NO LABEL').slice(0, 20));
+    console.log('  Root row count:', allRootRows.length);
+    console.log('  Nested row count:', allNestedRows.length);
 
     // Generate dates by starting from startDate and adding months
     // This is more reliable than parsing QB's column labels
@@ -2922,7 +2930,8 @@ app.get('/api/cash-balance', async (req, res) => {
         sampleDates: monthDates.slice(0, 3),
         sampleBalances: cashEndBalances.slice(0, 3),
         reportKeys: Object.keys(cashFlowReport).slice(0, 10),
-        allRowLabels: cashFlowReport.Rows?.Row?.map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'NO_LABEL').slice(0, 50),
+        allRootRowLabels: allRootRows,
+        allNestedRowLabels: allNestedRows.slice(0, 50),
       }
     });
   } catch (err) {
