@@ -2884,7 +2884,18 @@ app.get('/api/cash-balance', async (req, res) => {
       runningBalance += (netCashFlows[i] || 0);
     }
 
-    console.log(`✅ Built ${balances.length} balance records`);
+    // Always add current balance as final point (today)
+    if (!balances.length || balances[balances.length - 1].date !== today) {
+      balances.push({
+        date: today,
+        balance: round2(currentCash),
+      });
+    } else {
+      // Update the last balance to match current cash in case of rounding
+      balances[balances.length - 1].balance = round2(currentCash);
+    }
+
+    console.log(`✅ Built ${balances.length} balance records, ending at ${today} with $${currentCash}`);
     res.json({
       success: true,
       currentCash: round2(currentCash),

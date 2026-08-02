@@ -1866,7 +1866,7 @@
             </div>
           </div>
           <div className="chart-container">
-            <div className="chart-title">Weekly Cash Balance</div>
+            <div className="chart-title">Monthly Cash Balance</div>
             {balances.length > 0 ? (
               <svg width="100%" height="500" viewBox="0 0 1000 450" style={{ overflow: 'visible' }}>
                 {/* Grid lines */}
@@ -1931,11 +1931,14 @@
                   return <circle key={`dot${i}`} cx={x} cy={y} r="4" fill="#10b981" />;
                 })}
 
-                {/* X-axis labels (every Nth point to avoid crowding) */}
+                {/* X-axis labels (show ~8 labels evenly distributed) */}
                 {balances.map((b, i) => {
-                  if (i % Math.ceil(balances.length / 8) === 0) {
+                  const labelInterval = Math.ceil(balances.length / 8);
+                  // Always show first, last, and every Nth point
+                  const shouldShow = (i === 0) || (i === balances.length - 1) || (i % labelInterval === 0);
+                  if (shouldShow) {
                     const x = 60 + (i / (balances.length - 1)) * 890;
-                    const dateObj = new Date(b.date);
+                    const dateObj = new Date(b.date + 'T00:00:00Z');
                     const label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                     return (
                       <text key={`label${i}`} x={x} y={chartHeight + 40} textAnchor="middle" fontSize="11" fill="#666">
