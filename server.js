@@ -2776,116 +2776,56 @@ app.get('/api/cash-balance', async (req, res) => {
     const currentCash = findCashTotal(balanceSheetRes.data.Rows?.Row) || 0;
     console.log(`✅ Current cash balance: $${currentCash}`);
 
-    // Fetch 3-year CashFlow report with monthly summarization to get ending balances for each month
-    const threeYearsAgo = new Date();
-    threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
-    const startDate = threeYearsAgo.toISOString().split('T')[0];
-    const endDate = today;
+    // Load monthly financial data to calculate historical cash balances
+    console.log('Loading monthly financial data...');
+    const monthlyFinancial = loadData(MONTHLY_FINANCIAL_FILE) || {};
 
-    console.log(`Fetching CashFlow report from ${startDate} to ${endDate} with monthly summarization...`);
-    const cfRes = await axios.get(
-      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
-      {
-        params: {
-          start_date: startDate,
-          end_date: endDate,
-          summarize_column_by: 'Month',
-        },
-        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
-      }
-    );
+    // Build array of months from oldest to newest
+    const months = Object.keys(monthlyFinancial)
+      .map(key => ({ key, ...monthlyFinancial[key] }))
+      .sort((a, b) => {
+        const yearDiff = a.year - b.year;
+        if (yearDiff !== 0) return yearDiff;
+        // Sort by month number within same year
+        const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
+      });
 
-    const cfReport = cfRes.data;
-    console.log(`✅ CashFlow report fetched`);
+    console.log(`Found ${months.length} months of financial data`);
 
-    // Extract ending cash balances from each month column
+    // Calculate cash balance for each month by working backwards from current balance
     const balances = [];
-    const columns = cfReport.Columns?.Column || [];
-    console.log(`CashFlow has ${columns.length} columns: ${columns.map(c => c.ColTitle).join(', ')}`);
+    let runningBalance = currentCash;
 
-    // Find the cash end row - it could have label "CASH AT END", be a summary row, or be nested
-    let cashEndRow = null;
-    const rows = cfReport.Rows?.Row || [];
+    // Work backwards through months to calculate ending balance for each
+    for (let i = months.length - 1; i >= 0; i--) {
+      const monthData = months[i];
+      const pl = monthData.pl || 0;
 
-    // Helper to check if a row has substantial numeric values in month columns
-    const hasMonthlyValues = (row) => {
-      const vals = row.ColData || row.Summary?.ColData || [];
-      // Check if at least half the month columns have numeric values (skip first empty and last total column)
-      const monthVals = vals.slice(1, -1);
-      const numericCount = monthVals.filter(v => parseFloat(v?.value) !== 0).length;
-      return numericCount > monthVals.length * 0.4;  // At least 40% have non-zero values
-    };
+      // Subtract this month's P&L to get the balance at the start of this month
+      runningBalance -= pl;
 
-    // First check root rows for "Cash at End" label or rows with numeric data
-    for (const row of rows) {
-      const label = (row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '').toUpperCase();
-      if (label.includes('CASH') && (label.includes('END') || label.includes('ENDING'))) {
-        cashEndRow = row;
-        console.log(`Found "Cash at End" row: "${label}"`);
-        break;
-      }
-      // If label is UNKNOWN or generic, check if it has numeric data (might be the ending balance)
-      if (label === 'UNKNOWN' && hasMonthlyValues(row)) {
-        cashEndRow = row;
-        console.log(`Found potential cash end row with numeric data: "${label}"`);
-        break;
-      }
-    }
+      // Get the last day of this month
+      const monthIndex = MONTH_NAMES.indexOf(monthData.name);
+      const monthDate = new Date(monthData.year, monthIndex + 1, 0);
+      const year = monthDate.getFullYear();
+      const month = String(monthDate.getMonth() + 1).padStart(2, '0');
+      const day = String(monthDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
 
-    // If not found in root, search nested rows
-    if (!cashEndRow) {
-      for (const row of rows) {
-        if (row.Rows?.Row) {
-          for (const nestedRow of row.Rows.Row) {
-            const label = (nestedRow.Header?.ColData?.[0]?.value || nestedRow.ColData?.[0]?.value || '').toUpperCase();
-            if (label.includes('CASH') && (label.includes('END') || label.includes('ENDING'))) {
-              cashEndRow = nestedRow;
-              console.log(`Found nested "Cash at End" row: "${label}"`);
-              break;
-            }
-          }
-          if (cashEndRow) break;
-        }
-      }
-    }
-
-    if (cashEndRow) {
-      const cashValues = cashEndRow.ColData || cashEndRow.Summary?.ColData || [];
-
-      // Map each month column to its end-of-month date and cash balance
-      columns.forEach((col, idx) => {
-        // Skip empty and total columns
-        if (!col.ColTitle || col.ColTitle === 'Total') return;
-
-        const cashBalance = parseFloat(cashValues[idx]?.value) || 0;
-
-        balances.push({
-          date: col.ColTitle,
-          balance: round2(cashBalance),
-        });
+      balances.unshift({
+        date: dateStr,
+        balance: round2(runningBalance),
       });
-
-      console.log(`Extracted ${balances.length} months of cash balance data`);
-    } else {
-      console.warn('Could not find "Cash at End" row in QB CashFlow report - will fall back to today only');
     }
 
-    // If we couldn't get monthly data from CashFlow, fall back to just today's balance
-    if (!balances.length) {
-      console.warn('Could not extract monthly cash balances from CashFlow report');
-      balances.push({
-        date: today,
-        balance: round2(currentCash),
-      });
-    } else {
-      // Ensure today's balance is included as the final point if not already
-      if (balances[balances.length - 1].date !== today) {
-        balances.push({
-          date: today,
-          balance: round2(currentCash),
-        });
-      }
-    }
+    // Ensure today's balance is included as the final point
+    balances.push({
+      date: today,
+      balance: round2(currentCash),
+    });
+
+    console.log(`✅ Calculated ${balances.length} month-end cash balances`);
 
     console.log(`✅ Built ${balances.length} balance records, ending at ${today} with $${currentCash}`);
     res.json({
