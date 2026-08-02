@@ -2797,21 +2797,34 @@ app.get('/api/cash-balance', async (req, res) => {
     const cashFlowReport = cashFlowRes.data;
     console.log(`✅ Statement of Cash Flows fetched`);
 
-    // Recursively search ALL rows (at any depth) for one containing "cash" and "end"
+    // QB's summary section is in a root row with no label
+    // Extract cash balances from inside that section
     const findCashBalances = (rows) => {
       if (!rows) return [];
 
       for (const row of rows) {
         const label = (row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '').toUpperCase();
 
-        // Look for any row with "CASH" and "END" in the label
+        // First, look for "CASH AT END" directly
         if (label.includes('CASH') && label.includes('END')) {
           const cols = row.Summary?.ColData || row.ColData || [];
-          console.log(`Found cash/end row: "${label}", extracting ${cols.length} values`);
           return cols.slice(1).map(c => parseFloat(c.value) || 0);
         }
 
-        // Recursively search nested rows
+        // If this is a section with no label, search its nested rows
+        if (!label || label.includes('NO LABEL')) {
+          if (row.Rows?.Row) {
+            for (const nestedRow of row.Rows.Row) {
+              const nestedLabel = (nestedRow.Header?.ColData?.[0]?.value || nestedRow.ColData?.[0]?.value || '').toUpperCase();
+              if (nestedLabel.includes('CASH') && nestedLabel.includes('END')) {
+                const cols = nestedRow.Summary?.ColData || nestedRow.ColData || [];
+                return cols.slice(1).map(c => parseFloat(c.value) || 0);
+              }
+            }
+          }
+        }
+
+        // Recursively search other nested rows
         if (row.Rows?.Row) {
           const found = findCashBalances(row.Rows.Row);
           if (found.length > 0) return found;
