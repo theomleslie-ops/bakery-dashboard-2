@@ -2763,39 +2763,6 @@ app.get('/api/cash-balance', async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Helper to extract ending cash balance from CashFlow report
-    let debugRowsLogged = false;
-    const extractCashEndingBalance = (rows) => {
-      if (!rows) return null;
-
-      // Log row labels for debugging (only first time)
-      if (!debugRowsLogged && rows.length > 0) {
-        debugRowsLogged = true;
-        const labels = rows.map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'UNKNOWN');
-        console.log('CashFlow report root row labels:', labels);
-      }
-
-      // Look for "Cash at End" row
-      for (const row of rows) {
-        const label = (row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '').toUpperCase();
-        if (label.includes('CASH') && label.includes('END')) {
-          // The second column (index 1) is the total for this month
-          const val = row.Summary?.ColData?.[1]?.value || row.ColData?.[1]?.value;
-          if (val) return parseFloat(val);
-        }
-      }
-
-      // Recursively search in nested rows
-      for (const row of rows) {
-        if (row.Rows?.Row) {
-          const found = extractCashEndingBalance(row.Rows.Row);
-          if (found !== null) return found;
-        }
-      }
-
-      return null;
-    };
-
     // Fetch current Balance Sheet to get today's cash balance
     console.log('Fetching QB Balance Sheet for current cash balance...');
     const balanceSheetRes = await axios.get(
@@ -2809,53 +2776,86 @@ app.get('/api/cash-balance', async (req, res) => {
     const currentCash = findCashTotal(balanceSheetRes.data.Rows?.Row) || 0;
     console.log(`✅ Current cash balance: $${currentCash}`);
 
-    // Build 3 years of end-of-month cash balances using CashFlow reports
-    const balances = [];
+    // Fetch 3-year CashFlow report with monthly summarization
     const monthsToFetch = 36;
+    const threeYearsAgo = new Date();
+    threeYearsAgo.setMonth(threeYearsAgo.getMonth() - monthsToFetch);
+    const startDate = threeYearsAgo.toISOString().split('T')[0];
+    const endDate = today;
 
-    console.log(`Fetching end-of-month cash balances for last ${monthsToFetch} months...`);
+    console.log(`Fetching CashFlow report from ${startDate} to ${endDate} with monthly summarization...`);
+    const cfRes = await axios.get(
+      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
+      {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+          summarize_column_by: 'Month',
+        },
+        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+      }
+    );
 
-    for (let m = monthsToFetch - 1; m >= 0; m--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - m);
+    const cfReport = cfRes.data;
+    console.log(`✅ CashFlow report fetched`);
 
-      const year = date.getFullYear();
-      const month = date.getMonth();
+    // Extract monthly end balances from the report
+    const balances = [];
+    const columns = cfReport.Columns?.Column || [];
 
-      // First day of the month
-      const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    console.log(`CashFlow report has ${columns.length} columns`);
 
-      // Last day of the month
-      const lastDayOfMonth = new Date(year, month + 1, 0);
-      const day = lastDayOfMonth.getDate();
-      const lastDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    // Find the "Cash at End" row to get ending balances for each month
+    let endingBalances = [];
+    const findEndingBalances = (rows) => {
+      if (!rows) return [];
 
-      // Don't fetch future dates
-      if (lastDay > today) continue;
+      for (const row of rows) {
+        const label = (row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '').toUpperCase();
+        console.log(`Checking row label: "${label}"`);
 
-      try {
-        // Fetch CashFlow report for this month's date range
-        const cfRes = await axios.get(
-          `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
-          {
-            params: {
-              start_date: firstDay,
-              end_date: lastDay,
-            },
-            headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
-          }
-        );
+        if (label.includes('CASH') && label.includes('END')) {
+          console.log(`Found "Cash at End" row with ${row.ColData?.length || 0} columns`);
+          return (row.ColData || []).slice(1).map(c => parseFloat(c.value) || 0);
+        }
+      }
 
-        // Extract the ending cash balance from the report
-        const cash = extractCashEndingBalance(cfRes.data.Rows?.Row) || 0;
-        balances.push({
-          date: lastDay,
-          balance: round2(cash),
-        });
+      // Recursively search in nested rows
+      for (const row of rows) {
+        if (row.Rows?.Row) {
+          const found = findEndingBalances(row.Rows.Row);
+          if (found.length > 0) return found;
+        }
+      }
 
-        console.log(`  ${lastDay}: $${round2(cash)}`);
-      } catch (err) {
-        console.error(`Failed to fetch cash flow for ${firstDay} to ${lastDay}:`, err.message);
+      return [];
+    };
+
+    endingBalances = findEndingBalances(cfReport.Rows?.Row || []);
+    console.log(`Found ${endingBalances.length} ending balances`);
+
+    // Map ending balances to month-end dates
+    if (endingBalances.length > 0) {
+      let currentDate = new Date(startDate);
+
+      for (let i = 0; i < endingBalances.length; i++) {
+        // Move to last day of current month
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const lastDayOfMonth = new Date(year, month + 1, 0);
+        const day = lastDayOfMonth.getDate();
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+        if (dateStr <= today) {
+          balances.push({
+            date: dateStr,
+            balance: round2(endingBalances[i]),
+          });
+          console.log(`  ${dateStr}: $${round2(endingBalances[i])}`);
+        }
+
+        // Move to next month
+        currentDate = new Date(year, month + 1, 1);
       }
     }
 
