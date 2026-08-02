@@ -2797,38 +2797,35 @@ app.get('/api/cash-balance', async (req, res) => {
     const cashFlowReport = cashFlowRes.data;
     console.log(`✅ Statement of Cash Flows fetched`);
 
-    // Parse the cash flow report to extract net cash flow for each period
-    // Look for "NET CASH INCREASE FOR PERIOD" which is the total of all activities
-    const findNetCashFlow = (rows) => {
-      const flows = [];
-      if (!rows) return flows;
+    // Parse the cash flow report to extract monthly ending cash balances
+    // Look for "CASH AT END OF PERIOD" which gives us the actual balance each month
+    const findCashBalances = (rows) => {
+      const balances = [];
+      if (!rows) return balances;
 
       for (const row of rows) {
         const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        // Look for NET CASH INCREASE FOR PERIOD (total of operating, investing, financing)
-        // Fallback: NET CHANGE IN CASH or similar
-        if (label.toUpperCase().includes('NET CASH INCREASE') ||
-            label.toUpperCase().includes('NET CHANGE IN CASH')) {
+        // Look for CASH AT END OF PERIOD (the actual ending balance for each month)
+        if (label.toUpperCase().includes('CASH AT END')) {
           // Extract values for each column (each month)
           const cols = row.Summary?.ColData || row.ColData || [];
           return cols.slice(1).map(c => parseFloat(c.value) || 0); // Skip label column
         }
         if (row.Rows?.Row) {
-          const found = findNetCashFlow(row.Rows.Row);
+          const found = findCashBalances(row.Rows.Row);
           if (found.length > 0) return found;
         }
       }
-      return flows;
+      return balances;
     };
 
-    const netCashFlows = findNetCashFlow(cashFlowReport.Rows?.Row) || [];
+    const cashEndBalances = findCashBalances(cashFlowReport.Rows?.Row) || [];
     const columns = cashFlowReport.Columns?.Column || [];
 
     console.log('Column count:', columns.length);
     console.log('First few columns:', columns.slice(0, 3).map(c => ({ ColTitle: c.ColTitle, ColName: c.ColName })));
-    console.log('Net cash flows count:', netCashFlows.length);
-    console.log('First 3 net cash flows:', netCashFlows.slice(0, 3));
-    console.log('All row labels:', cashFlowReport.Rows?.Row?.map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value).filter(l => l) || []);
+    console.log('Cash end balances count:', cashEndBalances.length);
+    console.log('First 3 cash end balances:', cashEndBalances.slice(0, 3));
 
     // Generate dates by starting from startDate and adding months
     // This is more reliable than parsing QB's column labels
@@ -2848,40 +2845,36 @@ app.get('/api/cash-balance', async (req, res) => {
     console.log('Generated month dates:', monthDates.slice(0, 3));
 
     // Validate data consistency
-    if (monthDates.length !== netCashFlows.length) {
-      console.error(`Date/flow mismatch: ${monthDates.length} dates but ${netCashFlows.length} flows`);
+    if (monthDates.length !== cashEndBalances.length) {
+      console.error(`Date/balance mismatch: ${monthDates.length} dates but ${cashEndBalances.length} balances`);
     }
 
-    // Build running balance from oldest to newest month
+    // Build balance history from QB's cash end balances
     const balances = [];
-    let runningBalance = currentCash;
+    const dataCount = Math.min(monthDates.length, cashEndBalances.length);
 
-    // Work backwards through months to get starting balance
-    const dataCount = Math.min(monthDates.length, netCashFlows.length);
-    for (let i = dataCount - 1; i >= 0; i--) {
-      runningBalance -= (netCashFlows[i] || 0);
-    }
-
-    // Now work forward to build balance history
-    console.log(`Filtering dates: today=${today}, dataCount=${dataCount}`);
+    console.log(`Building ${dataCount} balance records, filtering dates up to today=${today}`);
     for (let i = 0; i < dataCount; i++) {
       const date = monthDates[i];
+      const balance = cashEndBalances[i];
+
       if (!date || date === 'Invalid Date') {
         console.error(`Invalid date at index ${i}: ${monthDates[i]}`);
         continue;
       }
+
       // Only include dates up to today to avoid showing future projections
       const isIncluded = date <= today;
       if (i < 3 || i === dataCount - 1) {
-        console.log(`Date ${i}: ${date} <= ${today} = ${isIncluded}`);
+        console.log(`Balance ${i}: ${date} = $${round2(balance)}, include=${isIncluded}`);
       }
+
       if (isIncluded) {
         balances.push({
           date: date,
-          balance: round2(runningBalance),
+          balance: round2(balance),
         });
       }
-      runningBalance += (netCashFlows[i] || 0);
     }
 
     // Always add current balance as final point (today)
