@@ -2779,10 +2779,21 @@ app.get('/api/cash-balance', async (req, res) => {
     // Load monthly financial data to calculate historical cash balances
     console.log('Loading monthly financial data...');
     const monthlyFinancial = loadData(MONTHLY_FINANCIAL_FILE) || {};
+    console.log(`Loaded financial data with ${Object.keys(monthlyFinancial).length} entries`);
 
     // Build array of months from oldest to newest
     const months = Object.keys(monthlyFinancial)
-      .map(key => ({ key, ...monthlyFinancial[key] }))
+      .map(key => {
+        const data = monthlyFinancial[key];
+        return {
+          key,
+          month: data.month,
+          name: data.name,
+          year: data.year,
+          pl: data.pl,
+        };
+      })
+      .filter(m => m.year && m.name && m.pl !== undefined)
       .sort((a, b) => {
         const yearDiff = a.year - b.year;
         if (yearDiff !== 0) return yearDiff;
@@ -2791,7 +2802,10 @@ app.get('/api/cash-balance', async (req, res) => {
         return monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
       });
 
-    console.log(`Found ${months.length} months of financial data`);
+    console.log(`Found ${months.length} months of financial data (after filtering)`);
+    if (months.length > 0) {
+      console.log(`First month: ${months[0].name} ${months[0].year}, Last month: ${months[months.length - 1].name} ${months[months.length - 1].year}`);
+    }
 
     // Calculate cash balance for each month by working backwards from current balance
     const balances = [];
