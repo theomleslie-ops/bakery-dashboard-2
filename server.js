@@ -2799,20 +2799,33 @@ app.get('/api/cash-balance', async (req, res) => {
 
     // Parse the cash flow report to extract monthly ending cash balances
     // Look for "CASH AT END OF PERIOD" which gives us the actual balance each month
-    const findCashBalances = (rows) => {
+    const findCashBalances = (rows, depth = 0) => {
       const balances = [];
       if (!rows) return balances;
 
       for (const row of rows) {
         const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+        console.log(`Row (depth ${depth}): "${label}"`);
+
         // Look for CASH AT END OF PERIOD (the actual ending balance for each month)
         if (label.toUpperCase().includes('CASH AT END')) {
+          console.log(`Found CASH AT END OF PERIOD row, extracting values...`);
           // Extract values for each column (each month)
           const cols = row.Summary?.ColData || row.ColData || [];
+          console.log(`Column count in row: ${cols.length}`);
           return cols.slice(1).map(c => parseFloat(c.value) || 0); // Skip label column
         }
+
+        // Also check for "Cash at end" (different capitalization)
+        if (label.toUpperCase().includes('CASH') && label.toUpperCase().includes('END')) {
+          console.log(`Found cash/end row: "${label}", extracting values...`);
+          const cols = row.Summary?.ColData || row.ColData || [];
+          return cols.slice(1).map(c => parseFloat(c.value) || 0);
+        }
+
+        // Recursively search nested rows
         if (row.Rows?.Row) {
-          const found = findCashBalances(row.Rows.Row);
+          const found = findCashBalances(row.Rows.Row, depth + 1);
           if (found.length > 0) return found;
         }
       }
