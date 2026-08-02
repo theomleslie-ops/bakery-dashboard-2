@@ -2921,18 +2921,19 @@ app.get('/api/cash-balance', async (req, res) => {
       balances,
       generatedAt: new Date().toISOString(),
       _debug: {
+        requestedWeeks: weeksBack,
+        requestedDateRange: { start: startDate, end: endDate },
         columnCount: columns.length,
+        columnsInfo: columns.slice(0, 5).map(c => c.ColTitle || c.ColName),
         cashEndBalanceCount: cashEndBalances.length,
+        allCashEndBalances: cashEndBalances.slice(0, 40),
         dateCount: monthDates.length,
+        sampleDates: monthDates.slice(0, 5),
         balanceCount: balances.length,
+        sampleBalances: balances.slice(0, 5),
         today: today,
-        lastDate: monthDates[monthDates.length - 1],
-        lastBalance: balances[balances.length - 1],
-        sampleDates: monthDates.slice(0, 3),
-        sampleBalances: cashEndBalances.slice(0, 3),
-        reportKeys: Object.keys(cashFlowReport).slice(0, 10),
         allRootRowLabels: allRootRows,
-        allNestedRowLabels: allNestedRows.slice(0, 50),
+        firstTenNestedRowLabels: allNestedRows.slice(0, 10),
       }
     });
   } catch (err) {
