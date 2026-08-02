@@ -1797,23 +1797,23 @@
 
 
     function CashBalanceDashboard() {
-      const [balances, setBalances] = useState([]);
+      const [allBalances, setAllBalances] = useState([]);
       const [currentCash, setCurrentCash] = useState(0);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
       const [weeksRange, setWeeksRange] = useState(52);
 
-      useEffect(() => { fetchData(); }, [weeksRange]);
+      useEffect(() => { fetchData(); }, []);
 
       const fetchData = async () => {
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/cash-balance?weeks=${weeksRange}`);
+          const response = await fetch(`${baseUrl}/api/cash-balance`);
           const data = await response.json();
           if (data.success) {
             setCurrentCash(data.currentCash);
-            setBalances(data.balances || []);
+            setAllBalances(data.balances || []);
             setStatus('ready');
           } else {
             setError(data.message || 'Failed to load cash balance data');
@@ -1827,6 +1827,12 @@
 
       if (status === 'loading') return <div className="loading">Loading cash balance data…</div>;
       if (status === 'error') return <div className="error">{error}</div>;
+
+      // Filter balances based on selected time range
+      const today = new Date();
+      const cutoffDate = new Date(today.getFullYear(), today.getMonth() - Math.ceil(weeksRange / 4.33), today.getDate());
+      const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+      const balances = allBalances.filter(b => b.date >= cutoffDateStr);
 
       const chartHeight = 400;
       const minBalance = Math.min(...balances.map(b => b.balance), 0);

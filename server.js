@@ -2744,18 +2744,7 @@ app.get('/api/cash-balance', async (req, res) => {
     const qbClient = require('./pipeline/qb-client');
     const tokens = await qbClient.getValidTokens();
 
-    // Fetch current Balance Sheet to get today's cash balance
-    console.log('Fetching QB Balance Sheet for current cash balance...');
-    const today = new Date().toISOString().split('T')[0];
-    const balanceSheetRes = await axios.get(
-      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
-      {
-        params: { as_of_date: today },
-        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
-      }
-    );
-
-    // Find cash accounts in the report
+    // Helper to extract cash total from balance sheet
     const findCashTotal = (rows) => {
       if (!rows) return null;
       for (const row of rows) {
@@ -2766,168 +2755,73 @@ app.get('/api/cash-balance', async (req, res) => {
         }
         if (row.Rows?.Row) {
           const found = findCashTotal(row.Rows.Row);
-          if (found) return found;
+          if (found !== null) return found;
         }
       }
       return null;
     };
 
-    const currentCash = findCashTotal(balanceSheetRes.data.Rows?.Row) || 0;
-    console.log(`✅ Current cash balance: $${currentCash}`);
+    const today = new Date().toISOString().split('T')[0];
 
-    // Fetch Statement of Cash Flows report
-    console.log('Fetching QB Statement of Cash Flows...');
-    const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 52, 260);
-    const monthsBack = Math.ceil(weeksBack / 4.33);
-    const endDate = today;
-    const startDate = addDays(endDate, -7 * weeksBack);
-
-    const cashFlowRes = await axios.get(
-      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
+    // Fetch current Balance Sheet to get today's cash balance
+    console.log('Fetching QB Balance Sheet for current cash balance...');
+    const balanceSheetRes = await axios.get(
+      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
       {
-        params: {
-          start_date: startDate,
-          end_date: endDate,
-          summarize_column_by: 'Month',
-        },
+        params: { as_of_date: today },
         headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
       }
     );
 
-    const cashFlowReport = cashFlowRes.data;
-    console.log(`✅ Statement of Cash Flows fetched`);
+    const currentCash = findCashTotal(balanceSheetRes.data.Rows?.Row) || 0;
+    console.log(`✅ Current cash balance: $${currentCash}`);
 
-    // QB's CashFlow report has different structures - look for cash data directly in root rows
-    const findCashBalances = (rows) => {
-      if (!rows) return [];
-
-      // First, look for a root row with no label that has many columns
-      for (const row of rows) {
-        const label = (row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '').toUpperCase();
-        const cols = row.Summary?.ColData || row.ColData || [];
-
-        // Look for "CASH AT END" in label
-        if (label.includes('CASH') && label.includes('END')) {
-          return cols.slice(1).map(c => parseFloat(c.value) || 0);
-        }
-
-        // The "NO LABEL" root row with 39 columns might contain the cash data
-        if ((!label || label === 'NO LABEL') && cols.length > 10) {
-          console.log(`Found NO LABEL root row with ${cols.length} columns, checking if it's cash data`);
-          // Try extracting values - this might be the monthly cash balance data
-          const values = cols.slice(1).map(c => parseFloat(c.value) || 0);
-          if (values.length > 20) {  // If we got many values, probably cash data
-            console.log(`Extracted ${values.length} values from NO LABEL root row`);
-            return values;
-          }
-        }
-      }
-
-      // Fall back to recursive search in nested rows
-      for (const row of rows) {
-        if (row.Rows?.Row) {
-          const found = findCashBalances(row.Rows.Row);
-          if (found.length > 0) return found;
-        }
-      }
-
-      return [];
-    };
-
-    const cashEndBalances = findCashBalances(cashFlowReport.Rows?.Row) || [];
-    const columns = cashFlowReport.Columns?.Column || [];
-
-    const allRootRows = cashFlowReport.Rows?.Row?.map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'NO LABEL') || [];
-    const allNestedRows = [];
-    const noLabelRowData = [];
-
-    cashFlowReport.Rows?.Row?.forEach(r => {
-      const label = r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'NO LABEL';
-
-      if (r.Rows?.Row) {
-        r.Rows.Row.forEach(nr => {
-          const nrLabel = nr.Header?.ColData?.[0]?.value || nr.ColData?.[0]?.value || 'NO LABEL';
-          allNestedRows.push(nrLabel);
-
-          // Collect all rows from NO LABEL section
-          if (!label || label === 'NO LABEL') {
-            noLabelRowData.push({
-              label: nrLabel,
-              hasSummaryData: !!nr.Summary?.ColData,
-              hasColData: !!nr.ColData,
-              dataCols: (nr.Summary?.ColData || nr.ColData || []).length
-            });
-          }
-        });
-      }
-    });
-
-    console.log('QB CashFlow Report Debug:');
-    console.log('  Requested date range:', startDate, 'to', endDate);
-    console.log('  Column count:', columns.length);
-    console.log('  Cash end balances count:', cashEndBalances.length);
-    console.log('  Root row count:', allRootRows.length);
-    console.log('  Nested row count:', allNestedRows.length);
-
-    // Generate dates by starting from startDate and adding months
-    // This is more reliable than parsing QB's column labels
-    const monthDates = [];
-    const parseDate = (dateStr) => {
-      const [year, month, day] = dateStr.split('-');
-      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-    };
-
-    let currentDate = parseDate(startDate);
-    for (let i = 0; i < cashEndBalances.length; i++) {
-      monthDates.push(currentDate.toISOString().slice(0, 10));
-      // Move to first day of next month
-      currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
-    }
-
-    console.log('Generated month dates:', monthDates.slice(0, 3));
-
-    // Validate data consistency
-    if (monthDates.length !== cashEndBalances.length) {
-      console.error(`Date/balance mismatch: ${monthDates.length} dates but ${cashEndBalances.length} balances`);
-    }
-
-    // Build balance history from QB's cash end balances
+    // Build 3 years of end-of-month cash balances by fetching Balance Sheet for each month-end
     const balances = [];
-    const dataCount = Math.min(monthDates.length, cashEndBalances.length);
+    const monthsToFetch = 36;
 
-    console.log(`Building ${dataCount} balance records, filtering dates up to today=${today}`);
-    for (let i = 0; i < dataCount; i++) {
-      const date = monthDates[i];
-      const balance = cashEndBalances[i];
+    console.log(`Fetching end-of-month cash balances for last ${monthsToFetch} months...`);
 
-      if (!date || date === 'Invalid Date') {
-        console.error(`Invalid date at index ${i}: ${monthDates[i]}`);
-        continue;
-      }
+    for (let m = monthsToFetch - 1; m >= 0; m--) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - m);
 
-      // Only include dates up to today to avoid showing future projections
-      const isIncluded = date <= today;
-      if (i < 3 || i === dataCount - 1) {
-        console.log(`Balance ${i}: ${date} = $${round2(balance)}, include=${isIncluded}`);
-      }
+      // Move to last day of the month
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const lastDayOfMonth = new Date(year, month + 1, 0);
+      const dateStr = lastDayOfMonth.toISOString().split('T')[0];
 
-      if (isIncluded) {
+      // Don't fetch future dates
+      if (dateStr > today) continue;
+
+      try {
+        const bsRes = await axios.get(
+          `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
+          {
+            params: { as_of_date: dateStr },
+            headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+          }
+        );
+
+        const cash = findCashTotal(bsRes.data.Rows?.Row) || 0;
         balances.push({
-          date: date,
-          balance: round2(balance),
+          date: dateStr,
+          balance: round2(cash),
         });
+
+        console.log(`  ${dateStr}: $${round2(cash)}`);
+      } catch (err) {
+        console.error(`Failed to fetch balance sheet for ${dateStr}:`, err.message);
       }
     }
 
-    // Always add current balance as final point (today)
+    // Ensure today's balance is included as the final point
     if (!balances.length || balances[balances.length - 1].date !== today) {
       balances.push({
         date: today,
         balance: round2(currentCash),
       });
-    } else {
-      // Update the last balance to match current cash in case of rounding
-      balances[balances.length - 1].balance = round2(currentCash);
     }
 
     console.log(`✅ Built ${balances.length} balance records, ending at ${today} with $${currentCash}`);
@@ -2937,20 +2831,8 @@ app.get('/api/cash-balance', async (req, res) => {
       balances,
       generatedAt: new Date().toISOString(),
       _debug: {
-        requestedWeeks: weeksBack,
-        requestedDateRange: { start: startDate, end: endDate },
-        columnCount: columns.length,
-        columnsInfo: columns.slice(0, 5).map(c => c.ColTitle || c.ColName),
-        cashEndBalanceCount: cashEndBalances.length,
-        allCashEndBalances: cashEndBalances.slice(0, 40),
-        dateCount: monthDates.length,
-        sampleDates: monthDates.slice(0, 5),
-        balanceCount: balances.length,
-        sampleBalances: balances.slice(0, 5),
-        today: today,
-        allRootRowLabels: allRootRows,
-        allNestedRowLabels: allNestedRows,
-        noLabelSectionRows: noLabelRowData,
+        recordsCount: balances.length,
+        monthsRequested: monthsToFetch,
       }
     });
   } catch (err) {
