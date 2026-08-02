@@ -2801,13 +2801,18 @@ app.get('/api/cash-balance', async (req, res) => {
     // Extract ending cash balances from each month column
     const balances = [];
     const columns = cfReport.Columns?.Column || [];
+    console.log(`CashFlow has ${columns.length} columns: ${columns.map(c => c.ColTitle).join(', ')}`);
 
     // Find rows with "Cash at End" label
     const findCashEndRow = (rows) => {
       if (!rows) return null;
+      const rootLabels = rows.map(r => (r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || '').toUpperCase());
+      console.log(`Root row labels: ${rootLabels.slice(0, 5).join(', ')}`);
+
       for (const row of rows) {
         const label = (row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '').toUpperCase();
         if (label.includes('CASH') && label.includes('END')) {
+          console.log(`Found "Cash at End" row: "${label}"`);
           return row;
         }
       }
@@ -2823,6 +2828,7 @@ app.get('/api/cash-balance', async (req, res) => {
 
     const cashEndRow = findCashEndRow(cfReport.Rows?.Row);
     if (cashEndRow) {
+      console.log('Successfully found cash end row');
       const cashValues = cashEndRow.ColData || [];
 
       // Map each month column to its end-of-month date and cash balance
