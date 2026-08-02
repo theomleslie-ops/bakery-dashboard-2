@@ -1802,6 +1802,8 @@
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
       const [weeksRange, setWeeksRange] = useState(52);
+      const [hoveredPoint, setHoveredPoint] = useState(null);
+      const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
       useEffect(() => { fetchData(); }, []);
 
@@ -1815,6 +1817,11 @@
             setCurrentCash(data.currentCash);
             setAllBalances(data.balances || []);
             setStatus('ready');
+            // Log early 2025 data for debugging
+            const early2025 = data.balances.filter(b => b.date.startsWith('2025-') && b.date < '2025-03-01');
+            if (early2025.length > 0) {
+              console.log('📊 Early 2025 cash balances:', early2025);
+            }
           } else {
             setError(data.message || 'Failed to load cash balance data');
             setStatus('error');
@@ -1846,6 +1853,15 @@
       const getY = (balance) => chartHeight - ((balance - chartMin) / chartRange) * chartHeight;
       const centerLine = getY(0);
 
+      const handleMouseEnter = (index, x, y) => {
+        setHoveredPoint(index);
+        setTooltipPos({ x, y });
+      };
+
+      const handleMouseLeave = () => {
+        setHoveredPoint(null);
+      };
+
       return (
         <div className="container">
           <header>
@@ -1874,7 +1890,7 @@
           <div className="chart-container">
             <div className="chart-title">Monthly Cash Balance</div>
             {balances.length > 0 ? (
-              <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative', paddingTop: '20px' }}>
                 <svg width="100%" height="500" viewBox="0 0 1000 450" style={{ overflow: 'visible' }}>
                   {/* Grid lines */}
                   {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
@@ -1935,15 +1951,11 @@
                   {balances.map((b, i) => {
                     const x = 60 + (i / (balances.length - 1)) * 890;
                     const y = getY(b.balance);
-                    const [year, month, day] = b.date.split('-');
-                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                    const monthName = monthNames[parseInt(month) - 1];
-                    const tooltip = `${monthName} ${year}\n$${b.balance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    const isHovered = hoveredPoint === i;
 
                     return (
-                      <g key={`dot${i}`}>
-                        <circle cx={x} cy={y} r="4" fill="#10b981" style={{ cursor: 'pointer' }} />
-                        <title>{tooltip}</title>
+                      <g key={`dot${i}`} onMouseEnter={() => handleMouseEnter(i, x, y)} onMouseLeave={handleMouseLeave}>
+                        <circle cx={x} cy={y} r={isHovered ? 6 : 4} fill={isHovered ? '#059669' : '#10b981'} style={{ cursor: 'pointer', transition: 'all 0.2s' }} />
                       </g>
                     );
                   })}
@@ -1965,6 +1977,33 @@
                     return null;
                   })}
                 </svg>
+
+                {/* Tooltip overlay */}
+                {hoveredPoint !== null && balances[hoveredPoint] && (
+                  <div style={{
+                    position: 'absolute',
+                    left: `${(tooltipPos.x / 1000) * 100}%`,
+                    top: `${(tooltipPos.y / 450) * 100}%`,
+                    transform: 'translate(-50%, -130%)',
+                    background: '#2c2416',
+                    color: 'white',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    pointerEvents: 'none',
+                    whiteSpace: 'nowrap',
+                    zIndex: 10,
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                  }}>
+                    {(() => {
+                      const [year, month, day] = balances[hoveredPoint].date.split('-');
+                      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                      const monthName = monthNames[parseInt(month) - 1];
+                      return `${monthName} ${year}: $${balances[hoveredPoint].balance.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+                    })()}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="empty">No cash balance data available</div>

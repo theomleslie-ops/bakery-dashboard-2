@@ -2840,9 +2840,11 @@ app.get('/api/cash-balance', async (req, res) => {
 
     // Calculate cash balance for each month by working backwards
     const balances = [];
+    const debugLogs = [];
 
     // Start from the anchor balance (either end of last data month or today)
     let runningBalance = startingBalance;
+    debugLogs.push(`Starting balance: $${startingBalance}`);
 
     // Work backwards through months to calculate ending balance for each
     for (let i = months.length - 1; i >= 0; i--) {
@@ -2852,6 +2854,7 @@ app.get('/api/cash-balance', async (req, res) => {
       // The P&L represents the change during the month
       // To get the balance at END of month working backwards from a later point,
       // we subtract the monthly P&L (if positive profit, earlier balance was lower)
+      const prevBalance = runningBalance;
       runningBalance -= pl;
 
       // Get the last day of this month
@@ -2867,7 +2870,13 @@ app.get('/api/cash-balance', async (req, res) => {
         balance: round2(runningBalance),
       });
 
-      console.log(`  ${dateStr}: calculated balance $${round2(runningBalance)} (after subtracting P&L of $${pl})`);
+      const logMsg = `  ${dateStr}: $${round2(prevBalance)} - ($${pl}) = $${round2(runningBalance)}`;
+      console.log(logMsg);
+
+      // Keep early 2025 dates in debug log for review
+      if (dateStr < '2025-03-01') {
+        debugLogs.push(logMsg);
+      }
     }
 
     // Add today's balance if it's different from the last calculated month
@@ -2886,12 +2895,22 @@ app.get('/api/cash-balance', async (req, res) => {
     }
 
     console.log(`✅ Calculated ${balances.length} month-end cash balances`);
-
     console.log(`✅ Built ${balances.length} balance records, ending at ${today} with $${currentCash}`);
+
+    // Include debug info for early 2025 data
+    const early2025Balances = balances.filter(b => b.date < '2025-03-01');
+
     res.json({
       success: true,
       currentCash: round2(currentCash),
       balances,
+      debug: {
+        anchorBalance,
+        anchorDate,
+        startingBalance,
+        early2025: early2025Balances,
+        calculationLogs: debugLogs,
+      },
       generatedAt: new Date().toISOString(),
     });
   } catch (err) {
