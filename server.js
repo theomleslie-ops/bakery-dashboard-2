@@ -2798,38 +2798,46 @@ app.get('/api/cash-balance', async (req, res) => {
     console.log(`✅ Statement of Cash Flows fetched`);
 
     // Parse the cash flow report to extract monthly ending cash balances
-    // Look for "CASH AT END OF PERIOD" which gives us the actual balance each month
-    const findCashBalances = (rows, depth = 0) => {
-      const balances = [];
-      if (!rows) return balances;
+    // QB's CashFlow report has summary rows at the root level with no label
+    const findCashBalances = (rows) => {
+      if (!rows) return [];
 
       for (const row of rows) {
         const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        console.log(`Row (depth ${depth}): "${label}"`);
 
-        // Look for CASH AT END OF PERIOD (the actual ending balance for each month)
+        // Look for CASH AT END OF PERIOD row (may have no label in nested structure)
         if (label.toUpperCase().includes('CASH AT END')) {
-          console.log(`Found CASH AT END OF PERIOD row, extracting values...`);
-          // Extract values for each column (each month)
-          const cols = row.Summary?.ColData || row.ColData || [];
-          console.log(`Column count in row: ${cols.length}`);
-          return cols.slice(1).map(c => parseFloat(c.value) || 0); // Skip label column
-        }
-
-        // Also check for "Cash at end" (different capitalization)
-        if (label.toUpperCase().includes('CASH') && label.toUpperCase().includes('END')) {
-          console.log(`Found cash/end row: "${label}", extracting values...`);
           const cols = row.Summary?.ColData || row.ColData || [];
           return cols.slice(1).map(c => parseFloat(c.value) || 0);
         }
 
-        // Recursively search nested rows
+        // If row has nested data, search for CASH AT END within those rows
         if (row.Rows?.Row) {
-          const found = findCashBalances(row.Rows.Row, depth + 1);
-          if (found.length > 0) return found;
+          for (const nestedRow of row.Rows.Row) {
+            const nestedLabel = nestedRow.Header?.ColData?.[0]?.value || nestedRow.ColData?.[0]?.value || '';
+            if (nestedLabel.toUpperCase().includes('CASH AT END')) {
+              const cols = nestedRow.Summary?.ColData || nestedRow.ColData || [];
+              return cols.slice(1).map(c => parseFloat(c.value) || 0);
+            }
+          }
         }
       }
-      return balances;
+
+      // If still not found, check if there's a row with no label that has data columns
+      // (QB sometimes puts summary data in a row without a label)
+      for (const row of rows) {
+        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+        if (!label) {
+          // This is a row with no label - check if it has the full month data
+          const cols = row.Summary?.ColData || row.ColData || [];
+          if (cols.length === 39) {  // Should match columnCount from QB
+            console.log('Found row with 39 columns and no label, assuming this is CASH AT END OF PERIOD');
+            return cols.slice(1).map(c => parseFloat(c.value) || 0);
+          }
+        }
+      }
+
+      return [];
     };
 
     const cashEndBalances = findCashBalances(cashFlowReport.Rows?.Row) || [];
