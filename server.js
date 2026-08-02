@@ -2797,46 +2797,26 @@ app.get('/api/cash-balance', async (req, res) => {
     const cashFlowReport = cashFlowRes.data;
     console.log(`✅ Statement of Cash Flows fetched`);
 
-    // Parse the cash flow report to extract monthly ending cash balances
-    // QB's CashFlow report has summary rows at the root level with no label
+    // Recursively search ALL rows (at any depth) for one containing "cash" and "end"
     const findCashBalances = (rows) => {
       if (!rows) return [];
 
       for (const row of rows) {
-        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+        const label = (row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '').toUpperCase();
 
-        // Look for CASH AT END OF PERIOD row (may have no label in nested structure)
-        if (label.toUpperCase().includes('CASH AT END')) {
+        // Look for any row with "CASH" and "END" in the label
+        if (label.includes('CASH') && label.includes('END')) {
           const cols = row.Summary?.ColData || row.ColData || [];
+          console.log(`Found cash/end row: "${label}", extracting ${cols.length} values`);
           return cols.slice(1).map(c => parseFloat(c.value) || 0);
         }
 
-        // If row has nested data, search for CASH AT END within those rows
+        // Recursively search nested rows
         if (row.Rows?.Row) {
-          for (const nestedRow of row.Rows.Row) {
-            const nestedLabel = nestedRow.Header?.ColData?.[0]?.value || nestedRow.ColData?.[0]?.value || '';
-            if (nestedLabel.toUpperCase().includes('CASH AT END')) {
-              const cols = nestedRow.Summary?.ColData || nestedRow.ColData || [];
-              return cols.slice(1).map(c => parseFloat(c.value) || 0);
-            }
-          }
+          const found = findCashBalances(row.Rows.Row);
+          if (found.length > 0) return found;
         }
       }
-
-      // If still not found, check if there's a row with no label that has data columns
-      // (QB sometimes puts summary data in a row without a label)
-      for (const row of rows) {
-        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        if (!label) {
-          // This is a row with no label - check if it has the full month data
-          const cols = row.Summary?.ColData || row.ColData || [];
-          if (cols.length === 39) {  // Should match columnCount from QB
-            console.log('Found row with 39 columns and no label, assuming this is CASH AT END OF PERIOD');
-            return cols.slice(1).map(c => parseFloat(c.value) || 0);
-          }
-        }
-      }
-
       return [];
     };
 
