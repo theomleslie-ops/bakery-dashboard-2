@@ -2836,7 +2836,7 @@ app.get('/api/cash-balance', async (req, res) => {
     };
 
     let currentDate = parseDate(startDate);
-    for (let i = 0; i < netCashFlows.length; i++) {
+    for (let i = 0; i < cashEndBalances.length; i++) {
       monthDates.push(currentDate.toISOString().slice(0, 10));
       // Move to first day of next month
       currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
@@ -2896,14 +2896,14 @@ app.get('/api/cash-balance', async (req, res) => {
       generatedAt: new Date().toISOString(),
       _debug: {
         columnCount: columns.length,
-        netCashFlowCount: netCashFlows.length,
+        cashEndBalanceCount: cashEndBalances.length,
         dateCount: monthDates.length,
         balanceCount: balances.length,
         today: today,
         lastDate: monthDates[monthDates.length - 1],
         lastBalance: balances[balances.length - 1],
         sampleDates: monthDates.slice(0, 3),
-        sampleFlows: netCashFlows.slice(0, 3),
+        sampleBalances: cashEndBalances.slice(0, 3),
         reportKeys: Object.keys(cashFlowReport).slice(0, 10),
       }
     });
