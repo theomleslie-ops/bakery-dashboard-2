@@ -2873,7 +2873,15 @@ app.get('/api/cash-balance', async (req, res) => {
       generatedAt: new Date().toISOString(),
       _debug: {
         recordsCount: balances.length,
-        monthsRequested: monthsToFetch,
+        columnCount: columns.length,
+        columnTitles: columns.map(c => c.ColTitle),
+        rowLabels: (cfReport.Rows?.Row || []).map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'UNKNOWN').slice(0, 10),
+        allRowsStructure: (cfReport.Rows?.Row || []).map(r => ({
+          label: r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'UNKNOWN',
+          hasColData: !!r.ColData,
+          hasSummaryColData: !!r.Summary?.ColData,
+          hasNestedRows: !!r.Rows?.Row,
+        })),
       }
     });
   } catch (err) {
