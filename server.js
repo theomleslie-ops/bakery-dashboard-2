@@ -2764,8 +2764,16 @@ app.get('/api/cash-balance', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
 
     // Helper to extract ending cash balance from CashFlow report
+    let debugRowsLogged = false;
     const extractCashEndingBalance = (rows) => {
       if (!rows) return null;
+
+      // Log row labels for debugging (only first time)
+      if (!debugRowsLogged && rows.length > 0) {
+        debugRowsLogged = true;
+        const labels = rows.map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'UNKNOWN');
+        console.log('CashFlow report root row labels:', labels);
+      }
 
       // Look for "Cash at End" row
       for (const row of rows) {
