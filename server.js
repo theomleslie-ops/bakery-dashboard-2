@@ -2909,6 +2909,7 @@ app.get('/api/cash-balance', async (req, res) => {
         sampleDates: monthDates.slice(0, 3),
         sampleBalances: cashEndBalances.slice(0, 3),
         reportKeys: Object.keys(cashFlowReport).slice(0, 10),
+        allRowLabels: cashFlowReport.Rows?.Row?.map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'NO_LABEL').slice(0, 50),
       }
     });
   } catch (err) {
