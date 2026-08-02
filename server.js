@@ -2838,10 +2838,25 @@ app.get('/api/cash-balance', async (req, res) => {
 
     const allRootRows = cashFlowReport.Rows?.Row?.map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'NO LABEL') || [];
     const allNestedRows = [];
+    const noLabelRowData = [];
+
     cashFlowReport.Rows?.Row?.forEach(r => {
+      const label = r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'NO LABEL';
+
       if (r.Rows?.Row) {
         r.Rows.Row.forEach(nr => {
-          allNestedRows.push(nr.Header?.ColData?.[0]?.value || nr.ColData?.[0]?.value || 'NO LABEL');
+          const nrLabel = nr.Header?.ColData?.[0]?.value || nr.ColData?.[0]?.value || 'NO LABEL';
+          allNestedRows.push(nrLabel);
+
+          // Collect all rows from NO LABEL section
+          if (!label || label === 'NO LABEL') {
+            noLabelRowData.push({
+              label: nrLabel,
+              hasSummaryData: !!nr.Summary?.ColData,
+              hasColData: !!nr.ColData,
+              dataCols: (nr.Summary?.ColData || nr.ColData || []).length
+            });
+          }
         });
       }
     });
@@ -2933,7 +2948,8 @@ app.get('/api/cash-balance', async (req, res) => {
         sampleBalances: balances.slice(0, 5),
         today: today,
         allRootRowLabels: allRootRows,
-        firstTenNestedRowLabels: allNestedRows.slice(0, 10),
+        allNestedRowLabels: allNestedRows,
+        noLabelSectionRows: noLabelRowData,
       }
     });
   } catch (err) {
