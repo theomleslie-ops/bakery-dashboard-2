@@ -2790,7 +2790,8 @@ app.get('/api/cash-balance', async (req, res) => {
       const year = date.getFullYear();
       const month = date.getMonth();
       const lastDayOfMonth = new Date(year, month + 1, 0);
-      const dateStr = lastDayOfMonth.toISOString().split('T')[0];
+      const day = lastDayOfMonth.getDate();
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
       // Don't fetch future dates
       if (dateStr > today) continue;
