@@ -1944,8 +1944,9 @@
                   const shouldShow = (i === 0) || (i === balances.length - 1) || (i % labelInterval === 0);
                   if (shouldShow) {
                     const x = 60 + (i / (balances.length - 1)) * 890;
-                    const dateObj = new Date(b.date + 'T00:00:00Z');
-                    const label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    const [year, month, day] = b.date.split('-');
+                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    const label = `${monthNames[parseInt(month) - 1]} ${parseInt(day)}`;
                     return (
                       <text key={`label${i}`} x={x} y={chartHeight + 40} textAnchor="middle" fontSize="11" fill="#666">
                         {label}
