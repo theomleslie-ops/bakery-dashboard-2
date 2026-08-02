@@ -2822,10 +2822,14 @@ app.get('/api/cash-balance', async (req, res) => {
     const cashEndBalances = findCashBalances(cashFlowReport.Rows?.Row) || [];
     const columns = cashFlowReport.Columns?.Column || [];
 
-    console.log('Column count:', columns.length);
-    console.log('First few columns:', columns.slice(0, 3).map(c => ({ ColTitle: c.ColTitle, ColName: c.ColName })));
-    console.log('Cash end balances count:', cashEndBalances.length);
-    console.log('First 3 cash end balances:', cashEndBalances.slice(0, 3));
+    console.log('QB CashFlow Report Debug:');
+    console.log('  Requested date range:', startDate, 'to', endDate);
+    console.log('  Column count:', columns.length);
+    console.log('  All columns:', columns.map((c, i) => `${i}: ${c.ColTitle || c.ColName}`));
+    console.log('  Cash end balances count:', cashEndBalances.length);
+    console.log('  All cash end balances:', cashEndBalances);
+    console.log('  Row count:', cashFlowReport.Rows?.Row?.length || 0);
+    console.log('  All row labels:', cashFlowReport.Rows?.Row?.map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value || 'NO LABEL').slice(0, 20));
 
     // Generate dates by starting from startDate and adding months
     // This is more reliable than parsing QB's column labels
