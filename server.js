@@ -2780,7 +2780,7 @@ app.get('/api/cash-balance', async (req, res) => {
     const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 52, 260);
     const monthsBack = Math.ceil(weeksBack / 4.33);
     const endDate = today;
-    const startDate = addDays(new Date(endDate), -7 * weeksBack).toISOString().split('T')[0];
+    const startDate = addDays(endDate, -7 * weeksBack);
 
     const cashFlowRes = await axios.get(
       `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
