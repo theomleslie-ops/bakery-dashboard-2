@@ -2872,10 +2872,13 @@ app.get('/api/cash-balance', async (req, res) => {
         console.error(`Invalid date at index ${i}: ${monthDates[i]}`);
         continue;
       }
-      balances.push({
-        date: date,
-        balance: round2(runningBalance),
-      });
+      // Only include dates up to today to avoid showing future projections
+      if (date <= today) {
+        balances.push({
+          date: date,
+          balance: round2(runningBalance),
+        });
+      }
       runningBalance += (netCashFlows[i] || 0);
     }
 
