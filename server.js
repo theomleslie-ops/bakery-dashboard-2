@@ -2798,16 +2798,16 @@ app.get('/api/cash-balance', async (req, res) => {
     console.log(`✅ Statement of Cash Flows fetched`);
 
     // Parse the cash flow report to extract net cash flow for each period
-    // Look for "Net Cash Provided by Operating Activities" or similar line
+    // Look for "NET CASH INCREASE FOR PERIOD" which is the total of all activities
     const findNetCashFlow = (rows) => {
       const flows = [];
       if (!rows) return flows;
 
       for (const row of rows) {
         const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        // Look for net income, operating cash flow, or net change in cash
-        if (label.toUpperCase().includes('NET INCOME') ||
-            label.toUpperCase().includes('NET CASH PROVIDED') ||
+        // Look for NET CASH INCREASE FOR PERIOD (total of operating, investing, financing)
+        // Fallback: NET CHANGE IN CASH or similar
+        if (label.toUpperCase().includes('NET CASH INCREASE') ||
             label.toUpperCase().includes('NET CHANGE IN CASH')) {
           // Extract values for each column (each month)
           const cols = row.Summary?.ColData || row.ColData || [];
