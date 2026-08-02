@@ -2827,11 +2827,8 @@ app.get('/api/cash-balance', async (req, res) => {
     console.log('Column count:', columns.length);
     console.log('First few columns:', columns.slice(0, 3).map(c => ({ ColTitle: c.ColTitle, ColName: c.ColName })));
     console.log('Net cash flows count:', netCashFlows.length);
-    console.log('CashFlow Report structure:', {
-      hasColumns: !!cashFlowReport.Columns,
-      hasRows: !!cashFlowReport.Rows,
-      firstRow: cashFlowReport.Rows?.Row?.[0]?.ColData?.[0]?.value,
-    });
+    console.log('First 3 net cash flows:', netCashFlows.slice(0, 3));
+    console.log('All row labels:', cashFlowReport.Rows?.Row?.map(r => r.Header?.ColData?.[0]?.value || r.ColData?.[0]?.value).filter(l => l) || []);
 
     // Generate dates by starting from startDate and adding months
     // This is more reliable than parsing QB's column labels
