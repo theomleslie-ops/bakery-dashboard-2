@@ -30,7 +30,7 @@
     },
     {
       "squareItem": "Baguette",
-      "recipe": "Country baguette"
+      "recipe": "Country dough"
     },
     {
       "squareItem": "Forest Scone",
@@ -46,11 +46,11 @@
     },
     {
       "squareItem": "Long Braid",
-      "recipe": "Country baguette"
+      "recipe": "Challah dough"
     },
     {
       "squareItem": "Epi",
-      "recipe": "Country epi"
+      "recipe": "Country dough"
     },
     {
       "squareItem": "Mini Banana Bread Loaf",
@@ -67,10 +67,6 @@
     {
       "squareItem": "Nutella Bun",
       "recipe": "Chocolate Nutella Scone British"
-    },
-    {
-      "squareItem": "Jalapeno & Cheddar Baton",
-      "recipe": "Pain de mie dough"
     },
     {
       "squareItem": "Ham & Cheese Baton",
