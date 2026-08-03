@@ -29,8 +29,16 @@
       "recipe": "Oatmeal cookies"
     },
     {
+      "squareItem": "Baguette",
+      "recipe": "Country baguette"
+    },
+    {
       "squareItem": "Forest Scone",
       "recipe": "FOREST SCONES"
+    },
+    {
+      "squareItem": "Olive PC",
+      "recipe": "Country olive dough with Galahad"
     },
     {
       "squareItem": "Chocolate Sourdough Scone",
@@ -41,36 +49,24 @@
       "recipe": "Country baguette"
     },
     {
-      "squareItem": "Cinn SWIRL",
-      "recipe": "Coffee cake  Crumble"
+      "squareItem": "Epi",
+      "recipe": "Country epi"
     },
     {
       "squareItem": "Mini Banana Bread Loaf",
       "recipe": "Banana Bread"
     },
     {
-      "squareItem": "Baguette",
-      "recipe": "Country baguette"
+      "squareItem": "Cinn SWIRL",
+      "recipe": "Coffee cake  Crumble"
     },
     {
       "squareItem": "PB Mound Cookie",
       "recipe": "PB cookies"
     },
     {
-      "squareItem": "Berries & Cream Scone",
-      "recipe": "Berries & Cream scone - BRITISH"
-    },
-    {
-      "squareItem": "Epi",
-      "recipe": "Country epi"
-    },
-    {
       "squareItem": "Nutella Bun",
       "recipe": "Chocolate Nutella Scone British"
-    },
-    {
-      "squareItem": "Olive PC",
-      "recipe": "Country olive dough with Galahad"
     },
     {
       "squareItem": "Jalapeno & Cheddar Baton",
@@ -79,6 +75,10 @@
     {
       "squareItem": "Ham & Cheese Baton",
       "recipe": "Pain de mie dough"
+    },
+    {
+      "squareItem": "Blueberry Corn Muffin",
+      "recipe": "Blueberry Corn Muffin Batter"
     }
   ]
 }
