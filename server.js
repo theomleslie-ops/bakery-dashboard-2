@@ -2893,6 +2893,33 @@ app.get('/api/debug/qb-cash-balance', async (req, res) => {
   }
 });
 
+// Debug endpoint to see CashFlow report structure
+app.get('/api/debug/qb-cashflow', async (req, res) => {
+  try {
+    const qbClient = require('./pipeline/qb-client');
+    const tokens = await qbClient.getValidTokens();
+
+    const dateStr = req.query.date || '2025-02-28';
+
+    console.log(`Fetching QB CashFlow report as of ${dateStr}...`);
+    const cfRes = await axios.get(
+      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
+      {
+        params: { end_date: dateStr },
+        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+      }
+    );
+
+    res.json(cfRes.data);
+  } catch (err) {
+    console.error('QB cashflow check error:', err.message);
+    res.status(500).json({
+      error: 'Failed to fetch QB CashFlow report',
+      message: err.message,
+    });
+  }
+});
+
 // ============= PUBLIC DASHBOARD API ENDPOINTS =============
 
 // Square data endpoint
