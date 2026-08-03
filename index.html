@@ -1802,6 +1802,7 @@
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
       const [weeksRange, setWeeksRange] = useState(52);
+      const [hoveredIndex, setHoveredIndex] = useState(null);
 
       useEffect(() => { fetchData(); }, []);
 
@@ -1935,22 +1936,23 @@
                   {balances.map((b, i) => {
                     const x = 60 + (i / (balances.length - 1)) * 890;
                     const y = getY(b.balance);
-                    const [year, month, day] = b.date.split('-');
-                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                    const monthName = monthNames[parseInt(month) - 1];
-                    const tooltip = `${monthName} ${year}\n$${b.balance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-
                     return (
-                      <g key={`dot${i}`}>
-                        <circle cx={x} cy={y} r="4" fill="#10b981" style={{ cursor: 'pointer' }} />
-                        <title>{tooltip}</title>
-                      </g>
+                      <circle
+                        key={`dot${i}`}
+                        cx={x}
+                        cy={y}
+                        r="5"
+                        fill="#10b981"
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={() => setHoveredIndex(i)}
+                        onMouseLeave={() => setHoveredIndex(null)}
+                      />
                     );
                   })}
 
                   {/* X-axis labels - show every 2 months */}
                   {balances.map((b, i) => {
-                    const shouldShow = (i === 0) || (i === balances.length - 1) || (i % 2 === 0);
+                    const shouldShow = (i % 2 === 0);
                     if (shouldShow) {
                       const x = 60 + (i / (balances.length - 1)) * 890;
                       const [year, month, day] = b.date.split('-');
@@ -1964,6 +1966,28 @@
                     }
                     return null;
                   })}
+
+                  {/* Hover tooltip */}
+                  {hoveredIndex !== null && (() => {
+                    const b = balances[hoveredIndex];
+                    const x = 60 + (hoveredIndex / (balances.length - 1)) * 890;
+                    const [year, month, day] = b.date.split('-');
+                    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                    const monthName = monthNames[parseInt(month) - 1];
+                    const tooltipWidth = 180;
+                    const tooltipHeight = 80;
+                    const tooltipX = x < 500 ? x + 12 : x - tooltipWidth - 12;
+                    const tooltipY = 20;
+                    return (
+                      <g key="tooltip">
+                        <line x1={x} y1="10" x2={x} y2={chartHeight + 20} stroke="#ddd" strokeWidth="1" strokeDasharray="3" />
+                        <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="#fff" stroke="#ccc" strokeWidth="1" rx="4" />
+                        <text x={tooltipX + 10} y={tooltipY + 20} fontSize="12" fontWeight="700" fill="#333">{monthName} {year}</text>
+                        <text x={tooltipX + 10} y={tooltipY + 42} fontSize="11" fill="#666">Balance:</text>
+                        <text x={tooltipX + 10} y={tooltipY + 62} fontSize="13" fontWeight="600" fill="#10b981">${b.balance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</text>
+                      </g>
+                    );
+                  })()}
                 </svg>
               </div>
             ) : (
