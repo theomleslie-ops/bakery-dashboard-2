@@ -3060,6 +3060,31 @@ app.post('/api/ingredient-costs/trigger', async (req, res) => {
   }
 });
 
+// DEBUG: Serve raw extracted PDF text for a bill (for parser development)
+app.get('/api/debug/pdf-text/:billId', (req, res) => {
+  try {
+    const billId = req.params.billId;
+    const debugFile = path.join(__dirname, `debug-pdf-${billId}.txt`);
+
+    if (!fs.existsSync(debugFile)) {
+      return res.status(404).json({
+        error: 'Debug file not found',
+        message: `No debug file for bill ${billId}. File path would be: debug-pdf-${billId}.txt`,
+        path: debugFile,
+      });
+    }
+
+    const text = fs.readFileSync(debugFile, 'utf-8');
+    res.type('text/plain').send(text);
+  } catch (err) {
+    console.error('Debug PDF text read error:', err.message);
+    res.status(500).json({
+      error: 'Failed to read debug file',
+      message: err.message,
+    });
+  }
+});
+
 // Cash balance trend - fetches Statement of Cash Flows from QB
 app.get('/api/cash-balance', async (req, res) => {
   try {
