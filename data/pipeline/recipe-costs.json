@@ -1,6 +1,6 @@
 {
   "generatedAt": "2026-08-03T04:21:30.693113",
-  "recipeCount": 17,
+  "recipeCount": 18,
   "recipes": [
     {
       "recipe": "Country round",
@@ -120,6 +120,12 @@
       "source": "bakery-margin-analysis",
       "product": "Blueberry Corn Muffin",
       "updated": "2026-08-03T04:21:30.693113"
+    },
+    {
+      "recipe": "Chocolate polenta scone - british",
+      "costPerUnit": 0.88,
+      "source": "bakery-margin-analysis",
+      "product": "Chocolate Sourdough Scone"
     }
   ],
   "notes": "Bakery margin analysis with real ingredient costs from invoices"
