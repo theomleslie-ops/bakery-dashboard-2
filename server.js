@@ -2613,10 +2613,12 @@ app.get('/api/product-margins', async (req, res) => {
       const top20 = rankProductsByRevenue(sales, 20);
 
       const withMargins = [];
+      const debugMatches = [];
       for (const item of top20) {
         // Find recipe match: Priority 1 = explicit overrides, Priority 2 = fuzzy matching
         let costPerUnit = null;
         let matchedRecipe = null;
+        let matchMethod = 'none';
         const recipes = Object.keys(costByRecipe);
         const itemLower = item.name.toLowerCase();
 
@@ -2625,6 +2627,8 @@ app.get('/api/product-margins', async (req, res) => {
           const recipeName = overrides[itemLower];
           costPerUnit = costByRecipe[recipeName.toLowerCase()];
           matchedRecipe = recipeName;
+          matchMethod = 'override';
+          debugMatches.push({ product: item.name, matched: matchedRecipe, cost: costPerUnit, method: matchMethod });
         }
 
         // Priority 2: Fuzzy matching if override didn't work
@@ -2668,6 +2672,8 @@ app.get('/api/product-margins', async (req, res) => {
           if (bestRecipe && bestScore > 0) {
             matchedRecipe = bestRecipe;
             costPerUnit = costByRecipe[bestRecipe];
+            matchMethod = 'fuzzy';
+            debugMatches.push({ product: item.name, matched: matchedRecipe, cost: costPerUnit, score: bestScore, method: matchMethod });
           }
         }
 
@@ -2699,6 +2705,7 @@ app.get('/api/product-margins', async (req, res) => {
       generatedAt: new Date().toISOString(),
       squareSalesCache: salesData.fetchedAt,
       windows: result,
+      debug: { matchingResults: debugMatches.slice(0, 10) }
     });
   } catch (e) {
     console.error('Product margins error:', e.message, e.stack);
