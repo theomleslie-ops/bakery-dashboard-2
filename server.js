@@ -13,6 +13,9 @@ const qbClient = require('./pipeline/qb-client');
 const qbCache = require('./pipeline/qb-cache');
 const claudeMCP = require('./pipeline/claude-mcp');
 const composioConnectors = require('./pipeline/composio-connectors');
+const marginSchedulerModule = require('./pipeline/margin-scheduler');
+
+let marginScheduler = null;
 
 // Safe lazy-load of initMargins
 const initMargins = async () => {
@@ -2976,6 +2979,22 @@ app.get('/api/calculate-margins', async (req, res) => {
   }
 });
 
+// Margin scheduler status
+app.get('/api/margin-scheduler/status', (req, res) => {
+  if (!marginScheduler) {
+    return res.status(503).json({
+      error: 'Scheduler not initialized',
+      message: 'Margin scheduler is still starting up',
+    });
+  }
+  const status = marginScheduler.getStatus();
+  res.json({
+    scheduler: 'margin-calculator',
+    schedule: 'Daily at 6 AM UTC, plus immediate run on startup',
+    status,
+  });
+});
+
 // Cash balance trend - fetches Statement of Cash Flows from QB
 app.get('/api/cash-balance', async (req, res) => {
   try {
@@ -3288,6 +3307,10 @@ const server = app.listen(PORT, async () => {
   if (qbConfigured) {
     startQBRefreshJobs();
   }
+
+  // Initialize automated margin calculation scheduler
+  // Runs daily at 6 AM UTC, with immediate run on startup
+  marginScheduler = marginSchedulerModule.start();
 
   // Auto-rebuild product margins weekly (Sundays at 3am)
   // Fetches vendor prices from QB + recipes from Google Drive
