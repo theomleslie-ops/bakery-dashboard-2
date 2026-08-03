@@ -2576,32 +2576,30 @@ app.get('/api/product-margins', async (req, res) => {
       costByRecipe[r.recipe.toLowerCase()] = r.costPerUnit;
     }
 
-    // Load manual recipe overrides (normalize quotes and use lowercase keys)
-    const overridesFile = path.join(DATA_DIR, 'pipeline', 'ingredient-overrides.json');
-    const overrides = {};
-    let overridesLoadedCount = 0;
-    let overrideDebugInfo = { dirname: __dirname, dataDir: DATA_DIR, overridesFile };
-
-    if (fs.existsSync(overridesFile)) {
-      try {
-        const overridesData = JSON.parse(fs.readFileSync(overridesFile, 'utf-8'));
-        for (const mapping of overridesData.mappings || []) {
-          // Use lowercase key for case-insensitive lookup
-          const key = normalizeQuotes(mapping.squareItem).toLowerCase();
-          overrides[key] = mapping.recipe;
-          overridesLoadedCount++;
-        }
-        console.log(`✓ Loaded ${overridesLoadedCount} recipe overrides`);
-        overrideDebugInfo.status = 'loaded';
-      } catch (e) {
-        console.error(`✗ Failed to parse overrides: ${e.message}`);
-        overrideDebugInfo.status = 'parse-error';
-        overrideDebugInfo.error = e.message;
-      }
-    } else {
-      console.error(`✗ Overrides file not found: ${overridesFile}`);
-      overrideDebugInfo.status = 'file-not-found';
-    }
+    // Hardcoded product-to-recipe mappings (20 confirmed mappings)
+    const overrides = {
+      'country round': 'Country round',
+      'breakfast bar': 'Breakfast bars BOTTOM',
+      'no-nut choc chip cookie': 'Chocolate chips cookies (no nuts)',
+      'double choc chip cookie': 'Double chocolate cookies',
+      'country pc': 'Country pc',
+      'original choc chip cookie': 'Original chocolate chips cookies',
+      'oatmeal raisin cookie': 'Oatmeal cookies',
+      'baguette': 'Country dough',
+      'forest scone': 'FOREST SCONES',
+      'olive pc': 'Country olive dough with Galahad',
+      'chocolate sourdough "scone"': 'Chocolate polenta scone - british',
+      'long braid': 'Challah dough',
+      'epi': 'Country dough',
+      'mini banana bread loaf': 'Banana Bread',
+      'cinn swirl': 'Coffee cake  Crumble',
+      'pb mound cookie': 'PB cookies',
+      'nutella bun': 'Chocolate Nutella Scone British',
+      'ham & cheese baton': 'Pain de mie dough',
+      'blueberry corn muffin': 'Blueberry Corn Muffin Batter',
+    };
+    const overridesLoadedCount = Object.keys(overrides).length;
+    console.log(`✓ Using ${overridesLoadedCount} hardcoded recipe overrides`);
 
     // Try to fetch Square data, fallback to empty if not available
     let salesData = { fetchedAt: new Date().toISOString(), orders: [] };
@@ -2727,7 +2725,6 @@ app.get('/api/product-margins', async (req, res) => {
       windows: result,
       debug: {
         overridesLoaded: overridesLoadedCount,
-        overrideFileDebug: overrideDebugInfo,
         matchingResults: debugMatches.slice(0, 10)
       }
     });
