@@ -1,22 +1,80 @@
 {
   "mappings": [
-    { "squareItem": "Country Round", "recipe": "IRISH SODA BREAD", "quantity": "1kg" },
-    { "squareItem": "Breakfast Bar", "recipe": "PATE SABLE" },
-    { "squareItem": "NO-NUT Choc Chip Cookie", "recipe": "Double chocolate cookies" },
-    { "squareItem": "Double Choc Chip Cookie", "recipe": "Double chocolate cookies" },
-    { "squareItem": "Country PC", "recipe": "IRISH SODA BREAD", "quantity": "450g" },
-    { "squareItem": "ORIGINAL Choc Chip Cookie", "recipe": "Double chocolate cookies" },
-    { "squareItem": "Oatmeal Raisin Cookie", "recipe": "Double chocolate cookies" },
-    { "squareItem": "Forest Scone", "recipe": "Black  Sesame Scone" },
-    { "squareItem": "Chocolate Sourdough \"Scone\"", "recipe": "Chocolate polenta scone - british" },
-    { "squareItem": "Long Braid", "recipe": "IRISH SODA BREAD" },
-    { "squareItem": "Cinn SWIRL", "recipe": "Coffee cake  Crumble" },
-    { "squareItem": "Mini Banana Bread Loaf", "recipe": "Banana Bread" },
-    { "squareItem": "Baguette", "recipe": "IRISH SODA BREAD", "quantity": "750g" },
-    { "squareItem": "PB Mound Cookie", "recipe": "Double chocolate cookies" },
-    { "squareItem": "Berries & Cream Scone", "recipe": "Lemon Currant British" },
-    { "squareItem": "Epi", "recipe": "IRISH SODA BREAD", "quantity": "750g" },
-    { "squareItem": "Nutella Bun", "recipe": "Chocolate Nutella Scone British" },
-    { "squareItem": "Olive PC", "recipe": "IRISH SODA BREAD" }
+    {
+      "squareItem": "Country Round",
+      "recipe": "IRISH SODA BREAD",
+      "quantity": "1kg"
+    },
+    {
+      "squareItem": "Breakfast Bar",
+      "recipe": "PATE SABLE"
+    },
+    {
+      "squareItem": "NO-NUT Choc Chip Cookie",
+      "recipe": "Double chocolate cookies"
+    },
+    {
+      "squareItem": "Double Choc Chip Cookie",
+      "recipe": "Double chocolate cookies"
+    },
+    {
+      "squareItem": "Country PC",
+      "recipe": "IRISH SODA BREAD",
+      "quantity": "450g"
+    },
+    {
+      "squareItem": "ORIGINAL Choc Chip Cookie",
+      "recipe": "Double chocolate cookies"
+    },
+    {
+      "squareItem": "Oatmeal Raisin Cookie",
+      "recipe": "Double chocolate cookies"
+    },
+    {
+      "squareItem": "Forest Scone",
+      "recipe": "Black  Sesame Scone"
+    },
+    {
+      "squareItem": "Chocolate Sourdough \"Scone\"",
+      "recipe": "Chocolate polenta scone - british"
+    },
+    {
+      "squareItem": "Long Braid",
+      "recipe": "IRISH SODA BREAD"
+    },
+    {
+      "squareItem": "Cinn SWIRL",
+      "recipe": "Coffee cake  Crumble"
+    },
+    {
+      "squareItem": "Mini Banana Bread Loaf",
+      "recipe": "Banana Bread"
+    },
+    {
+      "squareItem": "Baguette",
+      "recipe": "IRISH SODA BREAD",
+      "quantity": "750g"
+    },
+    {
+      "squareItem": "PB Mound Cookie",
+      "recipe": "Double chocolate cookies"
+    },
+    {
+      "squareItem": "Berries & Cream Scone",
+      "recipe": "Lemon Currant British"
+    },
+    {
+      "squareItem": "Epi",
+      "recipe": "IRISH SODA BREAD",
+      "quantity": "750g"
+    },
+    {
+      "squareItem": "Nutella Bun",
+      "recipe": "Chocolate Nutella Scone British"
+    },
+    {
+      "squareItem": "Olive PC",
+      "recipe": "IRISH SODA BREAD"
+    }
   ]
 }
