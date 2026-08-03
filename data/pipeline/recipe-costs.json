@@ -3,105 +3,122 @@
   "recipeCount": 17,
   "recipes": [
     {
-      "recipe": "Country Round",
+      "recipe": "Country round",
       "costPerUnit": 0.62,
       "source": "bakery-margin-analysis",
+      "product": "Country Round",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Breakfast Bar",
+      "recipe": "Breakfast bars BOTTOM",
       "costPerUnit": 4.59,
       "source": "bakery-margin-analysis",
+      "product": "Breakfast Bar",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "NO-NUT Choc Chip Cookie",
+      "recipe": "Chocolate chips cookies (no nuts)",
       "costPerUnit": 2.05,
       "source": "bakery-margin-analysis",
+      "product": "NO-NUT Choc Chip Cookie",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Double Choc Chip Cookie",
+      "recipe": "Double chocolate cookies",
       "costPerUnit": 2.05,
       "source": "bakery-margin-analysis",
+      "product": "Double Choc Chip Cookie",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Country PC",
+      "recipe": "Country pc",
       "costPerUnit": 0.28,
       "source": "bakery-margin-analysis",
+      "product": "Country PC",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "ORIGINAL Choc Chip Cookie",
+      "recipe": "Original chocolate chips cookies",
       "costPerUnit": 2.05,
       "source": "bakery-margin-analysis",
+      "product": "ORIGINAL Choc Chip Cookie",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Oatmeal Raisin Cookie",
+      "recipe": "Oatmeal cookies",
       "costPerUnit": 2.05,
       "source": "bakery-margin-analysis",
+      "product": "Oatmeal Raisin Cookie",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Baguette",
+      "recipe": "Country dough",
       "costPerUnit": 0.47,
       "source": "bakery-margin-analysis",
+      "product": "Baguette",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Forest Scone",
+      "recipe": "FOREST SCONES",
       "costPerUnit": 0.7,
       "source": "bakery-margin-analysis",
+      "product": "Forest Scone",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
       "recipe": "Chocolate Sourdough Scone",
       "costPerUnit": 0.88,
       "source": "bakery-margin-analysis",
+      "product": "Chocolate Sourdough Scone",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Long Braid",
+      "recipe": "Challah dough",
       "costPerUnit": 3.7,
       "source": "bakery-margin-analysis",
+      "product": "Long Braid",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Epi",
+      "recipe": "Country dough",
       "costPerUnit": 0.47,
       "source": "bakery-margin-analysis",
+      "product": "Epi",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Mini Banana Bread Loaf",
+      "recipe": "Banana Bread",
       "costPerUnit": 0.54,
       "source": "bakery-margin-analysis",
+      "product": "Mini Banana Bread Loaf",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "PB Mound Cookie",
+      "recipe": "PB cookies",
       "costPerUnit": 2.05,
       "source": "bakery-margin-analysis",
+      "product": "PB Mound Cookie",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Nutella Bun",
+      "recipe": "Chocolate Nutella Scone British",
       "costPerUnit": 1.79,
       "source": "bakery-margin-analysis",
+      "product": "Nutella Bun",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Ham & Cheese Baton",
+      "recipe": "Pain de mie dough",
       "costPerUnit": 1.05,
       "source": "bakery-margin-analysis",
+      "product": "Ham & Cheese Baton",
       "updated": "2026-08-03T04:21:30.693113"
     },
     {
-      "recipe": "Blueberry Corn Muffin",
+      "recipe": "Blueberry Corn Muffin Batter",
       "costPerUnit": 3.0,
       "source": "bakery-margin-analysis",
+      "product": "Blueberry Corn Muffin",
       "updated": "2026-08-03T04:21:30.693113"
     }
   ],
