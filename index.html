@@ -1859,6 +1859,7 @@
                 { weeks: 26, label: '6 Months' },
                 { weeks: 52, label: '1 Year' },
                 { weeks: 156, label: '3 Years' },
+                { weeks: 260, label: '5 Years' },
               ].map(opt => (
                 <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
               ))}

@@ -2765,33 +2765,26 @@ app.get('/api/cash-balance', async (req, res) => {
       return null;
     };
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
 
-    // Load monthly financial data to get the list of months
-    console.log('Loading monthly financial data...');
-    const monthlyFinancial = loadData(MONTHLY_FINANCIAL_FILE) || {};
-    console.log(`Loaded financial data with ${Object.keys(monthlyFinancial).length} entries`);
+    // Generate 60 months (5 years) of monthly data going back from today
+    const months = [];
+    for (let i = 59; i >= 0; i--) {
+      const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const year = date.getFullYear();
+      const month = date.getMonth(); // 0-11
+      const monthName = MONTH_NAMES[month];
+      const monthShort = MONTH_SHORTS[month];
 
-    // Build array of months from oldest to newest
-    const months = Object.keys(monthlyFinancial)
-      .map(key => {
-        const data = monthlyFinancial[key];
-        return {
-          key,
-          month: data.month,
-          name: data.name,
-          year: data.year,
-        };
-      })
-      .filter(m => m.year && m.name)
-      .sort((a, b) => {
-        const yearDiff = a.year - b.year;
-        if (yearDiff !== 0) return yearDiff;
-        const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
+      months.push({
+        year,
+        month: monthShort,
+        name: monthName,
       });
+    }
 
-    console.log(`Found ${months.length} months of financial data`);
+    console.log(`Generating 5-year cash balance data (60 months)...`);
     if (months.length > 0) {
       console.log(`Range: ${months[0].name} ${months[0].year} to ${months[months.length - 1].name} ${months[months.length - 1].year}`);
     }
@@ -2811,7 +2804,6 @@ app.get('/api/cash-balance', async (req, res) => {
       const endDateStr = lastDay.toISOString().split('T')[0];
 
       try {
-        console.log(`\nQuerying ${monthData.name} ${monthData.year} (${startDateStr} to ${endDateStr})`);
         const cfRes = await axios.get(
           `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
           {
@@ -2820,11 +2812,7 @@ app.get('/api/cash-balance', async (req, res) => {
           }
         );
 
-        if (i === 0) {
-          console.log('First response structure:', JSON.stringify(cfRes.data, null, 2).substring(0, 1000));
-        }
-
-        const cash = findCashAtEnd(cfRes.data.Rows?.Row, i === 0) || 0;
+        const cash = findCashAtEnd(cfRes.data.Rows?.Row) || 0;
         currentCash = cash;
         balances.push({
           date: endDateStr,
