@@ -2905,6 +2905,77 @@ app.get('/api/rebuild-margins/status', (req, res) => {
   res.json(status);
 });
 
+// Calculate margins from Google Sheets ingredient costs + recipes
+app.get('/api/calculate-margins', async (req, res) => {
+  try {
+    const sheetsOAuth = require('./pipeline/sheets-oauth');
+    const calculateMargins = require('./pipeline/calculate-margins');
+
+    // Check if Google is connected
+    if (!sheetsOAuth.isConnected()) {
+      return res.status(400).json({
+        error: 'Google not authenticated',
+        message: 'Visit /api/google/connect to authorize access to Recipe LSB folder',
+        status: 'google_not_connected',
+      });
+    }
+
+    // Load Square sales data from analysis.json
+    const analysisPath = path.join(__dirname, 'analysis.json');
+    let squareSalesData = [];
+    if (fs.existsSync(analysisPath)) {
+      try {
+        const analysis = JSON.parse(fs.readFileSync(analysisPath, 'utf-8'));
+        squareSalesData = (analysis.products || []).map(p => ({
+          product: p.product,
+          units: p.units,
+          price: p.sale_price,
+        }));
+      } catch (e) {
+        console.warn('Failed to load sales data from analysis.json:', e.message);
+      }
+    }
+
+    if (squareSalesData.length === 0) {
+      return res.status(400).json({
+        error: 'No sales data available',
+        message: 'Analysis.json not found or empty. Cannot calculate margins without Square sales data.',
+        status: 'no_sales_data',
+      });
+    }
+
+    // Calculate margins in background, return immediately
+    res.json({
+      status: 'calculating',
+      message: 'Margin calculation started. Check /api/calculate-margins/status for progress.',
+      productsCount: squareSalesData.length,
+    });
+
+    // Run calculation in background
+    (async () => {
+      try {
+        console.log(`🔄 Starting margin calculation with ${squareSalesData.length} products…`);
+        const result = await calculateMargins.main({ squareSalesData });
+
+        // Save result to analysis.json for dashboard consumption
+        fs.writeFileSync(analysisPath, JSON.stringify(result, null, 2));
+        console.log('✅ Margins calculation and analysis.json update complete');
+      } catch (err) {
+        console.error('Margin calculation error:', err.message);
+        if (err.code === 'GOOGLE_NOT_CONNECTED') {
+          console.error('  → Google OAuth failed. Visit /api/google/connect to re-authorize');
+        }
+      }
+    })();
+  } catch (err) {
+    console.error('Calculate margins startup error:', err.message);
+    res.status(500).json({
+      error: 'Calculation startup failed',
+      message: err.message,
+    });
+  }
+});
+
 // Cash balance trend - fetches Statement of Cash Flows from QB
 app.get('/api/cash-balance', async (req, res) => {
   try {
