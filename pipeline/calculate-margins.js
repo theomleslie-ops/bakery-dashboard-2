@@ -1,9 +1,9 @@
-// Automated margin calculation pipeline:
+// Automated margin calculation pipeline with bakery-specific costing logic:
 // 1. Read ingredient costs from a Google Sheet in "Recipe LSB" folder
 // 2. Pull recipes from Google Sheets in the same folder
-// 3. Cost recipes by matching ingredients
-// 4. Combine with Square sales data to calculate margins
-// 5. Return full margin analysis
+// 3. Handle base doughs, pre-ferments, compound recipes per bakery methodology
+// 4. Cost recipes by matching ingredients
+// 5. Combine with Square sales data to calculate margins
 
 const fs = require('fs');
 const path = require('path');
@@ -15,6 +15,53 @@ const OUT_DIR = path.join(__dirname, '..', 'data', 'pipeline');
 
 const load = (f, fallback) => {
   try { return JSON.parse(fs.readFileSync(f, 'utf-8')); } catch { return fallback; }
+};
+
+// ============ BAKERY-SPECIFIC COSTING LOGIC ============
+
+// Pre-ferment expansion formulas (% by weight)
+const PRE_FERMENT_FORMULAS = {
+  levain: {
+    'High Gluten Flour': 0.262,
+    'Whole Wheat Flour': 0.262,
+    'Water': 0.523,
+    'Levain Mother': 0.006,
+  },
+  poolish: {
+    'High Gluten Flour': 0.496,
+    'Water': 0.496,
+    'Dry Yeast': 0.008,
+  },
+};
+
+// Product → Base Dough Mapping (hardcoded business logic)
+// Format: product name → { baseDough: recipe name, portionKg }
+const PRODUCT_BASE_DOUGH_MAP = {
+  'Country Round': { baseDough: 'Country dough', portionKg: 1.0 },
+  'Country PC': { baseDough: 'Country dough', portionKg: 0.28 },
+  'Baguette': { baseDough: 'Country dough', portionKg: 0.75 },
+  'Epi': { baseDough: 'Country dough', portionKg: 0.75 },
+  'Long Braid': { baseDough: 'Challah dough', portionKg: 1.02 },
+};
+
+// Base dough recipe names to recognize and cost separately
+const BASE_DOUGH_RECIPES = new Set([
+  'country dough',
+  'challah dough',
+  'pain de mie dough',
+]);
+
+// Expand pre-ferment references into raw ingredients
+const expandPreFerment = (ingredientName, kg) => {
+  const nameLC = ingredientName.toLowerCase().trim();
+  const formula = PRE_FERMENT_FORMULAS[nameLC] || PRE_FERMENT_FORMULAS[nameLC.replace(/[^a-z]/g, '')];
+
+  if (!formula) return null;
+
+  return Object.entries(formula).map(([component, ratio]) => ({
+    name: component,
+    kg: kg * ratio,
+  }));
 };
 
 // Parse ingredient costs from a Google Sheet (assumed format: Name | Price/kg)
@@ -84,6 +131,62 @@ const readIngredientsSheet = async (drive, sheets, folderId) => {
   }
 };
 
+// Expand pre-ferments in recipe ingredients before costing
+const expandPreFermentsInRecipe = (recipe) => {
+  const expanded = { ...recipe };
+  const newIngredients = [];
+
+  for (const ing of recipe.ingredients) {
+    const expanded_ing = expandPreFerment(ing.name, ing.kg);
+    if (expanded_ing) {
+      newIngredients.push(...expanded_ing);
+    } else {
+      newIngredients.push(ing);
+    }
+  }
+
+  expanded.ingredients = newIngredients;
+  return expanded;
+};
+
+// Handle Breakfast Bar compound recipe (multiple layers = one product)
+// Recognizes "Breakfast Bar Bottom", "Breakfast Bar Middle", "Breakfast Bar Top" and combines them
+const combineBreakfastBarLayers = (costedRecipes) => {
+  const result = [];
+  const bbLayers = {};
+
+  for (const recipe of costedRecipes) {
+    const nameLC = recipe.recipe.toLowerCase();
+    const isBreakfastBar = /breakfast.?bar/i.test(recipe.recipe);
+
+    if (isBreakfastBar) {
+      // Collect all layers
+      if (!bbLayers['total_cost']) bbLayers['total_cost'] = 0;
+      bbLayers['total_cost'] += recipe.costPerUnit || 0;
+
+      // Mark as handled
+      bbLayers[nameLC] = true;
+    } else {
+      result.push(recipe);
+    }
+  }
+
+  // If we found Breakfast Bar layers, create a combined entry (cost / 32 units)
+  if (bbLayers['total_cost'] > 0) {
+    result.push({
+      recipe: 'Breakfast Bar',
+      sheet: 'Breakfast Bar (compound)',
+      status: 'costed',
+      costPerUnit: Math.round((bbLayers['total_cost'] / 32) * 100) / 100,
+      unitsPerBatch: 32,
+      totalBatchKg: null,
+      costByIngredient: [],
+    });
+  }
+
+  return result;
+};
+
 // Main calculation function
 const main = async ({ squareSalesData = [] } = {}) => {
   console.log('🔄 Calculating bakery margins from Google Sheets…\n');
@@ -133,13 +236,35 @@ const main = async ({ squareSalesData = [] } = {}) => {
   }
   console.log();
 
-  // Step 5: Cost recipes
-  console.log('Step 3: Costing recipes…');
+  // Step 5: Apply bakery-specific preprocessing
+  console.log('Step 3: Applying bakery costing logic…');
+
+  // Expand pre-ferments in all recipes
+  const expandedRecipes = recipeData.recipes.map(expandPreFermentsInRecipe);
+  console.log(`  ✓ Expanded Levain/Poolish references to component ingredients`);
+
+  // Separate base doughs from regular recipes
+  const baseDoughRecipes = [];
+  const productRecipes = [];
+
+  for (const recipe of expandedRecipes) {
+    const recipeLC = recipe.recipe.toLowerCase();
+    if (BASE_DOUGH_RECIPES.has(recipeLC)) {
+      baseDoughRecipes.push(recipe);
+    } else {
+      productRecipes.push(recipe);
+    }
+  }
+
+  console.log(`  ✓ Identified ${baseDoughRecipes.length} base doughs, ${productRecipes.length} products\n`);
+
+  // Step 6: Cost all recipes
+  console.log('Step 4: Costing recipes…');
   const ingredientOverrides = load(path.join(OUT_DIR, 'ingredient-overrides.json'), {});
   const priceOverrides = load(path.join(OUT_DIR, 'ingredient-price-overrides.json'), {});
   const exclusions = load(path.join(OUT_DIR, 'recipe-exclusions.json'), []);
 
-  // Convert ingredient costs dictionary to vendor prices array format (costing module expects this shape)
+  // Convert ingredient costs dictionary to vendor prices array format
   const vendorPricesArray = Object.entries(ingredientCosts).map(([name, price]) => ({
     itemCode: name,
     description: name,
@@ -147,27 +272,59 @@ const main = async ({ squareSalesData = [] } = {}) => {
     pricePerKg: price,
   }));
 
-  const { costs, coverage } = await costing.costAllRecipes(recipeData.recipes, vendorPricesArray, {
-    ingredientOverrides,
-    priceOverrides,
-    exclusions,
-  });
+  // Cost base doughs first
+  const { costs: baseDoughCosts, coverage: baseCoverage } = await costing.costAllRecipes(
+    baseDoughRecipes,
+    vendorPricesArray,
+    { ingredientOverrides, priceOverrides, exclusions }
+  );
 
-  console.log(`✓ Costed: ${coverage.costed.length} recipes`);
-  console.log(`⚠️  Needs attention: ${coverage.needsAttention.length} recipes`);
-  if (coverage.excluded.length > 0) {
-    console.log(`⊘ Excluded: ${coverage.excluded.length} recipes`);
+  console.log(`  Base doughs: ${baseCoverage.costed.length} costed, ${baseCoverage.needsAttention.length} need attention`);
+
+  // Build base dough cost lookup (cost per kg)
+  const baseDoughCostPerKg = {};
+  for (const recipe of baseCoverage.costed) {
+    baseDoughCostPerKg[recipe.recipe.toLowerCase()] = recipe.costPerUnit / recipe.unitsPerBatch;
   }
-  console.log();
 
-  // Step 6: Build recipe cost lookup
+  // Cost product recipes
+  const { costs: productCosts, coverage: productCoverage } = await costing.costAllRecipes(
+    productRecipes,
+    vendorPricesArray,
+    { ingredientOverrides, priceOverrides, exclusions }
+  );
+
+  console.log(`  Products: ${productCoverage.costed.length} costed, ${productCoverage.needsAttention.length} need attention\n`);
+
+  // Step 7: Combine Breakfast Bar layers (bottom + middle + top / 32 units)
+  const combinedProductRecipes = combineBreakfastBarLayers(productCoverage.costed);
+  const bbCombined = combinedProductRecipes.length < productCoverage.costed.length;
+  if (bbCombined) {
+    console.log(`  ✓ Combined Breakfast Bar layers into single product cost\n`);
+  }
+
+  // Step 8: Build recipe cost lookup with base dough mappings
   const recipeCostMap = {};
-  for (const recipe of coverage.costed) {
+
+  // Add costed product recipes (may include combined Breakfast Bar)
+  for (const recipe of combinedProductRecipes) {
     recipeCostMap[recipe.recipe] = recipe.costPerUnit;
   }
 
-  // Step 7: Calculate margins with Square sales data
-  console.log('Step 4: Calculating margins from Square sales data…');
+  // Override with base dough products (cost = baseDough cost/kg × portion weight)
+  for (const [productName, mapping] of Object.entries(PRODUCT_BASE_DOUGH_MAP)) {
+    const baseDoughLC = mapping.baseDough.toLowerCase();
+    const baseDoughCost = baseDoughCostPerKg[baseDoughLC];
+
+    if (baseDoughCost != null) {
+      recipeCostMap[productName] = baseDoughCost * mapping.portionKg;
+    } else {
+      console.warn(`  ⚠️  Base dough "${mapping.baseDough}" not costed, can't calculate ${productName}`);
+    }
+  }
+
+  // Step 9: Calculate margins with Square sales data
+  console.log('Step 6: Calculating margins from Square sales data…');
   let totalRevenue = 0;
   let totalCogs = 0;
   let totalUnits = 0;
@@ -211,13 +368,16 @@ const main = async ({ squareSalesData = [] } = {}) => {
     },
     products,
     coverage: {
-      costed: coverage.costed.length,
-      needsAttention: coverage.needsAttention.length,
-      excluded: coverage.excluded.length,
+      baseDoughs: baseCoverage.costed.length,
+      products: productCoverage.costed.length,
+      needsAttention: productCoverage.needsAttention.length + baseCoverage.needsAttention.length,
+      excluded: productCoverage.excluded.length + baseCoverage.excluded.length,
     },
   };
 
   console.log(`\n✅ Margin calculation complete`);
+  console.log(`   Base doughs costed: ${baseCoverage.costed.length}`);
+  console.log(`   Products costed: ${productCoverage.costed.length}`);
   console.log(`   Total Revenue: $${result.summary.total_revenue.toLocaleString()}`);
   console.log(`   Total COGS: $${result.summary.total_cogs.toLocaleString()}`);
   console.log(`   Blended Margin: ${result.summary.blended_margin_pct}%`);
