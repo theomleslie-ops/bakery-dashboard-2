@@ -4,12 +4,12 @@ Bakery Recipe Costing & Margin Analysis API
 Serves cost analysis for top 20 products
 """
 
-from flask import Flask, jsonify, send_file
+from flask import Flask, jsonify, send_file, render_template
 import json
 import os
 from datetime import datetime
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 
 # Load analysis data
 ANALYSIS_FILE = os.path.join(os.path.dirname(__file__), "analysis.json")
@@ -24,17 +24,8 @@ def load_analysis():
 
 @app.route("/", methods=["GET"])
 def home():
-    """API home endpoint"""
-    return jsonify({
-        "service": "Bakery Costing & Margin Analysis",
-        "version": "1.2",
-        "endpoints": {
-            "/api/summary": "Blended margin summary",
-            "/api/products": "All 20 products with costs and margins",
-            "/api/products/<rank>": "Individual product by rank",
-            "/api/download": "Download full JSON analysis"
-        }
-    })
+    """Dashboard home page"""
+    return render_template('index.html')
 
 @app.route("/api/summary", methods=["GET"])
 def summary():
