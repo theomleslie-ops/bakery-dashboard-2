@@ -5,85 +5,84 @@ const path = require('path');
 const qbClient = require('./qb-client');
 
 // Parse extracted PDF text to find line items
-// Handles multiple invoice formats: table-based, CSV-like, or free-form
+// Matches Chef's Warehouse invoice structure: QTY UNIT | ITEM_CODE | DESCRIPTION | PRICE | UOM | ...
 const parseInvoiceText = (text) => {
   const items = [];
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-  // Strategy: look for lines that have multiple numeric values (likely qty + price)
-  // Filter out obvious non-item lines (headers, totals, metadata)
-
-  const skipPatterns = /^(invoice|bill|number|date|po|po#|ship|terms|payment|account|thank|notes|subtotal|total|tax|amount due|grand total|balance|please|reference|vendor|from|to|attention)/i;
-  const numericLine = /[\d]+[\.\,]?[\d]*/g;
+  // Skip non-item patterns: headers, footers, metadata, route codes, totals
+  const skipPatterns = /^(ordered|shipped|item|description|price|uom|extended|invoice|bill|number|date|po|po#|ship|terms|payment|account|thank|notes|subtotal|total|tax|amount due|grand total|balance|please|reference|vendor|from|to|attention|page|tel|fax|route|ca-[a-z]+|received|date:|po number|thank you|continued|notes:)/i;
 
   for (const line of lines) {
-    // Skip empty, too-short, or header lines
-    if (line.length < 5 || skipPatterns.test(line)) continue;
+    if (line.length < 10 || skipPatterns.test(line)) continue;
 
-    // Extract all numbers from the line
-    const numbers = line.match(numericLine) || [];
+    // Target pattern: QTY UNIT [more fields] PRICE
+    // Examples from Chef's Warehouse:
+    // "8 PC | 8 PC | BF100 | WHOLE MILK GALLON | 5.71 | PC | 45.68"
+    // When extracted from PDF, pipes may be spaces: "8 PC 8 PC BF100 WHOLE MILK GALLON 5.71 PC 45.68"
 
-    // Skip if no numbers or too many (likely not a line item)
-    if (numbers.length < 2 || numbers.length > 6) continue;
+    // Key: Must start with a quantity (small number 1-999) followed by a unit code
+    const unitCodes = ['PC', 'CS', 'LB', 'EA', 'BX', 'DZ', 'CT', 'CA', 'KG', 'G', 'OZ', 'QT', 'GL', 'PT', 'ML', 'L'];
+    const unitPattern = unitCodes.join('|');
+    const qtyUnitMatch = line.match(new RegExp(`^(\\d+(?:\\.\\d+)?)\\s+(${unitPattern})\\b`, 'i'));
 
-    // Parse the line
-    // Typical formats:
-    // 1. "Item Name QTY UNIT PRICE AMOUNT"
-    // 2. "Item Name QTY PRICE"
-    // 3. "Item Name: QTY @ PRICE"
+    if (!qtyUnitMatch) continue;
 
-    const numericValues = numbers.map(n => parseFloat(n.replace(/,/g, '')));
-    if (numericValues.some(isNaN)) continue;
+    const qty = parseFloat(qtyUnitMatch[1]);
+    if (qty < 0.01 || qty > 10000) continue; // Reasonable qty range
 
-    // Extract description (everything up to first number)
-    const descMatch = line.match(/^([^\d]*?)[\d]/);
-    let description = descMatch ? descMatch[1].trim() : '';
+    // Extract all numbers from line (for finding prices)
+    const allNumbers = line.match(/\d+(?:\.\d{1,4})?/g) || [];
+    if (allNumbers.length < 2) continue; // Need at least qty and price
 
-    // Clean up description
-    description = description
-      .replace(/\*+$/, '') // Remove trailing asterisks
-      .replace(/^\W+/, '')  // Remove leading non-word chars
-      .substring(0, 80);    // Limit length
+    // Parse numbers: qty (already found), skip some middle ones (shipped qty, codes), find prices near end
+    const numericValues = allNumbers.map(n => parseFloat(n));
 
-    if (!description || description.length < 2) continue;
+    // Description is text between qty+unit and first price
+    // For now, extract everything after the qty+unit part
+    const afterQtyUnit = line.substring(qtyUnitMatch[0].length).trim();
 
-    // Heuristic for parsing qty and price:
-    // Usually: [small number or decimal] [larger number or currency]
-    // Try different arrangements
+    // Look for item code (alphanumeric, usually 4-10 chars, starts with letter or digit)
+    // Then everything up to the first price
+    let description = '';
+    let unitPrice = null;
 
-    let qty, unitPrice;
-
-    if (numericValues.length === 2) {
-      // Simple: qty and price (or total)
-      qty = numericValues[0];
-      unitPrice = numericValues[1];
-    } else if (numericValues.length >= 3) {
-      // Multiple numbers: usually qty, unit_price, total
-      // Qty is usually smallest, price is somewhere in middle/end
-      // Total is usually largest
-      qty = numericValues[0];
-      unitPrice = numericValues[1];
-      const total = numericValues[numericValues.length - 1];
-
-      // If unitPrice > total, it might be reversed
-      if (unitPrice > total) {
-        unitPrice = total / qty; // Assume last is total, calculate unit price
-      } else if (unitPrice * qty > total * 1.2) {
-        // Unit price too high relative to total, try next number
-        unitPrice = numericValues[2] || unitPrice;
+    // Try to find a price value (should be between 0.5 and 5000 for ingredients)
+    // Usually one of the last 1-3 numeric values is the unit price
+    for (let i = numericValues.length - 1; i > 0; i--) {
+      const val = numericValues[i];
+      if (val >= 0.5 && val < 5000) {
+        unitPrice = val;
+        // Description is text before this price number
+        const priceIndex = afterQtyUnit.lastIndexOf(val.toString());
+        if (priceIndex > 0) {
+          description = afterQtyUnit.substring(0, priceIndex).trim();
+        } else {
+          description = afterQtyUnit;
+        }
+        break;
       }
     }
 
-    // Validate and add item
-    if (qty > 0 && unitPrice > 0 && !isNaN(qty) && !isNaN(unitPrice)) {
-      // Sanity check: reasonable ingredient prices are typically < $1000/unit
-      if (unitPrice < 1000) {
-        items.push({
-          description,
-          quantity: qty,
-          unitPrice: Math.round(unitPrice * 100) / 100,
-        });
-      }
+    if (!unitPrice || !description) continue;
+
+    // Clean description
+    description = description
+      .replace(/\s*\|\s*/g, ' ')  // Replace pipes with spaces
+      .replace(/\s+/g, ' ')        // Collapse multiple spaces
+      .substring(0, 100)           // Limit length
+      .trim();
+
+    // Filter out non-item descriptions
+    if (description.length < 3 || /^[\d\s\-\.]+$/.test(description)) continue;
+
+    // Validate price is reasonable
+    if (unitPrice > 0 && unitPrice < 5000) {
+      items.push({
+        description,
+        quantity: qty,
+        unitPrice: Math.round(unitPrice * 100) / 100,
+      });
     }
   }
 
