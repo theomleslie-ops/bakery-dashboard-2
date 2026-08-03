@@ -2,16 +2,15 @@
   "mappings": [
     {
       "squareItem": "Country Round",
-      "recipe": "IRISH SODA BREAD",
-      "quantity": "1kg"
+      "recipe": "Country round"
     },
     {
       "squareItem": "Breakfast Bar",
-      "recipe": "PATE SABLE"
+      "recipe": "Breakfast bars BOTTOM"
     },
     {
       "squareItem": "NO-NUT Choc Chip Cookie",
-      "recipe": "Double chocolate cookies"
+      "recipe": "Chocolate chips cookies (no nuts)"
     },
     {
       "squareItem": "Double Choc Chip Cookie",
@@ -19,20 +18,19 @@
     },
     {
       "squareItem": "Country PC",
-      "recipe": "IRISH SODA BREAD",
-      "quantity": "450g"
+      "recipe": "Country pc"
     },
     {
       "squareItem": "ORIGINAL Choc Chip Cookie",
-      "recipe": "Double chocolate cookies"
+      "recipe": "Original chocolate chips cookies"
     },
     {
       "squareItem": "Oatmeal Raisin Cookie",
-      "recipe": "Double chocolate cookies"
+      "recipe": "Oatmeal cookies"
     },
     {
       "squareItem": "Forest Scone",
-      "recipe": "Black  Sesame Scone"
+      "recipe": "FOREST SCONES"
     },
     {
       "squareItem": "Chocolate Sourdough \"Scone\"",
@@ -40,7 +38,7 @@
     },
     {
       "squareItem": "Long Braid",
-      "recipe": "IRISH SODA BREAD"
+      "recipe": "Country baguette"
     },
     {
       "squareItem": "Cinn SWIRL",
@@ -52,21 +50,19 @@
     },
     {
       "squareItem": "Baguette",
-      "recipe": "IRISH SODA BREAD",
-      "quantity": "750g"
+      "recipe": "Country baguette"
     },
     {
       "squareItem": "PB Mound Cookie",
-      "recipe": "Double chocolate cookies"
+      "recipe": "PB cookies"
     },
     {
       "squareItem": "Berries & Cream Scone",
-      "recipe": "Lemon Currant British"
+      "recipe": "Berries & Cream scone - BRITISH"
     },
     {
       "squareItem": "Epi",
-      "recipe": "IRISH SODA BREAD",
-      "quantity": "750g"
+      "recipe": "Country epi"
     },
     {
       "squareItem": "Nutella Bun",
@@ -74,7 +70,7 @@
     },
     {
       "squareItem": "Olive PC",
-      "recipe": "IRISH SODA BREAD"
+      "recipe": "Country olive dough with Galahad"
     }
   ]
 }
