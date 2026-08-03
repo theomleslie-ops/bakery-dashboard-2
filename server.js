@@ -14,8 +14,10 @@ const qbCache = require('./pipeline/qb-cache');
 const claudeMCP = require('./pipeline/claude-mcp');
 const composioConnectors = require('./pipeline/composio-connectors');
 const marginSchedulerModule = require('./pipeline/margin-scheduler');
+const ingredientSchedulerModule = require('./pipeline/ingredient-scheduler');
 
 let marginScheduler = null;
+let ingredientScheduler = null;
 
 // Safe lazy-load of initMargins
 const initMargins = async () => {
@@ -2996,42 +2998,64 @@ app.get('/api/margin-scheduler/status', (req, res) => {
 });
 
 // Extract and display ingredient costs from QB bills
-app.get('/api/ingredient-costs', async (req, res) => {
+app.get('/api/ingredient-costs', (req, res) => {
   try {
-    const qbClient = require('./pipeline/qb-client');
-    const qbBillExtractor = require('./pipeline/qb-bill-extractor');
+    const cacheFile = path.join(__dirname, 'ingredient-costs-cache.json');
 
-    // Check if QB is connected
-    let qbConnected = false;
-    try {
-      const tokens = qbClient.loadTokens();
-      qbConnected = !!(tokens && tokens.refresh_token);
-    } catch {}
-
-    if (!qbConnected) {
-      return res.status(400).json({
-        error: 'QuickBooks not authenticated',
-        message: 'Visit /api/quickbooks/connect to authorize access to vendor bills',
-        status: 'qb_not_connected',
+    if (!fs.existsSync(cacheFile)) {
+      return res.status(202).json({
+        status: 'extracting',
+        message: 'Ingredient costs are being extracted in the background. Check /api/ingredient-costs/status for progress.',
+        cacheFile,
       });
     }
 
-    const result = await qbBillExtractor.extractBills({ weeks: parseInt(req.query.weeks || '52') });
+    // Read cached result instantly (no processing needed)
+    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf-8'));
 
     res.json({
       status: 'success',
-      generatedAt: result.generatedAt,
-      billsProcessed: result.billsProcessed,
-      ingredientsExtracted: result.ingredientsExtracted,
-      ingredients: result.ingredients,
-      note: 'Sorted alphabetically. Shows most recent purchase price per ingredient. If ingredient appears from multiple vendors, shows most recent purchase regardless of vendor.',
+      generatedAt: cached.generatedAt,
+      billsProcessed: cached.billsProcessed,
+      ingredientsExtracted: cached.ingredientsExtracted,
+      ingredients: cached.ingredients,
+      note: 'Sorted alphabetically. Shows most recent purchase price per ingredient. From QB bill PDFs.',
+      source: 'cached (updated on startup and when manually triggered)',
     });
   } catch (err) {
-    console.error('Ingredient cost extraction error:', err.message);
+    console.error('Ingredient cost cache read error:', err.message);
     res.status(500).json({
-      error: 'Bill extraction failed',
+      error: 'Failed to read ingredient costs cache',
       message: err.message,
       code: err.code,
+    });
+  }
+});
+
+// Ingredient extraction status - check background job progress
+app.get('/api/ingredient-costs/status', (req, res) => {
+  const status = ingredientScheduler.getStatus();
+  res.json({
+    status: status.isRunning ? 'extracting' : 'idle',
+    isRunning: status.isRunning,
+    lastRun: status.lastRun || null,
+  });
+});
+
+// Manually trigger ingredient extraction (runs in background)
+app.post('/api/ingredient-costs/trigger', async (req, res) => {
+  const weeks = parseInt(req.query.weeks || '52');
+  const triggered = await ingredientScheduler.triggerNow(weeks);
+
+  if (triggered) {
+    res.json({
+      status: 'started',
+      message: `Ingredient extraction started for last ${weeks} weeks`,
+    });
+  } else {
+    res.json({
+      status: 'already_running',
+      message: 'Extraction already in progress',
     });
   }
 });
@@ -3352,6 +3376,10 @@ const server = app.listen(PORT, async () => {
   // Initialize automated margin calculation scheduler
   // Runs daily at 6 AM UTC, with immediate run on startup
   marginScheduler = marginSchedulerModule.start();
+
+  // Initialize ingredient cost extraction scheduler
+  // Runs on startup to populate cache (takes time, runs in background)
+  ingredientScheduler = ingredientSchedulerModule.start();
 
   // Auto-rebuild product margins weekly (Sundays at 3am)
   // Fetches vendor prices from QB + recipes from Google Drive
