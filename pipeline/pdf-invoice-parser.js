@@ -1,8 +1,8 @@
 // Parse itemized line items from vendor invoice PDFs
-// Handles Chef's Warehouse invoice format where each item spans 3 lines:
+// Handles Chef's Warehouse invoice format where each item spans 3-5 lines:
 // Line 1: qty unit | qty unit | item# | description
-// Line 2: pack size / origin info
-// Line 3: unit_price | uom | extended_price
+// Line 2-3: pack size / origin / formatting info
+// Line 4-5: unit_price | uom | extended_price
 
 const path = require('path');
 const qbClient = require('./qb-client');
@@ -22,7 +22,7 @@ const parseInvoiceText = (text) => {
   const excludePattern = new RegExp(`\\b(${excludeKeywords.join('|')})\\b`, 'i');
 
   // Skip headers/footers
-  const skipPatterns = /^(ordered|shipped|item|description|price|uom|extended|invoice|bill|number|date|po|po#|ship|terms|payment|account|thank|notes|subtotal|total|tax|amount due|grand total|balance|please|reference|vendor|from|to|attention|page|tel|fax|route|ca-|received|date:|po number|thank you|continued|notes:|delivery|instructions)/i;
+  const skipPatterns = /^(ordered|shipped|item|description|price|uom|extended|invoice|bill|number|date|po|po#|ship|terms|payment|account|thank|notes|subtotal|total|tax|amount due|grand total|balance|please|reference|vendor|from|to|attention|page|tel|fax|route|ca-|received|date:|po number|thank you|continued|notes:|delivery|instructions|--\s*\d+\s*of\s*\d+|wea|pay|totals)/i;
 
   let i = 0;
   while (i < lines.length) {
@@ -50,31 +50,34 @@ const parseInvoiceText = (text) => {
       continue;
     }
 
-    // Extract description from this line (everything after qty+unit)
-    const afterQtyUnit = line.substring(qtyUnitMatch[0].length).trim();
-
-    // Next line should be pack size / origin info (optional)
-    // We'll merge the next 2 lines if they exist and look like continuation lines
+    // Merge up to next 4 lines to capture complete item row
+    // (some items span 3-5 lines depending on PDF layout)
     let mergedLine = line;
-    if (i + 2 < lines.length) {
-      const nextLine = lines[i + 1];
-      const pricingLine = lines[i + 2];
+    let linesConsumed = 0;
 
-      // Pricing line should contain price numbers
-      const priceMatch = pricingLine.match(/\d+\.?\d*/);
+    for (let j = 1; j <= 4 && i + j < lines.length; j++) {
+      const nextLine = lines[i + j];
 
-      // If next line doesn't look like a header and pricing line has numbers, merge
-      if (priceMatch && !skipPatterns.test(nextLine)) {
-        mergedLine = line + ' ' + nextLine + ' ' + pricingLine;
-        i += 2; // Skip the next two lines
+      // Stop if we hit a header or another item start
+      if (skipPatterns.test(nextLine) || nextLine.match(new RegExp(`^\\d+\\s+(${unitPattern})\\b`, 'i'))) {
+        break;
+      }
+
+      // Include the line if it looks like part of the item
+      // (has text or numbers, not empty)
+      if (nextLine.length > 0) {
+        mergedLine = mergedLine + ' ' + nextLine;
+        linesConsumed = j;
       }
     }
+
+    i += linesConsumed; // Skip the lines we merged
 
     // Extract all numbers from merged line
     const allNumbers = mergedLine.match(/\d+(?:\.\d{1,4})?/g) || [];
     const numericValues = allNumbers.map(n => parseFloat(n));
 
-    // Find valid prices (0.5 to 5000)
+    // Find valid prices (0.5 to 5000, likely unit costs or totals)
     const validPrices = [];
     for (const val of numericValues) {
       if (val >= 0.5 && val < 5000) {
@@ -95,18 +98,21 @@ const parseInvoiceText = (text) => {
       continue;
     }
 
-    // Description is the part after qty+unit, before numbers get too messy
-    let description = afterQtyUnit;
+    // Extract description: everything after qty+unit, before prices get messy
+    // Keep item codes (they're useful for matching) but clean up formatting
+    let description = mergedLine.substring(qtyUnitMatch[0].length).trim();
 
-    // Remove UOM codes and numbers that aren't part of item name
+    // Clean up: remove pack format patterns (e.g., "4/1 GAL", "10/3 LB", "24/500 ML")
+    // and other metadata, but keep alphanumeric item identifiers
     description = description
-      .replace(/\d+\.?\d*\s*(PC|CS|LB|EA|BX|DZ|CT|CA|KG|G|OZ|QT|GL|PT|ML|L|UOM)\b/gi, '') // Remove UOM patterns
-      .replace(/\d+\.?\d*/g, '') // Remove remaining numbers
-      .replace(/\s+/g, ' ')       // Collapse spaces
+      .replace(/\d+\/\d+\s*[A-Z]+/g, '') // Remove pack formats like "4/1 GAL"
+      .replace(/\b(plt|plt#|pallet|case|box|bag|pack|cs|ea|lb|pc|kg|g|oz|ml|l)\b/gi, '') // Remove unit references
+      .replace(/Plt#:|CS|PC|LB|BX|EA|CA|DZ|CT|KG|G|OZ|QT|GL|PT|ML|L/g, '') // Remove standalone UOM
+      .replace(/\s+/g, ' ')  // Collapse spaces
       .trim();
 
-    // Filter out garbage: too short, only numbers, suspicious patterns
-    if (!description || description.length < 3) {
+    // Filter out garbage: too short, only whitespace/numbers
+    if (!description || description.length < 3 || /^[\s\d\-\.]+$/.test(description)) {
       i++;
       continue;
     }
