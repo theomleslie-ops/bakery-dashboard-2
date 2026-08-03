@@ -1,98 +1,18 @@
 {
-  "Blueberries (frozen)": {
-    "price": 9.5,
-    "unit": "per kg",
-    "pricePerLb": 4.31,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Blueberries": {
-    "price": 9.5,
-    "unit": "per kg",
-    "pricePerLb": 4.31,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Blackberries (frozen)": {
-    "price": 10,
-    "unit": "per kg",
-    "pricePerLb": 4.54,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Blueberries (frozen), tossed in corn starch": {
-    "price": 9.5,
-    "unit": "per kg",
-    "pricePerLb": 4.31,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Blackberries (frozen), tossed in corn starch": {
-    "price": 10,
-    "unit": "per kg",
-    "pricePerLb": 4.54,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Cranberries": {
-    "price": 8.75,
-    "unit": "per kg",
-    "pricePerLb": 3.97,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "RASPBERRIES": {
-    "price": 9.25,
-    "unit": "per kg",
-    "pricePerLb": 4.19,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Apples": {
-    "price": 2.5,
-    "unit": "per kg",
-    "pricePerLb": 1.13,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Bananas, RIPE (BROWN SPOTS!)": {
-    "price": 1.75,
-    "unit": "per kg",
-    "pricePerLb": 0.79,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Zuchinni": {
-    "price": 3.5,
-    "unit": "per kg",
-    "pricePerLb": 1.59,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Zucchini": {
-    "price": 3.5,
-    "unit": "per kg",
-    "pricePerLb": 1.59,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Polenta": {
-    "price": 4.5,
-    "unit": "per kg",
-    "pricePerLb": 2.04,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Vanilla": {
-    "price": 18,
-    "unit": "per kg",
-    "pricePerLb": 8.16,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Dry yeast 1": {
-    "price": 15.5,
-    "unit": "per kg",
-    "pricePerLb": 7.03,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "Mozzarella Shredded": {
-    "price": 6.5,
-    "unit": "per kg",
-    "pricePerLb": 2.95,
-    "source": "Regional wholesale market rate 2026-08"
-  },
-  "GIUSTO OLD FASH ROLLED OATS 1/50 LB CS": {
-    "price": 195.4,
-    "unit": "50 lb case",
-    "pricePerLb": 3.908,
-    "source": "Chef's Warehouse invoice 4/28/2026"
-  }
+  "WHITE SUGAR": 0.84,
+  "SUGAR": 0.84,
+  "BROWN SUGAR": 0.90,
+  "BUTTER": 2.50,
+  "EGGS": 1.27,
+  "ALL PURPOSE FLOUR": 1.00,
+  "COCOA POWDER": 3.50,
+  "BAKING SODA": 0.50,
+  "BAKING POWDER": 0.75,
+  "SALT": 0.30,
+  "CHOCOLATE": 5.00,
+  "CHOCOLATE BITTERSWEET": 5.00,
+  "BITTER CHOCOLATE": 6.00,
+  "CHOCOLATE CHIPS": 5.00,
+  "UNSWEETENED CHOCOLATE": 6.00,
+  "CHERRIES": 8.00
 }
