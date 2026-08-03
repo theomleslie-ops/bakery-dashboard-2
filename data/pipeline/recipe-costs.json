@@ -301,14 +301,12 @@
       "portionKg": 1.865,
       "portionBasis": "1865g per pan",
       "unitsPerBatch": 1.0010723860589814,
-      "batchCost": 4.64,
-      "costPerUnit": null,
-      "allPriced": false,
-      "linesCosted": 11,
+      "batchCost": 6.3866814879938305,
+      "costPerUnit": 6.379839836694425,
+      "allPriced": true,
+      "linesCosted": 12,
       "linesTotal": 12,
-      "unpricedIngredients": [
-        "Apples"
-      ],
+      "unpricedIngredients": [],
       "lines": [
         {
           "ingredient": "Olive Oil /Aceite",
@@ -435,11 +433,11 @@
         {
           "ingredient": "Apples",
           "kg": 0.7,
-          "matchedTo": null,
+          "matchedTo": "Apples (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 2.5,
+          "lineCost": 1.75,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         },
@@ -565,14 +563,12 @@
       "portionKg": 1.392,
       "portionBasis": "sheet: Total brut/net",
       "unitsPerBatch": 1,
-      "batchCost": 5.13,
-      "costPerUnit": null,
-      "allPriced": false,
-      "linesCosted": 11,
+      "batchCost": 6.161005023047,
+      "costPerUnit": 6.161005023047,
+      "allPriced": true,
+      "linesCosted": 12,
       "linesTotal": 12,
-      "unpricedIngredients": [
-        "Bananas, RIPE (BROWN SPOTS!)"
-      ],
+      "unpricedIngredients": [],
       "lines": [
         {
           "ingredient": "Butter MANTEQUILLA",
@@ -616,11 +612,11 @@
         {
           "ingredient": "Bananas, RIPE (BROWN SPOTS!)",
           "kg": 0.588,
-          "matchedTo": "OLIVE SLICED BLK RIPE",
+          "matchedTo": "Bananas, RIPE (BROWN SPOTS!) (override)",
           "itemCode": "GO211",
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "low",
+          "pricePerKg": 1.75,
+          "lineCost": 1.029,
+          "confidence": "override",
           "flag": "non-weight",
           "alternates": [
             "OLIVE SLICED BLK RIPE",
@@ -915,14 +911,12 @@
       "portionKg": 2.085,
       "portionBasis": "sheet: Total brut/net",
       "unitsPerBatch": 1,
-      "batchCost": 7.61,
-      "costPerUnit": null,
-      "allPriced": false,
-      "linesCosted": 10,
+      "batchCost": 10.220157094094622,
+      "costPerUnit": 10.220157094094622,
+      "allPriced": true,
+      "linesCosted": 11,
       "linesTotal": 11,
-      "unpricedIngredients": [
-        "Blueberries (frozen)"
-      ],
+      "unpricedIngredients": [],
       "lines": [
         {
           "ingredient": "Butter",
@@ -1050,11 +1044,11 @@
         {
           "ingredient": "Blueberries (frozen)",
           "kg": 0.275,
-          "matchedTo": null,
+          "matchedTo": "Blueberries (frozen) (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 9.5,
+          "lineCost": 2.6125000000000003,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         },
@@ -1821,14 +1815,12 @@
       "portionKg": 1.383,
       "portionBasis": "sheet: Total brut/net",
       "unitsPerBatch": 1,
-      "batchCost": 6.27,
-      "costPerUnit": null,
-      "allPriced": false,
-      "linesCosted": 8,
+      "batchCost": 6.548742319765357,
+      "costPerUnit": 6.548742319765357,
+      "allPriced": true,
+      "linesCosted": 9,
       "linesTotal": 9,
-      "unpricedIngredients": [
-        "RASPBERRIES"
-      ],
+      "unpricedIngredients": [],
       "lines": [
         {
           "ingredient": "AP FLOUR",
@@ -1941,11 +1933,11 @@
         {
           "ingredient": "RASPBERRIES",
           "kg": 0.03,
-          "matchedTo": null,
+          "matchedTo": "RASPBERRIES (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 9.25,
+          "lineCost": 0.27749999999999997,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         }
@@ -3057,14 +3049,12 @@
       "portionKg": 2.04,
       "portionBasis": "sheet: Total brut/net",
       "unitsPerBatch": 1,
-      "batchCost": 6.74,
-      "costPerUnit": null,
-      "allPriced": false,
-      "linesCosted": 10,
+      "batchCost": 9.35304619282106,
+      "costPerUnit": 9.35304619282106,
+      "allPriced": true,
+      "linesCosted": 11,
       "linesTotal": 11,
-      "unpricedIngredients": [
-        "Blueberries"
-      ],
+      "unpricedIngredients": [],
       "lines": [
         {
           "ingredient": "Butter",
@@ -3192,11 +3182,11 @@
         {
           "ingredient": "Blueberries",
           "kg": 0.275,
-          "matchedTo": null,
+          "matchedTo": "Blueberries (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 9.5,
+          "lineCost": 2.6125000000000003,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         },
@@ -4890,14 +4880,12 @@
       "portionKg": 10.09262653,
       "portionBasis": "sheet: Total brut/net",
       "unitsPerBatch": 1.000000000311217,
-      "batchCost": 109.29,
-      "costPerUnit": null,
-      "allPriced": false,
-      "linesCosted": 17,
+      "batchCost": 109.42366893322288,
+      "costPerUnit": 109.42366889916838,
+      "allPriced": true,
+      "linesCosted": 18,
       "linesTotal": 18,
-      "unpricedIngredients": [
-        "Dry yeast 1"
-      ],
+      "unpricedIngredients": [],
       "lines": [
         {
           "ingredient": "Galahad flour 1",
@@ -4916,11 +4904,11 @@
         {
           "ingredient": "Dry yeast 1",
           "kg": 0.008670520231,
-          "matchedTo": "STEVIA IN THE RAW 1/GR",
+          "matchedTo": "Dry yeast 1 (override)",
           "itemCode": "2063",
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "low",
+          "pricePerKg": 15.5,
+          "lineCost": 0.1343930635805,
+          "confidence": "override",
           "flag": "non-weight",
           "alternates": [
             "CR SOUR CREAM 5 LB",
@@ -7916,14 +7904,12 @@
       "portionKg": 9.90175,
       "portionBasis": "sheet: Total brut/net",
       "unitsPerBatch": 1,
-      "batchCost": 63.55,
-      "costPerUnit": null,
-      "allPriced": false,
-      "linesCosted": 6,
+      "batchCost": 81.16129775976924,
+      "costPerUnit": 81.16129775976924,
+      "allPriced": true,
+      "linesCosted": 7,
       "linesTotal": 7,
-      "unpricedIngredients": [
-        "Zuchinni"
-      ],
+      "unpricedIngredients": [],
       "lines": [
         {
           "ingredient": "Yellow onion",
@@ -7956,11 +7942,11 @@
         {
           "ingredient": "Zuchinni",
           "kg": 5.033,
-          "matchedTo": null,
+          "matchedTo": "Zuchinni (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 3.5,
+          "lineCost": 17.6155,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         },
@@ -8480,23 +8466,21 @@
       "portionKg": 0.876,
       "portionBasis": "sheet: Total brut/net",
       "unitsPerBatch": 1,
-      "batchCost": 0,
-      "costPerUnit": null,
-      "allPriced": false,
+      "batchCost": 0.7425,
+      "costPerUnit": 0.7425,
+      "allPriced": true,
       "linesCosted": 1,
       "linesTotal": 2,
-      "unpricedIngredients": [
-        "Polenta"
-      ],
+      "unpricedIngredients": [],
       "lines": [
         {
           "ingredient": "Polenta",
           "kg": 0.165,
-          "matchedTo": null,
+          "matchedTo": "Polenta (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 4.5,
+          "lineCost": 0.7425,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         },
@@ -8664,24 +8648,21 @@
       "portionKg": 1.28,
       "portionBasis": "sheet: Total brut/net",
       "unitsPerBatch": 1,
-      "batchCost": 9.19,
-      "costPerUnit": null,
-      "allPriced": false,
-      "linesCosted": 6,
+      "batchCost": 11.239965498493376,
+      "costPerUnit": 11.239965498493376,
+      "allPriced": true,
+      "linesCosted": 8,
       "linesTotal": 8,
-      "unpricedIngredients": [
-        "Zucchini",
-        "Mozzarella Shredded"
-      ],
+      "unpricedIngredients": [],
       "lines": [
         {
           "ingredient": "Zucchini",
           "kg": 0.4,
-          "matchedTo": null,
+          "matchedTo": "Zucchini (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 3.5,
+          "lineCost": 1.4000000000000001,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         },
@@ -8758,11 +8739,11 @@
         {
           "ingredient": "Mozzarella Shredded",
           "kg": 0.1,
-          "matchedTo": null,
+          "matchedTo": "Mozzarella Shredded (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 6.5,
+          "lineCost": 0.65,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         },
@@ -9068,15 +9049,12 @@
       "portionKg": 0.16,
       "portionBasis": "160g normal",
       "unitsPerBatch": 4.5874999999999995,
-      "batchCost": 2.54,
-      "costPerUnit": null,
-      "allPriced": false,
-      "linesCosted": 7,
+      "batchCost": 3.7671732761250367,
+      "costPerUnit": 0.8211821855313433,
+      "allPriced": true,
+      "linesCosted": 9,
       "linesTotal": 9,
-      "unpricedIngredients": [
-        "Vanilla",
-        "Blueberries (frozen), tossed in corn starch"
-      ],
+      "unpricedIngredients": [],
       "lines": [
         {
           "ingredient": "ALL PURPOSE FLOUR/HARINA TODO USO",
@@ -9176,22 +9154,22 @@
         {
           "ingredient": "Vanilla",
           "kg": 0.01,
-          "matchedTo": null,
+          "matchedTo": "Vanilla (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 18,
+          "lineCost": 0.18,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         },
         {
           "ingredient": "Blueberries (frozen), tossed in corn starch",
           "kg": 0.11,
-          "matchedTo": null,
+          "matchedTo": "Blueberries (frozen), tossed in corn starch (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 9.5,
+          "lineCost": 1.045,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         }
@@ -9204,15 +9182,12 @@
       "portionKg": 0.16,
       "portionBasis": "160g normal",
       "unitsPerBatch": 3.70625,
-      "batchCost": 2.42,
-      "costPerUnit": null,
-      "allPriced": false,
-      "linesCosted": 8,
+      "batchCost": 2.9590079708141164,
+      "costPerUnit": 0.7983832636260685,
+      "allPriced": true,
+      "linesCosted": 10,
       "linesTotal": 10,
-      "unpricedIngredients": [
-        "Blackberries (frozen), tossed in corn starch",
-        "Blueberries (frozen)"
-      ],
+      "unpricedIngredients": [],
       "lines": [
         {
           "ingredient": "ALL PURPOSE FLOUR/HARINA TODO USO",
@@ -9329,22 +9304,22 @@
         {
           "ingredient": "Blackberries (frozen), tossed in corn starch",
           "kg": 0.025,
-          "matchedTo": null,
+          "matchedTo": "Blackberries (frozen), tossed in corn starch (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 10,
+          "lineCost": 0.25,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         },
         {
           "ingredient": "Blueberries (frozen)",
           "kg": 0.03,
-          "matchedTo": null,
+          "matchedTo": "Blueberries (frozen) (override)",
           "itemCode": null,
-          "pricePerKg": null,
-          "lineCost": null,
-          "confidence": "none",
+          "pricePerKg": 9.5,
+          "lineCost": 0.285,
+          "confidence": "override",
           "flag": "no-match",
           "alternates": []
         }
