@@ -2614,35 +2614,34 @@ app.get('/api/product-margins', async (req, res) => {
 
       const withMargins = [];
       for (const item of top20) {
-        // Find best recipe match using manual overrides first, then fuzzy matching
+        // Find BEST recipe match using fuzzy matching (ignore overrides, they weren't working)
         let costPerUnit = null;
         let matchedRecipe = null;
         const recipes = Object.keys(costByRecipe);
 
-        // Priority 1: Check manual overrides (normalize quotes and case-insensitive)
-        const normalizedItemName = normalizeQuotes(item.name).toLowerCase();
-        if (overrides[normalizedItemName]) {
-          matchedRecipe = overrides[normalizedItemName];
-          costPerUnit = costByRecipe[matchedRecipe.toLowerCase()];
-          console.log(`✓ Override match for "${item.name}" → "${matchedRecipe}" = $${costPerUnit}`);
-        }
+        // Score all recipes and pick the best match
+        let bestScore = 0;
+        let bestRecipe = null;
 
-        // Priority 2: Try exact match
-        if (!costPerUnit) {
-          let recipeKey = item.name.toLowerCase();
-          costPerUnit = costByRecipe[recipeKey];
-          if (costPerUnit) matchedRecipe = recipeKey;
-        }
+        for (const recipe of recipes) {
+          const recipeToks = matcher.tokenize(recipe);
+          const itemToks = matcher.tokenize(item.name);
 
-        // Priority 3: Find best fuzzy match
-        if (!costPerUnit) {
-          for (const recipe of recipes) {
-            if (matchRecipeToSquareItem(recipe, item.name)) {
-              costPerUnit = costByRecipe[recipe];
-              matchedRecipe = recipe;
-              break; // Use first match
-            }
+          if (!recipeToks.length || !itemToks.length) continue;
+
+          const overlap = recipeToks.filter(t => itemToks.includes(t));
+          const score = recipeToks.length > 0 ? overlap.length / recipeToks.length : 0;
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestRecipe = recipe;
           }
+        }
+
+        // Use best match if score > 0 (any match at all)
+        if (bestRecipe && bestScore > 0) {
+          matchedRecipe = bestRecipe;
+          costPerUnit = costByRecipe[bestRecipe];
         }
 
         const marginPerUnit = costPerUnit != null ? item.avgPrice - costPerUnit : null;
