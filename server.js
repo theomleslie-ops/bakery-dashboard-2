@@ -2903,6 +2903,54 @@ app.get('/api/cash-balance', async (req, res) => {
   }
 });
 
+// Debug endpoint to check QB cash balance for a specific date
+app.get('/api/debug/qb-cash-balance', async (req, res) => {
+  try {
+    const qbClient = require('./pipeline/qb-client');
+    const tokens = await qbClient.getValidTokens();
+
+    const dateStr = req.query.date || '2025-02-28';
+
+    // Helper to extract cash total from balance sheet
+    const findCashTotal = (rows) => {
+      if (!rows) return null;
+      for (const row of rows) {
+        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+        if (label.toUpperCase().includes('CASH') || label.toUpperCase().includes('BANK')) {
+          const val = row.Summary?.ColData?.[1]?.value || row.ColData?.[1]?.value;
+          if (val) return parseFloat(val);
+        }
+        if (row.Rows?.Row) {
+          const found = findCashTotal(row.Rows.Row);
+          if (found !== null) return found;
+        }
+      }
+      return null;
+    };
+
+    console.log(`Fetching QB Balance Sheet as of ${dateStr}...`);
+    const bsRes = await axios.get(
+      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
+      {
+        params: { as_of_date: dateStr },
+        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+      }
+    );
+
+    const cash = findCashTotal(bsRes.data.Rows?.Row) || 0;
+    res.json({
+      date: dateStr,
+      cash: round2(cash),
+    });
+  } catch (err) {
+    console.error('QB balance check error:', err.message);
+    res.status(500).json({
+      error: 'Failed to fetch QB balance',
+      message: err.message,
+    });
+  }
+});
+
 // ============= PUBLIC DASHBOARD API ENDPOINTS =============
 
 // Square data endpoint
