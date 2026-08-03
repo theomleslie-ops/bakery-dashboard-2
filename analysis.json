@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-03T04:21:30.693113",
+  "generated_at": "2026-08-03T13:43:39.482798",
   "period": "Real Square sales data",
   "summary": {
     "total_units": 33355,
     "total_revenue": 240916.5,
-    "total_cogs": 59148.51,
-    "total_profit": 181767.99,
-    "blended_margin_pct": 75.4
+    "total_cogs": 49547.34,
+    "total_profit": 191369.16,
+    "blended_margin_pct": 79.4
   },
   "products": [
     {
@@ -36,22 +36,22 @@
       "product": "NO-NUT Choc Chip Cookie",
       "units": 3424,
       "sale_price": 6.0,
-      "cost_per_unit": 2.05,
+      "cost_per_unit": 1.18,
       "revenue": 20544.0,
-      "cogs": 7019.2,
-      "profit": 13524.8,
-      "margin_pct": 65.8
+      "cogs": 4040.32,
+      "profit": 16503.68,
+      "margin_pct": 80.3
     },
     {
       "rank": 4,
       "product": "Double Choc Chip Cookie",
       "units": 2799,
       "sale_price": 6.5,
-      "cost_per_unit": 2.05,
+      "cost_per_unit": 1.26,
       "revenue": 18193.5,
-      "cogs": 5737.95,
-      "profit": 12455.55,
-      "margin_pct": 68.5
+      "cogs": 3526.74,
+      "profit": 14666.76,
+      "margin_pct": 80.6
     },
     {
       "rank": 5,
@@ -69,22 +69,22 @@
       "product": "ORIGINAL Choc Chip Cookie",
       "units": 2702,
       "sale_price": 6.5,
-      "cost_per_unit": 2.05,
+      "cost_per_unit": 1.21,
       "revenue": 17563.0,
-      "cogs": 5539.1,
-      "profit": 12023.9,
-      "margin_pct": 68.5
+      "cogs": 3269.42,
+      "profit": 14293.58,
+      "margin_pct": 81.4
     },
     {
       "rank": 7,
       "product": "Oatmeal Raisin Cookie",
       "units": 2490,
       "sale_price": 6.0,
-      "cost_per_unit": 2.05,
+      "cost_per_unit": 1.19,
       "revenue": 14940.0,
-      "cogs": 5104.5,
-      "profit": 9835.5,
-      "margin_pct": 65.8
+      "cogs": 2963.1,
+      "profit": 11976.9,
+      "margin_pct": 80.2
     },
     {
       "rank": 8,
