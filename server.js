@@ -3033,6 +3033,42 @@ app.get('/api/ingredient-costs', (req, res) => {
 });
 
 // Ingredient extraction status - check background job progress
+// Debug endpoint: show raw extracted PDF text from a real bill
+app.get('/api/debug/raw-pdf-text/:billId', async (req, res) => {
+  try {
+    const billId = req.params.billId;
+
+    // Download and extract from the actual PDF
+    const pdfBuffer = await qbClient.downloadInvoicePdf(billId);
+    if (!pdfBuffer) {
+      return res.json({ error: 'No PDF found for this bill', billId });
+    }
+
+    const text = await qbClient.extractPdfText(pdfBuffer);
+
+    // Split into lines and show first 60 lines with visible line breaks
+    const lines = text.split('\n');
+    const sample = lines.slice(0, 60);
+
+    res.json({
+      billId,
+      pdfSize: pdfBuffer.length,
+      totalLines: lines.length,
+      totalChars: text.length,
+      firstLinesRaw: sample.map((line, i) => ({
+        lineNum: i + 1,
+        content: line,
+        length: line.length,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: 'Failed to extract PDF text',
+      message: err.message,
+    });
+  }
+});
+
 // Debug endpoint: show cache file structure
 app.get('/api/debug/cache-structure', (req, res) => {
   try {
