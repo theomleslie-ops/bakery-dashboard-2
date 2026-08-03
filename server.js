@@ -2600,7 +2600,7 @@ app.get('/api/product-margins', async (req, res) => {
       'long braid': 'Challah dough',
       'epi': 'Country dough',
       'mini banana bread loaf': 'Banana Bread',
-      'cinn swirl': 'Coffee cake  Crumble',
+      'cinn swirl': 'Pain de mie dough',
       'pb mound cookie': 'PB cookies',
       'nutella bun': 'Chocolate Nutella Scone British',
       'ham & cheese baton': 'Pain de mie dough',
