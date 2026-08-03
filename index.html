@@ -1599,14 +1599,27 @@
       if (!data || !data.top20) return <div style={{ padding: '20px' }}>No data available.</div>;
 
       const summary = data.summary || {};
+      const [period, setPeriod] = React.useState('lifetime');
 
       return (
         <div className="container" style={{ padding: '20px' }}>
-          <h2>🥐 Bakery Margins</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{ margin: 0 }}>🥐 Bakery Margins</h2>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <label style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>Period:</label>
+              <select value={period} onChange={(e) => setPeriod(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd', fontSize: '14px', cursor: 'pointer' }}>
+                <option value="lifetime">Lifetime</option>
+                <option value="last_52_weeks">Last 52 Weeks</option>
+                <option value="last_26_weeks">Last 26 Weeks</option>
+                <option value="last_12_weeks">Last 12 Weeks</option>
+                <option value="last_4_weeks">Last 4 Weeks</option>
+              </select>
+            </div>
+          </div>
 
           {data.generatedAt && (
             <div style={{ marginBottom: '20px', padding: '15px', background: '#f9f9f9', borderRadius: '4px', fontSize: '14px', color: '#666' }}>
-              Data as of: {new Date(data.generatedAt).toLocaleString()}
+              Data as of: {new Date(data.generatedAt).toLocaleString()} | Period: <strong>{period.replace(/_/g, ' ').toUpperCase()}</strong>
             </div>
           )}
 
@@ -1636,9 +1649,9 @@
               <tr style={{ background: '#f0f0f0', borderBottom: '2px solid #ddd' }}>
                 <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Product</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Units</th>
-                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Avg Price</th>
-                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Cost</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Revenue</th>
+                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Avg Price</th>
+                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>COGS</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Margin $</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Margin %</th>
               </tr>
@@ -1648,9 +1661,9 @@
                 <tr key={i} style={{ borderBottom: '1px solid #eee', background: i % 2 === 0 ? '#fafafa' : 'white' }}>
                   <td style={{ padding: '12px', textAlign: 'left' }}><strong>{item.name}</strong></td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>{item.quantity.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>
+                  <td style={{ padding: '12px', textAlign: 'right' }}>${item.revenue.toLocaleString('en-US', {maximumFractionDigits: 2})}</td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>${item.avgPrice.toFixed(2)}</td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>${item.cogs.toFixed(2)}</td>
-                  <td style={{ padding: '12px', textAlign: 'right' }}>${item.revenue.toLocaleString('en-US', {maximumFractionDigits: 2})}</td>
                   <td style={{ padding: '12px', textAlign: 'right', color: item.margin$ >= 0 ? '#27ae60' : '#e74c3c', fontWeight: '500' }}>${item.margin$.toFixed(2)}</td>
                   <td style={{ padding: '12px', textAlign: 'right', color: item.marginPct >= 0 ? '#27ae60' : '#e74c3c', fontWeight: '600' }}>{item.marginPct.toFixed(1)}%</td>
                 </tr>
