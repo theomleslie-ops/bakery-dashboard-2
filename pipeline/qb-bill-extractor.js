@@ -33,6 +33,7 @@ const parseBill = async (bill) => {
       lineAmount: Math.round((item.quantity * item.unitPrice) * 100) / 100,
     }));
     extractionSource = 'pdf';
+    console.log(`      📄 Bill ${bill.DocNumber}: Used PDF extraction (${lines.length} items)`);
   } else {
     // Fall back to QB's Line array
     const lineItems = bill.Line || [];
@@ -52,6 +53,9 @@ const parseBill = async (bill) => {
       }
     }
     extractionSource = lines.length > 0 ? 'bill_line_array' : 'none';
+    if (extractionSource === 'bill_line_array') {
+      console.log(`      📋 Bill ${bill.DocNumber}: Fell back to QB Line array (${lines.length} items from bill.Line[0].Description)`);
+    }
   }
 
   return {

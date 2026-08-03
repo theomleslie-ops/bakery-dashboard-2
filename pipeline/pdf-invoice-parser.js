@@ -121,23 +121,28 @@ const extractLineItemsFromPdf = async (billId, retryCount = 0, maxRetries = 3) =
     // Extract text from PDF
     const text = await qbClient.extractPdfText(pdfBuffer);
     if (!text || text.trim().length === 0) {
+      console.warn(`      ⚠️  No text extracted from PDF for bill ${billId} (${pdfBuffer.length} byte PDF)`);
       return null;
     }
+
+    // Log what we got from the PDF
+    console.log(`      ✓ Extracted ${text.length} chars from PDF bill ${billId}`);
 
     // Parse text to find line items
     const items = parseInvoiceText(text);
 
     if (items.length > 0) {
+      console.log(`      ✓ Parsed ${items.length} line items from PDF`);
       return items;
     }
 
-    // PDF was readable but parsing failed - log sample for debugging
-    const textPreview = text.substring(0, 300).replace(/\n/g, ' | ');
-    console.warn(`      ⚠️  Could not parse items from PDF bill ${billId}. Text preview: "${textPreview}..."`);
+    // PDF was readable but parsing failed - log detailed sample for debugging
+    const textPreview = text.substring(0, 500).replace(/\n/g, ' | ');
+    console.warn(`      ⚠️  Could not parse items from PDF bill ${billId} (${text.length} chars). Sample:\n        "${textPreview}..."`);
     return null;
   } catch (e) {
     if (e.response?.status === 429) {
-      console.warn(`      ⚠️  Rate limited for bill ${billId} (will retry later)`);
+      console.warn(`      ⚠️  Rate limited for bill ${billId} (will retry)`);
     } else {
       console.warn(`      ⚠️  Error extracting PDF for bill ${billId}: ${e.message}`);
     }
