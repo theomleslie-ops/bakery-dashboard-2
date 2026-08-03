@@ -2536,9 +2536,21 @@ app.get('/api/debug/overrides', (req, res) => {
       return res.json({ error: 'File not found', path: overridesFile });
     }
     const data = JSON.parse(fs.readFileSync(overridesFile, 'utf-8'));
+
+    // Build overrides object like the main endpoint does
+    const overrides = {};
+    for (const mapping of data.mappings || []) {
+      overrides[normalizeQuotes(mapping.squareItem)] = mapping.recipe;
+    }
+
     res.json({
       count: data.mappings.length,
-      mappings: data.mappings.slice(0, 5)
+      rawMappings: data.mappings.slice(0, 3),
+      overrideKeys: Object.keys(overrides),
+      sampleLookup: {
+        "Country Round": overrides["Country Round"],
+        "Breakfast Bar": overrides["Breakfast Bar"]
+      }
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
