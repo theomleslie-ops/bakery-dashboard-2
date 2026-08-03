@@ -2636,8 +2636,9 @@ app.get('/api/product-margins', async (req, res) => {
         const itemLower = item.name.toLowerCase();
 
         // Priority 1: Check explicit overrides
-        if (overrides[itemLower]) {
-          const recipeName = overrides[itemLower];
+        const overrideKey = Object.keys(overrides).find(key => key === itemLower);
+        if (overrideKey) {
+          const recipeName = overrides[overrideKey];
           const recipeCost = costByRecipe[recipeName.toLowerCase()];
           if (recipeCost != null) {
             costPerUnit = recipeCost;
