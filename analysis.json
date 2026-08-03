@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-03T04:18:40.439091",
+  "generated_at": "2026-08-03T04:21:30.693113",
   "period": "Real Square sales data",
   "summary": {
     "total_units": 33355,
     "total_revenue": 240916.5,
-    "total_cogs": 59026.59,
-    "total_profit": 181889.91,
-    "blended_margin_pct": 75.5
+    "total_cogs": 59148.51,
+    "total_profit": 181767.99,
+    "blended_margin_pct": 75.4
   },
   "products": [
     {
@@ -146,11 +146,11 @@
       "product": "Mini Banana Bread Loaf",
       "units": 1524,
       "sale_price": 7.0,
-      "cost_per_unit": 0.46,
+      "cost_per_unit": 0.54,
       "revenue": 10668.0,
-      "cogs": 701.04,
-      "profit": 9966.96,
-      "margin_pct": 93.4
+      "cogs": 822.96,
+      "profit": 9845.04,
+      "margin_pct": 92.3
     },
     {
       "rank": 16,
@@ -196,10 +196,5 @@
       "profit": 4617.0,
       "margin_pct": 50.0
     }
-  ],
-  "notes": {
-    "real_prices": "Breakfast Bar ingredients, base doughs, specialty items from actual invoices",
-    "estimated_prices": "Bananas, walnuts, feta, flax seeds, teff flour, etc.",
-    "missing_recipes": "Olive PC, Cinn SWIRL, Jalapeno & Cheddar Baton"
-  }
+  ]
 }
