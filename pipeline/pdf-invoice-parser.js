@@ -6,6 +6,7 @@ const qbClient = require('./qb-client');
 
 // Parse extracted PDF text to find line items
 // Matches Chef's Warehouse invoice structure: QTY UNIT | ITEM_CODE | DESCRIPTION | PRICE | UOM | ...
+// v2: Strict pattern matching for tabular invoices (fixes garbage extraction)
 const parseInvoiceText = (text) => {
   const items = [];
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
