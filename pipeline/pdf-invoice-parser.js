@@ -126,16 +126,30 @@ const parseInvoiceText = (text, billId) => {
     // Extract description: everything after qty+unit, before prices get messy
     let description = mergedLine.substring(qtyUnitMatch[0].length).trim();
 
-    // Conservative cleanup: only remove specific patterns we're confident about
+    // Extract product name: remove item codes at start, pack formats at end, prices
+    // Format: [qty+unit] [item-codes] PRODUCT NAME [pack-format] [plt#] [prices]
+
+    // Remove leading numeric item codes (pure digits or letters+digits patterns)
     description = description
-      .replace(/\bGF\d+\b/g, '') // Remove Chef's Warehouse item codes like GF298
-      .replace(/\bVN\d+\b/g, '') // Remove vendor codes like VN150758
-      .replace(/\bBF\d+\b/g, '') // Remove item codes like BF100
-      .replace(/\b[A-Z]{2,3}\d{3,}\b/g, '') // Remove general item codes (2-3 letters + 3+ digits)
-      .replace(/\d+\/\d+\s*[A-Z]+\b/g, '') // Remove pack formats like "4/1 GAL", "3/5.75 LB"
-      .replace(/Plt#?:?\s*\d+/gi, '') // Remove "Plt#: 4", "Plt: 5"
-      .replace(/\s+/g, ' ')  // Collapse multiple spaces
+      .replace(/^\s*\d+\s+/g, '') // Remove leading numbers
+      .replace(/^\s*[A-Z]{1,3}\d+\s+/g, '') // Remove codes like "GF298", "VN150758"
       .trim();
+
+    // Remove pack format patterns and everything after them
+    // Patterns: "3/5.75 LB", "1/50 LB BAG", etc.
+    const packFormatIdx = description.search(/\d+\/\d+\s*[A-Z]/i);
+    if (packFormatIdx !== -1) {
+      description = description.substring(0, packFormatIdx).trim();
+    }
+
+    // Remove Plt# patterns (e.g., "Plt#: 4", "Plt: 1")
+    description = description.replace(/\bPlt#?:?\s*\d+/gi, '').trim();
+
+    // Remove prices (decimal numbers like "42.00", "75.81")
+    description = description.replace(/\s+\d+\.\d{2}(?:\s+\d+\.\d{2})?$/g, '').trim();
+
+    // Collapse extra spaces
+    description = description.replace(/\s+/g, ' ').trim();
 
     // Filter out garbage: too short, only whitespace/numbers
     if (!description || description.length < 3 || /^[\s\d\-\.]+$/.test(description)) {
