@@ -3033,6 +3033,32 @@ app.get('/api/ingredient-costs', (req, res) => {
 });
 
 // Ingredient extraction status - check background job progress
+// Debug endpoint: show cache file structure
+app.get('/api/debug/cache-structure', (req, res) => {
+  try {
+    const cacheFile = path.join(__dirname, 'ingredient-costs-cache.json');
+    if (!fs.existsSync(cacheFile)) {
+      return res.json({ error: 'Cache file not found' });
+    }
+    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf-8'));
+    res.json({
+      topLevelKeys: Object.keys(cached),
+      billsProcessed: cached.billsProcessed,
+      ingredientsExtracted: cached.ingredientsExtracted,
+      hasRawBills: !!cached.rawBills,
+      rawBillsCount: cached.rawBills?.length || 0,
+      rawBillsSample: cached.rawBills?.slice(0, 3).map(b => ({
+        docNumber: b.docNumber,
+        vendorName: b.vendorName,
+        extractionSource: b.extractionSource,
+        lineItems: b.lineItems?.length || 0,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/ingredient-costs/status', (req, res) => {
   const status = ingredientScheduler.getStatus();
   res.json({
