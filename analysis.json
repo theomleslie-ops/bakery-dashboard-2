@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-03T13:57:15.287463",
+  "generated_at": "2026-08-03T14:22:36.694434",
   "period": "Real Square sales data",
   "summary": {
     "total_units": 33355,
     "total_revenue": 240916.5,
-    "total_cogs": 52326.71,
-    "total_profit": 188589.79,
-    "blended_margin_pct": 78.3
+    "total_cogs": 43173.39,
+    "total_profit": 197743.11,
+    "blended_margin_pct": 82.1
   },
   "products": [
     {
@@ -25,11 +25,11 @@
       "product": "Breakfast Bar",
       "units": 3124,
       "sale_price": 7.5,
-      "cost_per_unit": 4.59,
+      "cost_per_unit": 1.66,
       "revenue": 23430.0,
-      "cogs": 14339.16,
-      "profit": 9090.84,
-      "margin_pct": 38.8
+      "cogs": 5185.84,
+      "profit": 18244.16,
+      "margin_pct": 77.9
     },
     {
       "rank": 3,

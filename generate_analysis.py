@@ -64,7 +64,7 @@ challah_dough_cost_per_kg = 3.63
 
 sales_data = [
     {"rank": 1, "product": "Country Round", "units": 1984, "price": 12.00, "cost": 1.34},
-    {"rank": 2, "product": "Breakfast Bar", "units": 3124, "price": 7.50, "cost": 4.59},
+    {"rank": 2, "product": "Breakfast Bar", "units": 3124, "price": 7.50, "cost": 1.66},
     {"rank": 3, "product": "NO-NUT Choc Chip Cookie", "units": 3424, "price": 6.00, "cost": 1.18},
     {"rank": 4, "product": "Double Choc Chip Cookie", "units": 2799, "price": 6.50, "cost": 1.26},
     {"rank": 5, "product": "Country PC", "units": 2973, "price": 6.00, "cost": 0.37},
