@@ -160,6 +160,14 @@ const exchangeCodeForTokens = async (code, realmId) => {
   return tokens;
 };
 
+// Fetch a single Bill by ID with full detail including all Line items
+const getBillDetail = async (billId) => {
+  const sql = `SELECT * FROM Bill WHERE Id = '${billId}'`;
+  const response = await query(sql);
+  const bill = (response.Bill || [])[0];
+  return bill || null;
+};
+
 module.exports = {
   getValidTokens,
   query,
@@ -167,6 +175,7 @@ module.exports = {
   loadTokens,
   saveTokens,
   listBills,
+  getBillDetail,
   downloadInvoicePdf,
   extractPdfText,
   findVendorByName,

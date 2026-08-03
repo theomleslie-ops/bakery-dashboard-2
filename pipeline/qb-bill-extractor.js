@@ -76,45 +76,77 @@ const extractBills = async ({ weeks = 12 } = {}) => {
   let allBills = [];
 
   try {
-    // Query ALL bills from the date range (no vendor filter)
-    // Then filter by vendor name in JavaScript for reliability
-    console.log(`  Querying all bills since ${cutoffISO}…`);
+    // Query bill IDs from the date range
+    console.log(`  Querying all bill IDs since ${cutoffISO}…`);
 
-    const query = `SELECT * FROM Bill WHERE TxnDate >= '${cutoffISO}' ORDER BY TxnDate DESC`;
+    const query = `SELECT Id, DocNumber, TxnDate, VendorRef FROM Bill WHERE TxnDate >= '${cutoffISO}' ORDER BY TxnDate DESC`;
 
     try {
       const response = await qbClient.query(query);
-      const allQBBills = response.Bill || [];
-      console.log(`  ✓ Retrieved ${allQBBills.length} total bills since ${cutoffISO}`);
+      const billSummaries = response.Bill || [];
+      console.log(`  ✓ Retrieved ${billSummaries.length} total bill IDs since ${cutoffISO}`);
 
-      // Filter bills by vendor name in JavaScript
-      for (const [key, vendorName] of Object.entries(VENDOR_NAMES)) {
-        const vendorBills = allQBBills.filter(bill => {
-          const billVendor = bill.VendorRef?.name || '';
-          // Case-insensitive partial match on vendor name
-          return billVendor.toLowerCase().includes(vendorName.toLowerCase());
-        });
+      // Group by vendor, then fetch full detail for each bill
+      const vendorBillIds = {};
+      for (const billSummary of billSummaries) {
+        const vendorName = billSummary.VendorRef?.name || '';
+        let vendorKey = null;
 
-        if (vendorBills.length > 0) {
-          allBills.push(...vendorBills);
-          console.log(`    ✓ ${vendorBills.length} bills from ${vendorName}`);
+        for (const [key, expectedVendorName] of Object.entries(VENDOR_NAMES)) {
+          if (vendorName.toLowerCase().includes(expectedVendorName.toLowerCase())) {
+            vendorKey = key;
+            break;
+          }
+        }
+
+        if (vendorKey) {
+          if (!vendorBillIds[vendorKey]) vendorBillIds[vendorKey] = [];
+          vendorBillIds[vendorKey].push(billSummary.Id);
+        }
+      }
+
+      // Fetch full detail for each bill from target vendors
+      for (const [vendorKey, vendorName] of Object.entries(VENDOR_NAMES)) {
+        const billIds = vendorBillIds[vendorKey] || [];
+        if (billIds.length === 0) {
+          console.log(`    ⊘ No bills from ${vendorName}`);
+          continue;
+        }
+
+        console.log(`    ⬇️  Fetching full detail for ${billIds.length} bills from ${vendorName}…`);
+        const fullBills = [];
+
+        for (const billId of billIds) {
+          try {
+            const fullBill = await qbClient.getBillDetail(billId);
+            if (fullBill) {
+              fullBills.push(fullBill);
+            }
+          } catch (e) {
+            console.warn(`      ⚠️  Could not fetch detail for bill ${billId}: ${e.message}`);
+          }
+        }
+
+        if (fullBills.length > 0) {
+          allBills.push(...fullBills);
+          console.log(`    ✓ ${fullBills.length} bills from ${vendorName} (with full line detail)`);
 
           // DEBUG: Log structure of first bill
-          if (vendorBills.length > 0) {
-            const firstBill = vendorBills[0];
-            console.log(`\n    DEBUG: First ${vendorName} bill structure:`);
-            console.log(`      DocNumber: ${firstBill.DocNumber}`);
-            console.log(`      TxnDate: ${firstBill.TxnDate}`);
-            console.log(`      TotalAmt: ${firstBill.TotalAmt}`);
-            console.log(`      Line array exists: ${!!firstBill.Line}`);
-            console.log(`      Line array length: ${(firstBill.Line || []).length}`);
-            if (firstBill.Line && firstBill.Line.length > 0) {
-              console.log(`      First line: ${JSON.stringify(firstBill.Line[0], null, 2).substring(0, 300)}...`);
+          const firstBill = fullBills[0];
+          console.log(`\n    DEBUG: First ${vendorName} bill structure:`);
+          console.log(`      DocNumber: ${firstBill.DocNumber}`);
+          console.log(`      TxnDate: ${firstBill.TxnDate}`);
+          console.log(`      TotalAmt: ${firstBill.TotalAmt}`);
+          console.log(`      Line array exists: ${!!firstBill.Line}`);
+          console.log(`      Line array length: ${(firstBill.Line || []).length}`);
+          if (firstBill.Line && firstBill.Line.length > 0) {
+            console.log(`      First 2 lines:`);
+            for (let i = 0; i < Math.min(2, firstBill.Line.length); i++) {
+              const line = firstBill.Line[i];
+              console.log(`        Line ${i}: DetailType=${line.DetailType}, Desc="${(line.Description || '').substring(0, 40)}", Amt=${line.Amount}, Qty=${line.ItemBasedExpenseLineDetail?.Qty || 'N/A'}`);
             }
-            console.log();
           }
-        } else {
-          console.log(`    ⊘ No bills from ${vendorName}`);
+          console.log();
         }
       }
     } catch (e) {
