@@ -103,13 +103,30 @@ const listBills = async (vendorId, sinceDate) => {
 
 // Download a bill's itemized invoice PDF (skip email-body attachments). Returns Buffer|null.
 const downloadInvoicePdf = async (billId) => {
-  const atts = (await query(`select * from Attachable where AttachableRef.EntityRef.Value = '${billId}'`)).Attachable || [];
+  const attQuery = `select * from Attachable where AttachableRef.EntityRef.Value = '${billId}'`;
+  const attResponse = await query(attQuery);
+  const atts = attResponse.Attachable || [];
+
+  // Log for debugging: show what we're querying and what we get
+  if (atts.length === 0) {
+    console.log(`      DEBUG: downloadInvoicePdf(${billId}): Attachable query returned 0 results`);
+  } else {
+    console.log(`      DEBUG: downloadInvoicePdf(${billId}): Found ${atts.length} attachments`);
+    atts.forEach(att => {
+      console.log(`        - ${att.FileName} (${att.ContentType})`);
+    });
+  }
+
   const pdf = atts.find((a) => /pdf/i.test(a.ContentType || '') && !/email/i.test(a.FileName || ''))
     || atts.find((a) => /pdf/i.test(a.ContentType || ''));
   if (!pdf) return null;
+
   const full = (await query(`select * from Attachable where Id = '${pdf.Id}'`)).Attachable?.[0];
   if (!full?.TempDownloadUri) return null;
+
+  console.log(`      DEBUG: Downloading PDF from TempDownloadUri...`);
   const res = await axios.get(full.TempDownloadUri, { responseType: 'arraybuffer' });
+  console.log(`      DEBUG: Downloaded ${res.data.length} bytes`);
   return Buffer.from(res.data);
 };
 
