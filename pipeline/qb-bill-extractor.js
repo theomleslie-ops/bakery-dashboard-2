@@ -176,8 +176,18 @@ const extractBills = async ({ weeks = 12 } = {}) => {
     throw e;
   }
 
-  // Parse bills and extract line items (async, so use Promise.all)
-  const parsedBills = await Promise.all(allBills.map(parseBill));
+  // Parse bills and extract line items sequentially (to avoid rate limiting PDFs)
+  // This is slower but avoids HTTP 429 errors from too many concurrent requests
+  const parsedBills = [];
+  for (let i = 0; i < allBills.length; i++) {
+    const bill = allBills[i];
+    const parsed = await parseBill(bill);
+    parsedBills.push(parsed);
+    // Small delay between PDFs to space out requests
+    if (i < allBills.length - 1) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
 
   console.log(`  ✓ Parsed ${parsedBills.length} bills\n`);
 
