@@ -9,9 +9,26 @@ const qbClient = require('./qb-client');
 
 // Parse extracted PDF text to find line items
 // Reconstructs multi-line item rows before pattern matching
-const parseInvoiceText = (text) => {
+const parseInvoiceText = (text, billId) => {
   const items = [];
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  // Search for missing ingredients to debug extraction
+  const searchKeywords = ['FLOUR', 'BUTTER', 'SUGAR', 'YEAST', 'CHOCOLATE'];
+  const foundKeywords = [];
+  lines.forEach((line, idx) => {
+    for (const kw of searchKeywords) {
+      if (line.toUpperCase().includes(kw)) {
+        foundKeywords.push({ keyword: kw, lineIdx: idx, line });
+      }
+    }
+  });
+  if (foundKeywords.length > 0) {
+    console.log(`      🔍 FOUND MISSING INGREDIENTS in bill ${billId}:`);
+    foundKeywords.forEach(f => {
+      console.log(`         [${f.lineIdx}] ${f.keyword}: "${f.line}"`);
+    });
+  }
 
   // Non-food items and packaging to exclude
   const excludeKeywords = [
@@ -175,8 +192,16 @@ const extractLineItemsFromPdf = async (billId, retryCount = 0, maxRetries = 3) =
     // Log what we got from the PDF
     console.log(`      ✓ Extracted ${text.length} chars from PDF bill ${billId}`);
 
+    // Save raw extracted text for debugging/analysis
+    const debugFile = path.join(__dirname, '..', `raw-pdf-${billId}.txt`);
+    try {
+      require('fs').writeFileSync(debugFile, text);
+    } catch (e) {
+      // Silently fail - not critical
+    }
+
     // Parse text to find line items
-    const items = parseInvoiceText(text);
+    const items = parseInvoiceText(text, billId);
 
     if (items.length > 0) {
       console.log(`      ✓ Parsed ${items.length} line items from PDF`);
