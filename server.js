@@ -2745,17 +2745,19 @@ app.get('/api/cash-balance', async (req, res) => {
     const tokens = await qbClient.getValidTokens();
 
     // Helper to extract "Cash at End of Period" from cash flow statement
-    const findCashAtEnd = (rows) => {
+    const findCashAtEnd = (rows, debug = false) => {
       if (!rows) return null;
       for (const row of rows) {
         const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+        if (debug) console.log(`    Row label: "${label}"`);
         if (label.toUpperCase().includes('CASH AT END')) {
           const val = row.Summary?.ColData?.[1]?.value || row.ColData?.[1]?.value;
+          if (debug) console.log(`      Found CASH AT END, value: ${val}`);
           if (val !== undefined && val !== null) return parseFloat(val);
         }
         // Recurse into nested rows
         if (row.Rows?.Row) {
-          const found = findCashAtEnd(row.Rows.Row);
+          const found = findCashAtEnd(row.Rows.Row, debug);
           if (found !== null) return found;
         }
       }
@@ -2798,7 +2800,8 @@ app.get('/api/cash-balance', async (req, res) => {
     let currentCash = 0;
 
     console.log('Querying QB Statement of Cash Flows for each month...');
-    for (const monthData of months) {
+    for (let i = 0; i < months.length; i++) {
+      const monthData = months[i];
       const monthIndex = MONTH_NAMES.indexOf(monthData.name);
       const firstDay = new Date(monthData.year, monthIndex, 1);
       const lastDay = new Date(monthData.year, monthIndex + 1, 0);
@@ -2807,6 +2810,7 @@ app.get('/api/cash-balance', async (req, res) => {
       const endDateStr = lastDay.toISOString().split('T')[0];
 
       try {
+        console.log(`\nQuerying ${monthData.name} ${monthData.year} (${startDateStr} to ${endDateStr})`);
         const cfRes = await axios.get(
           `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
           {
@@ -2815,7 +2819,11 @@ app.get('/api/cash-balance', async (req, res) => {
           }
         );
 
-        const cash = findCashAtEnd(cfRes.data.Rows?.Row) || 0;
+        if (i === 0) {
+          console.log('First response structure:', JSON.stringify(cfRes.data, null, 2).substring(0, 1000));
+        }
+
+        const cash = findCashAtEnd(cfRes.data.Rows?.Row, i === 0) || 0;
         currentCash = cash;
         balances.push({
           date: endDateStr,
