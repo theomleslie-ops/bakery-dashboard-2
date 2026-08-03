@@ -25,6 +25,13 @@ const runExtraction = async (weeks = 52) => {
 
     const result = await qbBillExtractor.extractBills({ weeks });
 
+    // Count extraction sources from rawBills
+    const sourceCount = {};
+    for (const bill of result.rawBills || []) {
+      const src = bill.extractionSource || 'unknown';
+      sourceCount[src] = (sourceCount[src] || 0) + 1;
+    }
+
     // Cache result to disk
     fs.writeFileSync(CACHE_FILE, JSON.stringify(result, null, 2));
 
@@ -36,6 +43,7 @@ const runExtraction = async (weeks = 52) => {
       billsProcessed: result.billsProcessed,
       ingredientsExtracted: result.ingredientsExtracted,
       generatedAt: result.generatedAt,
+      extractionSources: sourceCount,
     };
 
     console.log(`[ingredient-scheduler] ✅ Complete in ${duration}s`);
