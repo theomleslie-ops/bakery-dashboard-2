@@ -2748,8 +2748,9 @@ app.get('/api/cash-balance', async (req, res) => {
     const findCashAtEnd = (rows, debug = false) => {
       if (!rows) return null;
       for (const row of rows) {
-        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        if (debug) console.log(`    Row label: "${label}"`);
+        // Try multiple locations for the label (different report structures)
+        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || row.Summary?.ColData?.[0]?.value || '';
+        if (debug && label) console.log(`    Row label: "${label}"`);
         if (label.toUpperCase().includes('CASH AT END')) {
           const val = row.Summary?.ColData?.[1]?.value || row.ColData?.[1]?.value;
           if (debug) console.log(`      Found CASH AT END, value: ${val}`);
@@ -2907,12 +2908,16 @@ app.get('/api/debug/qb-cashflow', async (req, res) => {
     const tokens = await qbClient.getValidTokens();
 
     const dateStr = req.query.date || '2025-02-28';
+    const startDate = req.query.start_date || null;
+    const endDate = req.query.end_date || dateStr;
 
-    console.log(`Fetching QB CashFlow report as of ${dateStr}...`);
+    const params = startDate ? { start_date: startDate, end_date: endDate } : { end_date: endDate };
+    console.log(`Fetching QB CashFlow report with params:`, params);
+
     const cfRes = await axios.get(
       `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
       {
-        params: { end_date: dateStr },
+        params,
         headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
       }
     );
