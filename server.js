@@ -1233,6 +1233,16 @@ app.get('/api/quickbooks/status', (req, res) => {
   });
 });
 
+// Query QB for bills with line-item detail
+app.get('/api/quickbooks/bills', async (req, res) => {
+  try {
+    const bills = await qbClient.query('SELECT * FROM Bill MAXRESULTS 100');
+    res.json(bills);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Disconnect (forget stored tokens)
 app.post('/api/quickbooks/disconnect', (req, res) => {
   qbClient.disconnect();
