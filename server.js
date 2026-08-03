@@ -3111,36 +3111,99 @@ app.get('/api/debug/attachments/:billId', async (req, res) => {
   }
 });
 
-// Debug endpoint: show raw bill.Line data for a bill
-app.get('/api/debug/bill-lines/:billId', async (req, res) => {
+// Debug endpoint: search for document URLs/IDs in a bill
+app.get('/api/debug/bill-sources/:billDocNumber', async (req, res) => {
   try {
-    const billId = req.params.billId;
-    const bill = await qbClient.getBillDetail(billId);
+    const docNumber = req.params.billDocNumber;
+
+    // Find the bill by DocNumber
+    const billQuery = `SELECT * FROM Bill WHERE DocNumber = '${docNumber}' ORDER BY TxnDate DESC MAXRESULTS 1`;
+    const billResponse = await qbClient.query(billQuery);
+    const bill = (billResponse.Bill || [])[0];
 
     if (!bill) {
-      return res.status(404).json({ error: 'Bill not found', billId });
+      return res.status(404).json({ error: 'Bill not found', docNumber });
     }
 
-    const lines = bill.Line || [];
+    // Search for document-related fields
+    const allFields = Object.keys(bill);
+    const docFields = allFields.filter(f =>
+      f.toLowerCase().includes('doc') ||
+      f.toLowerCase().includes('source') ||
+      f.toLowerCase().includes('url') ||
+      f.toLowerCase().includes('link') ||
+      f.toLowerCase().includes('reference')
+    );
+
     res.json({
-      billId,
+      billId: bill.Id,
       docNumber: bill.DocNumber,
-      vendorName: bill.VendorRef?.name,
-      totalLines: lines.length,
-      lines: lines.map((line, i) => ({
-        index: i,
-        description: line.Description,
-        detailType: line.DetailType,
-        amount: line.Amount,
-        itemRef: line.ItemBasedExpenseLineDetail?.ItemRef?.name,
-        qty: line.ItemBasedExpenseLineDetail?.Qty,
-        fullLine: JSON.stringify(line).substring(0, 200),
-      })),
+      vendor: bill.VendorRef?.name,
+      totalFields: allFields.length,
+      documentRelatedFields: docFields,
+      fieldValues: docFields.reduce((acc, f) => {
+        const val = bill[f];
+        acc[f] = typeof val === 'object' ? JSON.stringify(val).substring(0, 200) : val;
+        return acc;
+      }, {}),
     });
   } catch (err) {
-    console.error('Error fetching bill lines:', err.message);
+    console.error('Error fetching bill sources:', err.message);
     res.status(500).json({
-      error: 'Failed to fetch bill lines',
+      error: 'Failed to fetch bill sources',
+      message: err.message,
+    });
+  }
+});
+
+// Debug endpoint: try to access financialdocument.platform.intuit.com with QB token
+app.get('/api/debug/source-document/:billId', async (req, res) => {
+  try {
+    const billId = req.params.billId;
+    const tokens = await qbClient.getValidTokens();
+
+    // Try different possible document IDs/patterns
+    const attempts = [
+      { id: billId, label: 'Using billId directly' },
+      { id: billId.substring(0, 8), label: 'Using first 8 chars of billId' },
+    ];
+
+    const results = [];
+
+    for (const attempt of attempts) {
+      const url = `https://financialdocument.platform.intuit.com/v2/no-user-cred/documents/${attempt.id}`;
+      try {
+        const resp = await axios.get(url, {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+          timeout: 5000,
+        });
+        results.push({
+          ...attempt,
+          status: resp.status,
+          success: true,
+          contentType: resp.headers['content-type'],
+          contentLength: resp.data?.length || 'unknown',
+        });
+      } catch (e) {
+        results.push({
+          ...attempt,
+          status: e.response?.status || 'no-response',
+          success: false,
+          error: e.message,
+          errorStatus: e.response?.statusText,
+        });
+      }
+    }
+
+    res.json({
+      billId,
+      tokenType: 'QB Bearer',
+      attempts: results,
+    });
+  } catch (err) {
+    console.error('Error testing source document access:', err.message);
+    res.status(500).json({
+      error: 'Failed to test source document',
       message: err.message,
     });
   }
