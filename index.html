@@ -1573,80 +1573,6 @@
       );
     }
 
-    function RecipeCostsDashboard() {
-      const [recipes, setRecipes] = useState([]);
-      const [loading, setLoading] = useState(true);
-      const [error, setError] = useState(null);
-      const [sortBy, setSortBy] = useState('recipe');
-
-      useEffect(() => {
-        const fetchRecipes = async () => {
-          try {
-            const response = await fetch('/api/recipe-costs');
-            if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
-            const data = await response.json();
-            setRecipes(data.recipes || []);
-          } catch (e) {
-            setError(e.message);
-          } finally {
-            setLoading(false);
-          }
-        };
-        fetchRecipes();
-      }, []);
-
-      if (loading) return <div style={{ padding: '20px' }}>Loading recipe costs…</div>;
-      if (error) return <div style={{ padding: '20px', color: 'red' }}>Error: {error}</div>;
-
-      const sorted = [...recipes].sort((a, b) => {
-        if (sortBy === 'cost') return (b.costPerUnit || 0) - (a.costPerUnit || 0);
-        if (sortBy === 'batch') return (b.batchCost || 0) - (a.batchCost || 0);
-        return a.recipe.localeCompare(b.recipe);
-      });
-
-      return (
-        <div className="container" style={{ padding: '20px' }}>
-          <h2>Recipe Costs</h2>
-          <div style={{ marginBottom: '20px', color: '#666', fontSize: '14px' }}>
-            {recipes.length} recipes fully costed
-            {recipes[0]?.totalKg && ` | Last updated: ${new Date().toLocaleString()}`}
-          </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <label>Sort by: </label>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-              <option value="recipe">Recipe Name</option>
-              <option value="cost">Cost Per Unit</option>
-              <option value="batch">Batch Cost</option>
-            </select>
-          </div>
-
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
-            <thead>
-              <tr style={{ background: '#f0f0f0', borderBottom: '2px solid #ddd' }}>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Recipe</th>
-                <th style={{ padding: '10px', textAlign: 'right' }}>Batch Cost</th>
-                <th style={{ padding: '10px', textAlign: 'right' }}>Total Kg</th>
-                <th style={{ padding: '10px', textAlign: 'right' }}>Units/Batch</th>
-                <th style={{ padding: '10px', textAlign: 'right' }}>Cost Per Unit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((r, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '10px' }}>{r.recipe}</td>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>${(r.batchCost || 0).toFixed(2)}</td>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>{(r.totalKg || 0).toFixed(2)}</td>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>{r.unitsPerBatch ? r.unitsPerBatch.toFixed(2) : '—'}</td>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>${r.costPerUnit ? r.costPerUnit.toFixed(2) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
-    }
-
     function ProductMarginsDashboard() {
       const [loading, setLoading] = useState(true);
       const [data, setData] = useState(null);
@@ -2091,7 +2017,6 @@
                 <button className={`tab-button ${activeTab === 'waste' ? 'active' : ''}`} onClick={() => setActiveTab('waste')}>Waste</button>
                 <button className={`tab-button ${activeTab === 'market-performance' ? 'active' : ''}`} onClick={() => setActiveTab('market-performance')}>Performance by Market</button>
                 <button className={`tab-button ${activeTab === 'product-margins' ? 'active' : ''}`} onClick={() => setActiveTab('product-margins')}>Product Margins</button>
-                <button className={`tab-button ${activeTab === 'recipe-costs' ? 'active' : ''}`} onClick={() => setActiveTab('recipe-costs')}>Recipe Costs</button>
                 <button className={`tab-button ${activeTab === 'cash-balance' ? 'active' : ''}`} onClick={() => setActiveTab('cash-balance')}>Cash Balance</button>
               </div>
             </div>
@@ -2104,7 +2029,6 @@
           <div className={`tab-content ${activeTab === 'waste' ? 'active' : ''}`}><WasteDashboard /></div>
           <div className={`tab-content ${activeTab === 'market-performance' ? 'active' : ''}`}><MarketPerformanceDashboard /></div>
           <div className={`tab-content ${activeTab === 'product-margins' ? 'active' : ''}`}><ProductMarginsDashboard /></div>
-          <div className={`tab-content ${activeTab === 'recipe-costs' ? 'active' : ''}`}><RecipeCostsDashboard /></div>
           <div className={`tab-content ${activeTab === 'cash-balance' ? 'active' : ''}`}><CashBalanceDashboard /></div>
         </div>
       );
