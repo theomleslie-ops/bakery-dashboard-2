@@ -59,18 +59,18 @@ ingredient_costs = {
 
 levain_cost_per_kg = 0.72
 poolish_cost_per_kg = 0.60
-country_dough_cost_per_kg = 0.653  # Calculated: (0.75*0.01 + 0.2*0.72 + 0.9*0.96 + 0.1*1.76 + 0.02*1.59) / 1.872 kg yield
+country_dough_cost_per_kg = 0.621  # Calculated: (0.75*0.01 + 0.2*0.72 + 0.9*0.96 + 0.1*1.76 + 0.02*1.59) / 1.970 kg brut
 challah_dough_cost_per_kg = 3.63
 
 sales_data = [
-    {"rank": 1, "product": "Country Round", "units": 1984, "price": 12.00, "cost": 0.65},
+    {"rank": 1, "product": "Country Round", "units": 1984, "price": 12.00, "cost": 0.62},
     {"rank": 2, "product": "Breakfast Bar", "units": 3124, "price": 7.50, "cost": 1.66},
     {"rank": 3, "product": "NO-NUT Choc Chip Cookie", "units": 3424, "price": 6.00, "cost": 1.18},
     {"rank": 4, "product": "Double Choc Chip Cookie", "units": 2799, "price": 6.50, "cost": 1.26},
-    {"rank": 5, "product": "Country PC", "units": 2973, "price": 6.00, "cost": 0.29},
+    {"rank": 5, "product": "Country PC", "units": 2973, "price": 6.00, "cost": 0.28},
     {"rank": 6, "product": "ORIGINAL Choc Chip Cookie", "units": 2702, "price": 6.50, "cost": 1.21},
     {"rank": 7, "product": "Oatmeal Raisin Cookie", "units": 2490, "price": 6.00, "cost": 1.19},
-    {"rank": 8, "product": "Baguette", "units": 1145, "price": 10.00, "cost": 0.49},
+    {"rank": 8, "product": "Baguette", "units": 1145, "price": 10.00, "cost": 0.47},
     {"rank": 9, "product": "Forest Scone", "units": 1852, "price": 6.00, "cost": None},
     {"rank": 10, "product": "Olive PC", "units": 1703, "price": 6.50, "cost": None},
     {"rank": 11, "product": "Chocolate Sourdough Scone", "units": 1818, "price": 6.00, "cost": 0.88},
