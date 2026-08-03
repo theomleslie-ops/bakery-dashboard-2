@@ -2744,19 +2744,18 @@ app.get('/api/cash-balance', async (req, res) => {
     const qbClient = require('./pipeline/qb-client');
     const tokens = await qbClient.getValidTokens();
 
-    // Helper to extract total cash from balance sheet bank accounts section
-    const findCashTotal = (rows) => {
+    // Helper to extract "Cash at End of Period" from cash flow statement
+    const findCashAtEnd = (rows) => {
       if (!rows) return null;
       for (const row of rows) {
         const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        // Look for "Bank Accounts" group
-        if (label.toUpperCase().includes('BANK')) {
+        if (label.toUpperCase().includes('CASH AT END')) {
           const val = row.Summary?.ColData?.[1]?.value || row.ColData?.[1]?.value;
           if (val !== undefined && val !== null) return parseFloat(val);
         }
         // Recurse into nested rows
         if (row.Rows?.Row) {
-          const found = findCashTotal(row.Rows.Row);
+          const found = findCashAtEnd(row.Rows.Row);
           if (found !== null) return found;
         }
       }
@@ -2794,37 +2793,37 @@ app.get('/api/cash-balance', async (req, res) => {
       console.log(`Range: ${months[0].name} ${months[0].year} to ${months[months.length - 1].name} ${months[months.length - 1].year}`);
     }
 
-    // Query QB Balance Sheet for each month's end date to get cash snapshot
+    // Query QB Statement of Cash Flows for each month
     const balances = [];
     let currentCash = 0;
 
-    console.log('Querying QB Balance Sheet for each month...');
+    console.log('Querying QB Statement of Cash Flows for each month...');
     for (const monthData of months) {
       const monthIndex = MONTH_NAMES.indexOf(monthData.name);
-      const lastDayOfMonth = new Date(monthData.year, monthIndex + 1, 0);
-      const year = lastDayOfMonth.getFullYear();
-      const month = String(lastDayOfMonth.getMonth() + 1).padStart(2, '0');
-      const day = String(lastDayOfMonth.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
+      const firstDay = new Date(monthData.year, monthIndex, 1);
+      const lastDay = new Date(monthData.year, monthIndex + 1, 0);
+
+      const startDateStr = firstDay.toISOString().split('T')[0];
+      const endDateStr = lastDay.toISOString().split('T')[0];
 
       try {
-        const bsRes = await axios.get(
-          `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
+        const cfRes = await axios.get(
+          `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
           {
-            params: { as_of_date: dateStr },
+            params: { start_date: startDateStr, end_date: endDateStr },
             headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
           }
         );
 
-        const cash = findCashTotal(bsRes.data.Rows?.Row) || 0;
+        const cash = findCashAtEnd(cfRes.data.Rows?.Row) || 0;
         currentCash = cash;
         balances.push({
-          date: dateStr,
+          date: endDateStr,
           balance: round2(cash),
         });
-        console.log(`  ✅ ${dateStr}: $${round2(cash)}`);
+        console.log(`  ✅ ${endDateStr}: $${round2(cash)}`);
       } catch (err) {
-        console.warn(`Failed to fetch Balance Sheet for ${dateStr}: ${err.message}`);
+        console.warn(`Failed to fetch CashFlow for ${monthData.name} ${monthData.year}: ${err.message}`);
       }
     }
 
