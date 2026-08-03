@@ -1055,8 +1055,15 @@ const startQBRefreshJobs = () => {
   });
 };
 
-const getQBRedirectUri = () =>
-  process.env.QUICKBOOKS_REDIRECT_URI || `http://localhost:${PORT}/api/quickbooks/callback`;
+const getQBRedirectUri = () => {
+  if (process.env.QUICKBOOKS_REDIRECT_URI) {
+    return process.env.QUICKBOOKS_REDIRECT_URI;
+  }
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/api/quickbooks/callback`;
+  }
+  return `http://localhost:${PORT}/api/quickbooks/callback`;
+};
 
 // Use qbClient for token loading (canonical source)
 const getValidQBAccessToken = async () => {
