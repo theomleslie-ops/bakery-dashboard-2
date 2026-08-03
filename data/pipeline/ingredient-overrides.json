@@ -33,7 +33,7 @@
       "recipe": "FOREST SCONES"
     },
     {
-      "squareItem": "Chocolate Sourdough \"Scone\"",
+      "squareItem": "Chocolate Sourdough Scone",
       "recipe": "Chocolate polenta scone - british"
     },
     {
@@ -71,6 +71,14 @@
     {
       "squareItem": "Olive PC",
       "recipe": "Country olive dough with Galahad"
+    },
+    {
+      "squareItem": "Jalapeno & Cheddar Baton",
+      "recipe": "City dough"
+    },
+    {
+      "squareItem": "Ham & Cheese Baton",
+      "recipe": "Country dough"
     }
   ]
 }
