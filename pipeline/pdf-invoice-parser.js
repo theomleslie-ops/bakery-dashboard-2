@@ -76,13 +76,25 @@ const parseInvoiceText = (text, billId) => {
     for (let j = 1; j <= 4 && i + j < lines.length; j++) {
       const nextLine = lines[i + j];
 
-      // Stop if we hit a header or another item start
-      if (skipPatterns.test(nextLine) || nextLine.match(new RegExp(`^\\d+\\s+(${unitPattern})\\b`, 'i'))) {
+      // Skip headers/footers
+      if (skipPatterns.test(nextLine)) {
         break;
       }
 
+      // Check if this line looks like a NEW item start (not just a price line)
+      // Price lines look like "34.00 CS 34.00" - small number + unit + small number
+      // Real items have qty + unit + more text/numbers with item code
+      const qtyMatch = nextLine.match(new RegExp(`^(\\d+(?:\\.\\d+)?)\\s+(${unitPattern})\\b`, 'i'));
+      if (qtyMatch) {
+        const potentialQty = parseFloat(qtyMatch[1]);
+        // If qty is large (>100) or followed by item code/text (not just prices), it's a new item
+        if (potentialQty >= 100 || /\D[A-Z0-9]{3,}/.test(nextLine.substring(qtyMatch[0].length))) {
+          break; // This is a real new item, stop merging
+        }
+        // Otherwise it's probably a price line (small qty + unit + numbers), keep merging
+      }
+
       // Include the line if it looks like part of the item
-      // (has text or numbers, not empty)
       if (nextLine.length > 0) {
         mergedLine = mergedLine + ' ' + nextLine;
         linesConsumed = j;
