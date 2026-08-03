@@ -2580,6 +2580,8 @@ app.get('/api/product-margins', async (req, res) => {
     const overridesFile = path.join(DATA_DIR, 'pipeline', 'ingredient-overrides.json');
     const overrides = {};
     let overridesLoadedCount = 0;
+    let overrideDebugInfo = { dirname: __dirname, dataDir: DATA_DIR, overridesFile };
+
     if (fs.existsSync(overridesFile)) {
       try {
         const overridesData = JSON.parse(fs.readFileSync(overridesFile, 'utf-8'));
@@ -2590,11 +2592,15 @@ app.get('/api/product-margins', async (req, res) => {
           overridesLoadedCount++;
         }
         console.log(`✓ Loaded ${overridesLoadedCount} recipe overrides`);
+        overrideDebugInfo.status = 'loaded';
       } catch (e) {
         console.error(`✗ Failed to parse overrides: ${e.message}`);
+        overrideDebugInfo.status = 'parse-error';
+        overrideDebugInfo.error = e.message;
       }
     } else {
       console.error(`✗ Overrides file not found: ${overridesFile}`);
+      overrideDebugInfo.status = 'file-not-found';
     }
 
     // Try to fetch Square data, fallback to empty if not available
@@ -2634,10 +2640,15 @@ app.get('/api/product-margins', async (req, res) => {
         // Priority 1: Check explicit overrides
         if (overrides[itemLower]) {
           const recipeName = overrides[itemLower];
-          costPerUnit = costByRecipe[recipeName.toLowerCase()];
-          matchedRecipe = recipeName;
-          matchMethod = 'override';
-          debugMatches.push({ product: item.name, matched: matchedRecipe, cost: costPerUnit, method: matchMethod });
+          const recipeCost = costByRecipe[recipeName.toLowerCase()];
+          if (recipeCost != null) {
+            costPerUnit = recipeCost;
+            matchedRecipe = recipeName;
+            matchMethod = 'override';
+            debugMatches.push({ product: item.name, matched: matchedRecipe, cost: costPerUnit, method: matchMethod });
+          } else {
+            debugMatches.push({ product: item.name, override: recipeName, error: `recipe not found in costs`, method: 'override-failed' });
+          }
         }
 
         // Priority 2: Fuzzy matching if override didn't work
@@ -2716,6 +2727,7 @@ app.get('/api/product-margins', async (req, res) => {
       windows: result,
       debug: {
         overridesLoaded: overridesLoadedCount,
+        overrideFileDebug: overrideDebugInfo,
         matchingResults: debugMatches.slice(0, 10)
       }
     });
