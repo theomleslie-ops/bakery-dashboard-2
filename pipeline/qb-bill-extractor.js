@@ -53,7 +53,6 @@ const categorizeVendor = (vendorName) => {
   const name = vendorName.toLowerCase();
   if (VENDOR_PATTERNS.chefs_warehouse.test(name)) return 'chefs_warehouse';
   if (VENDOR_PATTERNS.greenleaf.test(name)) return 'greenleaf';
-  if (VENDOR_PATTERNS.allen_brothers.test(name)) return 'allen_brothers';
   return null;
 };
 
@@ -81,11 +80,7 @@ const extractBills = async ({ weeks = 12 } = {}) => {
     // Then filter by vendor name in JavaScript for reliability
     console.log(`  Querying all bills since ${cutoffISO}…`);
 
-    const query = `
-      SELECT * FROM Bill
-      WHERE TxnDate >= '${cutoffISO}'
-      ORDERBY TxnDate DESC
-    `;
+    const query = `SELECT * FROM Bill WHERE TxnDate >= '${cutoffISO}' ORDER BY TxnDate DESC`;
 
     try {
       const response = await qbClient.query(query);
