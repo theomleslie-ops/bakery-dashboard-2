@@ -2528,6 +2528,23 @@ app.get('/api/recipe-costs', (req, res) => {
   }
 });
 
+// Debug endpoint to check ingredient overrides are loaded
+app.get('/api/debug/overrides', (req, res) => {
+  try {
+    const overridesFile = path.join(DATA_DIR, 'pipeline', 'ingredient-overrides.json');
+    if (!fs.existsSync(overridesFile)) {
+      return res.json({ error: 'File not found', path: overridesFile });
+    }
+    const data = JSON.parse(fs.readFileSync(overridesFile, 'utf-8'));
+    res.json({
+      count: data.mappings.length,
+      mappings: data.mappings.slice(0, 5)
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Main product margins endpoint
 app.get('/api/product-margins', async (req, res) => {
   try {
