@@ -3156,16 +3156,17 @@ app.get('/api/debug/bill-sources/:billDocNumber', async (req, res) => {
   }
 });
 
-// Debug endpoint: try to access financialdocument.platform.intuit.com with QB token
+// Debug endpoint: try to access financialdocument.platform.intuit.com with different auth methods
 app.get('/api/debug/source-document/:billId', async (req, res) => {
   try {
     const billId = req.params.billId;
     const tokens = await qbClient.getValidTokens();
 
-    // Try different possible document IDs/patterns
+    // Try different ID formats and auth methods
     const attempts = [
-      { id: billId, label: 'Using billId directly' },
-      { id: billId.substring(0, 8), label: 'Using first 8 chars of billId' },
+      { id: billId, authType: 'QB-Bearer', getHeaders: () => ({ Authorization: `Bearer ${tokens.access_token}` }) },
+      { id: billId, authType: 'none', getHeaders: () => ({}) },
+      { id: billId, authType: 'realm-header', getHeaders: () => ({ 'X-QB-Realm-Id': tokens.realmId, Authorization: `Bearer ${tokens.access_token}` }) },
     ];
 
     const results = [];
@@ -3174,7 +3175,7 @@ app.get('/api/debug/source-document/:billId', async (req, res) => {
       const url = `https://financialdocument.platform.intuit.com/v2/no-user-cred/documents/${attempt.id}`;
       try {
         const resp = await axios.get(url, {
-          headers: { Authorization: `Bearer ${tokens.access_token}` },
+          headers: attempt.getHeaders(),
           timeout: 5000,
         });
         results.push({
@@ -3189,7 +3190,7 @@ app.get('/api/debug/source-document/:billId', async (req, res) => {
           ...attempt,
           status: e.response?.status || 'no-response',
           success: false,
-          error: e.message,
+          error: e.message?.substring(0, 80),
           errorStatus: e.response?.statusText,
         });
       }
@@ -3197,8 +3198,8 @@ app.get('/api/debug/source-document/:billId', async (req, res) => {
 
     res.json({
       billId,
-      tokenType: 'QB Bearer',
       attempts: results,
+      note: '403 Forbidden means endpoint exists but auth is wrong. 404 means wrong ID format.',
     });
   } catch (err) {
     console.error('Error testing source document access:', err.message);
