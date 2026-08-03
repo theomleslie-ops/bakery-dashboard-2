@@ -1951,22 +1951,25 @@
                     );
                   })}
 
-                  {/* X-axis labels - show every 2 months */}
-                  {balances.map((b, i) => {
-                    const shouldShow = (i % 2 === 0);
-                    if (shouldShow) {
-                      const x = 60 + (i / (balances.length - 1)) * 890;
-                      const [year, month, day] = b.date.split('-');
-                      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                      const label = `${monthNames[parseInt(month) - 1]} '${year.slice(-2)}`;
-                      return (
-                        <text key={`label${i}`} x={x} y={chartHeight + 40} textAnchor="middle" fontSize="11" fill="#666">
-                          {label}
-                        </text>
-                      );
-                    }
-                    return null;
-                  })}
+                  {/* X-axis labels - dynamic spacing to prevent overlap */}
+                  {(() => {
+                    const labelStride = Math.max(1, Math.ceil(balances.length / 15));
+                    return balances.map((b, i) => {
+                      const shouldShow = (i % labelStride === 0) || (i === balances.length - 1);
+                      if (shouldShow) {
+                        const x = 60 + (i / (balances.length - 1)) * 890;
+                        const [year, month, day] = b.date.split('-');
+                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        const label = `${monthNames[parseInt(month) - 1]} '${year.slice(-2)}`;
+                        return (
+                          <text key={`label${i}`} x={x} y={chartHeight + 40} textAnchor="middle" fontSize="11" fill="#666">
+                            {label}
+                          </text>
+                        );
+                      }
+                      return null;
+                    });
+                  })()}
 
                   {/* Hover tooltip */}
                   {hoveredIndex !== null && (() => {
