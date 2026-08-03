@@ -2614,7 +2614,7 @@ app.get('/api/product-margins', async (req, res) => {
 
       const withMargins = [];
       for (const item of top20) {
-        // Find BEST recipe match using fuzzy matching (ignore overrides, they weren't working)
+        // Find BEST recipe match using multi-level fuzzy matching
         let costPerUnit = null;
         let matchedRecipe = null;
         const recipes = Object.keys(costByRecipe);
@@ -2622,15 +2622,33 @@ app.get('/api/product-margins', async (req, res) => {
         // Score all recipes and pick the best match
         let bestScore = 0;
         let bestRecipe = null;
+        const itemLower = item.name.toLowerCase();
 
         for (const recipe of recipes) {
+          let score = 0;
+          const recipeLower = recipe.toLowerCase();
+
+          // Method 1: Token overlap (original algorithm)
           const recipeToks = matcher.tokenize(recipe);
-          const itemToks = matcher.tokenize(item.name);
+          const itemToks = matcher.tokenize(itemLower);
 
-          if (!recipeToks.length || !itemToks.length) continue;
+          if (recipeToks.length && itemToks.length) {
+            const overlap = recipeToks.filter(t => itemToks.includes(t));
+            score = overlap.length / recipeToks.length;
+          }
 
-          const overlap = recipeToks.filter(t => itemToks.includes(t));
-          const score = recipeToks.length > 0 ? overlap.length / recipeToks.length : 0;
+          // Method 2: Substring matching (boost score if recipe name is in item name or vice versa)
+          if (recipeLower.includes(itemLower) || itemLower.includes(recipeLower)) {
+            score = Math.max(score, 0.9);
+          }
+
+          // Method 3: Partial word matching (any word from recipe in item name)
+          const recipeWords = recipeLower.split(/[\s\-_()]+/).filter(w => w.length > 2);
+          const itemWords = itemLower.split(/[\s\-_()]+/).filter(w => w.length > 2);
+          const wordOverlap = recipeWords.filter(w => itemWords.some(iw => iw.includes(w) || w.includes(iw)));
+          if (wordOverlap.length > 0) {
+            score = Math.max(score, wordOverlap.length / recipeWords.length);
+          }
 
           if (score > bestScore) {
             bestScore = score;
