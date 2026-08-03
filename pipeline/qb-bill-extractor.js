@@ -77,35 +77,43 @@ const extractBills = async ({ weeks = 12 } = {}) => {
   let allBills = [];
 
   try {
-    // Query each vendor separately using partial name matching
-    for (const [key, vendorName] of Object.entries(VENDOR_NAMES)) {
-      console.log(`  Querying ${vendorName}…`);
+    // Query ALL bills from the date range (no vendor filter)
+    // Then filter by vendor name in JavaScript for reliability
+    console.log(`  Querying all bills since ${cutoffISO}…`);
 
-      // QB query: search for bills where vendor name LIKE the pattern
-      // Using % wildcards for flexible matching
-      const vendorQuery = `
-        SELECT * FROM Bill
-        WHERE TxnDate >= '${cutoffISO}'
-        AND VendorRef.name LIKE '%${vendorName.split(' ')[0]}%'
-        ORDERBY TxnDate DESC
-      `;
+    const query = `
+      SELECT * FROM Bill
+      WHERE TxnDate >= '${cutoffISO}'
+      ORDERBY TxnDate DESC
+    `;
 
-      try {
-        const response = await qbClient.makeAuthenticatedRequest('/query', {
-          method: 'GET',
-          qs: { query: vendorQuery },
+    try {
+      const response = await qbClient.makeAuthenticatedRequest('/query', {
+        method: 'GET',
+        qs: { query },
+      });
+
+      const allQBBills = response.QueryResponse?.Bill || [];
+      console.log(`  ✓ Retrieved ${allQBBills.length} total bills since ${cutoffISO}`);
+
+      // Filter bills by vendor name in JavaScript
+      for (const [key, vendorName] of Object.entries(VENDOR_NAMES)) {
+        const vendorBills = allQBBills.filter(bill => {
+          const billVendor = bill.VendorRef?.name || '';
+          // Case-insensitive partial match on vendor name
+          return billVendor.toLowerCase().includes(vendorName.toLowerCase());
         });
 
-        const vendorBills = response.QueryResponse?.Bill || [];
         if (vendorBills.length > 0) {
           allBills.push(...vendorBills);
-          console.log(`    ✓ Found ${vendorBills.length} bills from ${vendorName}`);
+          console.log(`    ✓ ${vendorBills.length} bills from ${vendorName}`);
         } else {
-          console.log(`    ⊘ No bills found for ${vendorName}`);
+          console.log(`    ⊘ No bills from ${vendorName}`);
         }
-      } catch (e) {
-        console.warn(`    ⚠️  Error querying ${vendorName}: ${e.message}`);
       }
+    } catch (e) {
+      console.warn(`    ⚠️  Error querying bills: ${e.message}`);
+      throw e;
     }
   } catch (e) {
     console.error('Bill query failed:', e.message);
