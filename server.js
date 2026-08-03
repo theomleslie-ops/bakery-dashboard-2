@@ -2995,6 +2995,47 @@ app.get('/api/margin-scheduler/status', (req, res) => {
   });
 });
 
+// Extract and display ingredient costs from QB bills
+app.get('/api/ingredient-costs', async (req, res) => {
+  try {
+    const qbClient = require('./pipeline/qb-client');
+    const qbBillExtractor = require('./pipeline/qb-bill-extractor');
+
+    // Check if QB is connected
+    let qbConnected = false;
+    try {
+      const tokens = qbClient.loadTokens();
+      qbConnected = !!(tokens && tokens.refresh_token);
+    } catch {}
+
+    if (!qbConnected) {
+      return res.status(400).json({
+        error: 'QuickBooks not authenticated',
+        message: 'Visit /api/quickbooks/connect to authorize access to vendor bills',
+        status: 'qb_not_connected',
+      });
+    }
+
+    const result = await qbBillExtractor.extractBills({ weeks: parseInt(req.query.weeks || '52') });
+
+    res.json({
+      status: 'success',
+      generatedAt: result.generatedAt,
+      billsProcessed: result.billsProcessed,
+      ingredientsExtracted: result.ingredientsExtracted,
+      ingredients: result.ingredients,
+      note: 'Sorted alphabetically. Shows most recent purchase price per ingredient. If ingredient appears from multiple vendors, shows most recent purchase regardless of vendor.',
+    });
+  } catch (err) {
+    console.error('Ingredient cost extraction error:', err.message);
+    res.status(500).json({
+      error: 'Bill extraction failed',
+      message: err.message,
+      code: err.code,
+    });
+  }
+});
+
 // Cash balance trend - fetches Statement of Cash Flows from QB
 app.get('/api/cash-balance', async (req, res) => {
   try {
