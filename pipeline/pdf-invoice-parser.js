@@ -16,18 +16,19 @@ const parseInvoiceText = (text, billId) => {
   // Search for missing ingredients to debug extraction
   const searchKeywords = ['FLOUR', 'BUTTER', 'SUGAR', 'YEAST', 'CHOCOLATE'];
   const foundKeywords = [];
-  lines.forEach((line, idx) => {
+  for (let idx = 0; idx < lines.length; idx++) {
+    const lineUpper = lines[idx].toUpperCase();
     for (const kw of searchKeywords) {
-      if (line.toUpperCase().includes(kw)) {
-        foundKeywords.push({ keyword: kw, lineIdx: idx, line });
+      if (lineUpper.includes(kw)) {
+        foundKeywords.push({ keyword: kw, lineIdx: idx, line: lines[idx] });
       }
     }
-  });
+  }
   if (foundKeywords.length > 0) {
     console.log(`      🔍 FOUND MISSING INGREDIENTS in bill ${billId}:`);
-    foundKeywords.forEach(f => {
+    for (const f of foundKeywords) {
       console.log(`         [${f.lineIdx}] ${f.keyword}: "${f.line}"`);
-    });
+    }
   }
 
   // Non-food items and packaging to exclude
