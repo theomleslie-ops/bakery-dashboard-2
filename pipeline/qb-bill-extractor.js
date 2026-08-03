@@ -3,6 +3,7 @@
 // Pulls full line-item detail and builds ingredient cost table
 
 const qbClient = require('./qb-client');
+const pdfParser = require('./pdf-invoice-parser');
 
 // Vendor name patterns to match actual QB vendor names
 const VENDOR_PATTERNS = {
@@ -16,25 +17,41 @@ const VENDOR_NAMES = {
 };
 
 // Parse a bill from QB API response
-const parseBill = (bill) => {
-  const lines = [];
+// Tries to extract itemized line items from attached PDF invoice,
+// falls back to QB's Line array if PDF not available or parsing fails
+const parseBill = async (bill) => {
+  let lines = [];
+  let extractionSource = 'unknown';
 
-  // Extract line items
-  const lineItems = bill.Line || [];
-  for (const line of lineItems) {
-    if (line.DetailType === 'ItemBasedExpenseLineDetail' || line.DetailType === 'AccountBasedExpenseLineDetail') {
-      const item = line.ItemBasedExpenseLineDetail?.ItemRef || line.AccountBasedExpenseLineDetail?.AccountRef;
-      const description = line.Description || item?.name || 'Unknown Item';
-      const quantity = line.ItemBasedExpenseLineDetail?.Qty || 1;
-      const unitPrice = line.Amount / Math.max(quantity, 1);
+  // Try PDF extraction first (vendor invoices have itemized detail)
+  const pdfItems = await pdfParser.extractLineItemsFromPdf(bill.Id);
+  if (pdfItems && pdfItems.length > 0) {
+    lines = pdfItems.map(item => ({
+      description: item.description.trim(),
+      quantity: item.quantity,
+      unitPrice: Math.round(item.unitPrice * 100) / 100,
+      lineAmount: Math.round((item.quantity * item.unitPrice) * 100) / 100,
+    }));
+    extractionSource = 'pdf';
+  } else {
+    // Fall back to QB's Line array
+    const lineItems = bill.Line || [];
+    for (const line of lineItems) {
+      if (line.DetailType === 'ItemBasedExpenseLineDetail' || line.DetailType === 'AccountBasedExpenseLineDetail') {
+        const item = line.ItemBasedExpenseLineDetail?.ItemRef || line.AccountBasedExpenseLineDetail?.AccountRef;
+        const description = line.Description || item?.name || 'Unknown Item';
+        const quantity = line.ItemBasedExpenseLineDetail?.Qty || 1;
+        const unitPrice = line.Amount / Math.max(quantity, 1);
 
-      lines.push({
-        description: description.trim(),
-        quantity,
-        unitPrice: Math.round(unitPrice * 100) / 100,
-        lineAmount: Math.round(line.Amount * 100) / 100,
-      });
+        lines.push({
+          description: description.trim(),
+          quantity,
+          unitPrice: Math.round(unitPrice * 100) / 100,
+          lineAmount: Math.round(line.Amount * 100) / 100,
+        });
+      }
     }
+    extractionSource = lines.length > 0 ? 'bill_line_array' : 'none';
   }
 
   return {
@@ -45,6 +62,7 @@ const parseBill = (bill) => {
     dueDate: bill.DueDate,
     totalAmount: Math.round((bill.TotalAmt || 0) * 100) / 100,
     lineItems: lines,
+    extractionSource, // DEBUG: track which method was used
   };
 };
 
@@ -158,10 +176,22 @@ const extractBills = async ({ weeks = 12 } = {}) => {
     throw e;
   }
 
-  // Parse bills and extract line items
-  const parsedBills = allBills.map(parseBill);
+  // Parse bills and extract line items (async, so use Promise.all)
+  const parsedBills = await Promise.all(allBills.map(parseBill));
 
   console.log(`  ✓ Parsed ${parsedBills.length} bills\n`);
+
+  // Show extraction source breakdown
+  const sourceCount = {};
+  for (const bill of parsedBills) {
+    const src = bill.extractionSource;
+    sourceCount[src] = (sourceCount[src] || 0) + 1;
+  }
+  console.log('  Extraction sources:');
+  for (const [source, count] of Object.entries(sourceCount)) {
+    console.log(`    ${source}: ${count} bills`);
+  }
+  console.log();
 
   // Build ingredient cost table: aggregate by ingredient and find most recent price
   const ingredientCosts = {};
