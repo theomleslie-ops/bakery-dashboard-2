@@ -128,7 +128,9 @@ const extractBills = async ({ weeks = 12 } = {}) => {
       }
 
       // Fetch full detail for each bill from target vendors
+      console.log(`  Starting vendor bill detail fetch loop for ${Object.keys(VENDOR_NAMES).length} vendors…`);
       for (const [vendorKey, vendorName] of Object.entries(VENDOR_NAMES)) {
+        console.log(`    Processing vendor: ${vendorName}`);
         const billIds = vendorBillIds[vendorKey] || [];
         if (billIds.length === 0) {
           console.log(`    ⊘ No bills from ${vendorName}`);
@@ -149,32 +151,42 @@ const extractBills = async ({ weeks = 12 } = {}) => {
           }
         }
 
+        console.log(`    Fetched ${fullBills.length} full bills from ${vendorName}`);
+
         if (fullBills.length > 0) {
           allBills.push(...fullBills);
           console.log(`    ✓ ${fullBills.length} bills from ${vendorName} (with full line detail)`);
 
           // DEBUG: Log ALL fields from first bill to check for source document reference
-          const firstBill = fullBills[0];
-          console.log(`\n    DEBUG: First ${vendorName} bill (ID: ${firstBill.Id}) all fields:`);
-          const fieldNames = Object.keys(firstBill).sort();
-          console.log(`      Fields (${fieldNames.length}): ${fieldNames.join(', ')}`);
+          console.log(`    About to log first bill fields for ${vendorName}…`);
+          try {
+            const firstBill = fullBills[0];
+            console.log(`\n    DEBUG: First ${vendorName} bill (ID: ${firstBill.Id}) all fields:`);
+            const fieldNames = Object.keys(firstBill).sort();
+            console.log(`      Total fields: ${fieldNames.length}`);
+            console.log(`      All field names: ${fieldNames.join(', ')}`);
 
-          // Look specifically for source document or file references
-          const sourceFields = fieldNames.filter(f =>
-            f.toLowerCase().includes('source') ||
-            f.toLowerCase().includes('document') ||
-            f.toLowerCase().includes('file') ||
-            f.toLowerCase().includes('ref') ||
-            f.toLowerCase().includes('url') ||
-            f.toLowerCase().includes('link')
-          );
-          if (sourceFields.length > 0) {
-            console.log(`      Source/Document/File fields: ${sourceFields.join(', ')}`);
-            for (const field of sourceFields) {
-              console.log(`        ${field}: ${JSON.stringify(firstBill[field]).substring(0, 200)}`);
+            // Look specifically for source document or file references
+            const sourceFields = fieldNames.filter(f =>
+              f.toLowerCase().includes('source') ||
+              f.toLowerCase().includes('document') ||
+              f.toLowerCase().includes('file') ||
+              f.toLowerCase().includes('ref') ||
+              f.toLowerCase().includes('url') ||
+              f.toLowerCase().includes('link')
+            );
+            if (sourceFields.length > 0) {
+              console.log(`      Source/Document/File fields: ${sourceFields.join(', ')}`);
+              for (const field of sourceFields) {
+                const value = JSON.stringify(firstBill[field]).substring(0, 500);
+                console.log(`        ${field}: ${value}`);
+              }
+            } else {
+              console.log(`      ⚠️  No source/document/file/url fields found on Bill object`);
             }
-          } else {
-            console.log(`      ⚠️  No source/document/file/url fields found on Bill object`);
+          } catch (debugErr) {
+            console.error(`    ERROR in debug logging: ${debugErr.message}`);
+            console.error(debugErr.stack);
           }
           console.log();
         }
