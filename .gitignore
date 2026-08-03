@@ -6,3 +6,6 @@ uploads/
 data/*
 !data/monthly-financial.json
 !data/pl-by-channel.json
+!data/pipeline/yield-overrides.json
+!data/pipeline/ingredient-price-overrides.json
+!data/pipeline/ingredient-overrides.json
