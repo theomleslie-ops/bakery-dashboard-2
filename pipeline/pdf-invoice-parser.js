@@ -117,15 +117,15 @@ const parseInvoiceText = (text, billId) => {
     }
 
     // Extract description: everything after qty+unit, before prices get messy
-    // Keep item codes (they're useful for matching) but clean up formatting
     let description = mergedLine.substring(qtyUnitMatch[0].length).trim();
 
-    // Clean up: remove pack format patterns (e.g., "4/1 GAL", "10/3 LB", "24/500 ML")
-    // and other metadata, but keep alphanumeric item identifiers
+    // Aggressive cleanup: remove item codes, pack formats, UOM, prices, and metadata
     description = description
-      .replace(/\d+\/\d+\s*[A-Z]+/g, '') // Remove pack formats like "4/1 GAL"
-      .replace(/\b(plt|plt#|pallet|case|box|bag|pack|cs|ea|lb|pc|kg|g|oz|ml|l)\b/gi, '') // Remove unit references
-      .replace(/Plt#:|CS|PC|LB|BX|EA|CA|DZ|CT|KG|G|OZ|QT|GL|PT|ML|L/g, '') // Remove standalone UOM
+      .replace(/^[\d\w\-]+\s+/g, '') // Remove leading item/vendor codes (e.g., "VN150758 121881")
+      .replace(/\d+\/\d+\s*[A-Z]+/g, '') // Remove pack formats like "4/1 GAL", "3/5.75 LB"
+      .replace(/\d+\.?\d*\s*[A-Z]+\s*(?:Plt|CS|PC|LB|BC)/gi, '') // Remove "3/5.75 LB BC" patterns
+      .replace(/\b(plt|plt#|pallet|case|box|bag|pack|bc|cs|ea|lb|pc|kg|g|oz|ml|l|qt|gl|pt|ct|ca|dz|bx)\b/gi, '') // Remove all UOM/format keywords
+      .replace(/\d+\.\d{2}(?:\s+\d+\.\d{2})?/g, '') // Remove prices like "65.00" or "75.81 75.81"
       .replace(/\s+/g, ' ')  // Collapse spaces
       .trim();
 
