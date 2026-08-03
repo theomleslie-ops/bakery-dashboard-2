@@ -2794,11 +2794,21 @@ app.get('/api/cash-balance', async (req, res) => {
       console.log(`Range: ${months[0].name} ${months[0].year} to ${months[months.length - 1].name} ${months[months.length - 1].year}`);
     }
 
-    // Query QB CashFlow report for each month's end date
+    // Get balance sheet for Feb 28, 2025 as anchor point (known to be accurate)
+    const anchorDate = '2025-02-28';
+    const anchorBalance = 6676.32; // From QB Balance Sheet: Bank Accounts total as of Feb 28, 2025
+
     const balances = [];
     let currentCash = 0;
 
-    for (const monthData of months) {
+    // Split months into two groups: Feb 2025+ (use CashFlow) and before (calculate from anchor)
+    const moneyFeb2025Index = months.findIndex(m => m.year === 2025 && m.name === 'February');
+    const afterFeb = moneyFeb2025Index >= 0 ? months.slice(moneyFeb2025Index) : [];
+    const beforeFeb = moneyFeb2025Index >= 0 ? months.slice(0, moneyFeb2025Index) : months;
+
+    // Phase 1: For Feb 2025 and later, use CashFlow reports
+    console.log(`Fetching CashFlow data for ${afterFeb.length} months (Feb 2025+)...`);
+    for (const monthData of afterFeb) {
       const monthIndex = MONTH_NAMES.indexOf(monthData.name);
       const lastDayOfMonth = new Date(monthData.year, monthIndex + 1, 0);
       const year = lastDayOfMonth.getFullYear();
@@ -2807,7 +2817,6 @@ app.get('/api/cash-balance', async (req, res) => {
       const dateStr = `${year}-${month}-${day}`;
 
       try {
-        console.log(`Fetching QB CashFlow report for end_date=${dateStr}...`);
         const cfRes = await axios.get(
           `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
           {
@@ -2828,7 +2837,31 @@ app.get('/api/cash-balance', async (req, res) => {
       }
     }
 
-    console.log(`✅ Fetched ${balances.length} month-end cash balances from QB`);
+    // Phase 2: For months before Feb 2025, calculate backwards from anchor using P&L
+    console.log(`\nCalculating backwards from Feb 28, 2025 anchor ($${anchorBalance}) for ${beforeFeb.length} earlier months...`);
+    let runningBalance = anchorBalance;
+    for (let i = beforeFeb.length - 1; i >= 0; i--) {
+      const monthData = beforeFeb[i];
+      const pl = monthData.pl || 0;
+
+      // Working backwards: subtract PL to get previous month's ending balance
+      runningBalance -= pl;
+
+      const monthIndex = MONTH_NAMES.indexOf(monthData.name);
+      const monthDate = new Date(monthData.year, monthIndex + 1, 0);
+      const year = monthDate.getFullYear();
+      const month = String(monthDate.getMonth() + 1).padStart(2, '0');
+      const day = String(monthDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
+      balances.unshift({
+        date: dateStr,
+        balance: round2(runningBalance),
+      });
+      console.log(`  ${dateStr}: $${round2(runningBalance)} (worked back from P&L of $${pl})`);
+    }
+
+    console.log(`✅ Built ${balances.length} total month-end cash balances`);
 
     res.json({
       success: true,
