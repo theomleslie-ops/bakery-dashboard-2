@@ -78,12 +78,26 @@ const main = async ({ weeks = 12 } = {}) => {
     console.log(`  ⊘ Excluded: ${coverage.excluded.length} recipes`);
   }
 
-  // Step 4: Write artifacts
+  // Step 4: Apply product-to-recipe mappings to duplicate costed recipes
+  const productMappings = (ingredientOverrides.mappings || []);
+  const mappedRecipes = [...coverage.costed];
+
+  for (const mapping of productMappings) {
+    const targetRecipe = coverage.costed.find(r => r.recipe === mapping.recipe);
+    if (targetRecipe) {
+      mappedRecipes.push({
+        ...targetRecipe,
+        recipe: mapping.squareItem,
+      });
+    }
+  }
+
+  // Step 5: Write artifacts
   console.log('\nStep 4: Writing artifacts…');
   const recipeCosts = {
     generatedAt: new Date().toISOString(),
-    recipeCount: coverage.costed.length,
-    recipes: coverage.costed.map((r) => ({
+    recipeCount: mappedRecipes.length,
+    recipes: mappedRecipes.map((r) => ({
       recipe: r.recipe,
       sheet: r.sheet,
       costPerUnit: r.costPerUnit,
