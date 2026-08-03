@@ -3111,6 +3111,41 @@ app.get('/api/debug/attachments/:billId', async (req, res) => {
   }
 });
 
+// Debug endpoint: show raw bill.Line data for a bill
+app.get('/api/debug/bill-lines/:billId', async (req, res) => {
+  try {
+    const billId = req.params.billId;
+    const bill = await qbClient.getBillDetail(billId);
+
+    if (!bill) {
+      return res.status(404).json({ error: 'Bill not found', billId });
+    }
+
+    const lines = bill.Line || [];
+    res.json({
+      billId,
+      docNumber: bill.DocNumber,
+      vendorName: bill.VendorRef?.name,
+      totalLines: lines.length,
+      lines: lines.map((line, i) => ({
+        index: i,
+        description: line.Description,
+        detailType: line.DetailType,
+        amount: line.Amount,
+        itemRef: line.ItemBasedExpenseLineDetail?.ItemRef?.name,
+        qty: line.ItemBasedExpenseLineDetail?.Qty,
+        fullLine: JSON.stringify(line).substring(0, 200),
+      })),
+    });
+  } catch (err) {
+    console.error('Error fetching bill lines:', err.message);
+    res.status(500).json({
+      error: 'Failed to fetch bill lines',
+      message: err.message,
+    });
+  }
+});
+
 // Cash balance trend - fetches Statement of Cash Flows from QB
 app.get('/api/cash-balance', async (req, res) => {
   try {
