@@ -210,9 +210,9 @@ const extractLineItemsFromPdf = async (billId, retryCount = 0, maxRetries = 3) =
     }
 
     // PDF was readable but parsing failed - save full text for debugging
-    const debugFile = path.join(__dirname, '..', `debug-pdf-${billId}.txt`);
+    const failDebugFile = path.join(__dirname, '..', `debug-pdf-${billId}.txt`);
     try {
-      require('fs').writeFileSync(debugFile, text);
+      require('fs').writeFileSync(failDebugFile, text);
       console.warn(`      ⚠️  Could not parse PDF bill ${billId} (${text.length} chars). Full text saved to: debug-pdf-${billId}.txt`);
     } catch (e) {
       const textPreview = text.substring(0, 500).replace(/\n/g, ' | ');
