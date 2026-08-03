@@ -2817,14 +2817,7 @@ app.get('/api/bakery-margins', async (req, res) => {
       case 'lifetime': beginDate = new Date('2020-01-01'); break;
     }
 
-    // Query Square for orders in period
-    const { Client, Environment } = require('square');
-    const squareClient = new Client({
-      accessToken: process.env.SQUARE_ACCESS_TOKEN,
-      environment: Environment.Production
-    });
-
-    const ordersApi = squareClient.ordersApi;
+    // Query Square for orders in period using axios
     const locationIds = [
       'L41E1NSH9N1GC', 'LVTS3K9QFN95F', 'L5J0D4FWK7FFY', 'L2326PJNQ7KS9',
       'LWSX9K7SC3V37', 'L91Q2PN8KATAB', 'LGEFKKMZTYRJK'
@@ -2835,7 +2828,8 @@ app.get('/api/bakery-margins', async (req, res) => {
 
     for (const locationId of locationIds) {
       try {
-        const response = await ordersApi.searchOrders(locationId, {
+        const response = await axios.post('https://connect.squareup.com/v2/orders/search', {
+          locationId: locationId,
           query: {
             filter: {
               dateTimeFilter: {
@@ -2845,18 +2839,24 @@ app.get('/api/bakery-margins', async (req, res) => {
               }
             }
           }
+        }, {
+          headers: {
+            'Square-Version': '2024-06-21',
+            'Authorization': `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
         });
 
-        const orders = response.result.orders || [];
+        const orders = response.data.orders || [];
         for (const order of orders) {
-          if (!order.lineItems) continue;
-          for (const item of order.lineItems) {
+          if (!order.line_items) continue;
+          for (const item of order.line_items) {
             const productName = item.name;
             if (!productSales[productName]) {
               productSales[productName] = { units: 0, revenue: 0 };
             }
             productSales[productName].units += item.quantity || 1;
-            productSales[productName].revenue += (item.grossSalesMoney?.amount || 0) / 100;
+            productSales[productName].revenue += (item.gross_sales_money?.amount || 0) / 100;
           }
         }
       } catch (e) {
