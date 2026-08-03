@@ -2744,17 +2744,19 @@ app.get('/api/cash-balance', async (req, res) => {
     const qbClient = require('./pipeline/qb-client');
     const tokens = await qbClient.getValidTokens();
 
-    // Helper to extract cash total from balance sheet
-    const findCashTotal = (rows) => {
+    // Helper to extract cash balance from cash flow report
+    // CashFlow report has "Net Cash Provided by Operating Activities" or similar rows
+    // We need the final "Cash at End of Period" or total cash row
+    const findCashFromCashFlow = (rows) => {
       if (!rows) return null;
       for (const row of rows) {
         const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        if (label.toUpperCase().includes('CASH') || label.toUpperCase().includes('BANK')) {
+        if (label.toUpperCase().includes('CASH') && (label.toUpperCase().includes('END') || label.toUpperCase().includes('ENDING'))) {
           const val = row.Summary?.ColData?.[1]?.value || row.ColData?.[1]?.value;
           if (val) return parseFloat(val);
         }
         if (row.Rows?.Row) {
-          const found = findCashTotal(row.Rows.Row);
+          const found = findCashFromCashFlow(row.Rows.Row);
           if (found !== null) return found;
         }
       }
@@ -2763,7 +2765,7 @@ app.get('/api/cash-balance', async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Load monthly financial data to calculate historical cash balances
+    // Load monthly financial data to get the list of months
     console.log('Loading monthly financial data...');
     const monthlyFinancial = loadData(MONTHLY_FINANCIAL_FILE) || {};
     console.log(`Loaded financial data with ${Object.keys(monthlyFinancial).length} entries`);
@@ -2777,117 +2779,57 @@ app.get('/api/cash-balance', async (req, res) => {
           month: data.month,
           name: data.name,
           year: data.year,
-          pl: data.pl,
         };
       })
-      .filter(m => m.year && m.name && m.pl !== undefined)
+      .filter(m => m.year && m.name)
       .sort((a, b) => {
         const yearDiff = a.year - b.year;
         if (yearDiff !== 0) return yearDiff;
-        // Sort by month number within same year
         const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         return monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
       });
 
-    console.log(`Found ${months.length} months of financial data (after filtering)`);
+    console.log(`Found ${months.length} months of financial data`);
     if (months.length > 0) {
-      console.log(`First month: ${months[0].name} ${months[0].year}, Last month: ${months[months.length - 1].name} ${months[months.length - 1].year}`);
+      console.log(`Range: ${months[0].name} ${months[0].year} to ${months[months.length - 1].name} ${months[months.length - 1].year}`);
     }
 
-    // Fetch balance as of the last day of the last available month (more accurate anchor point)
-    let anchorBalance = 0;
-    let anchorDate = today;
+    // Query QB CashFlow report for each month's end date
+    const balances = [];
+    let currentCash = 0;
 
-    if (months.length > 0) {
-      const lastMonth = months[months.length - 1];
-      const monthIndex = MONTH_NAMES.indexOf(lastMonth.name);
-      const lastDayOfMonth = new Date(lastMonth.year, monthIndex + 1, 0);
-      anchorDate = lastDayOfMonth.toISOString().split('T')[0];
+    for (const monthData of months) {
+      const monthIndex = MONTH_NAMES.indexOf(monthData.name);
+      const lastDayOfMonth = new Date(monthData.year, monthIndex + 1, 0);
+      const year = lastDayOfMonth.getFullYear();
+      const month = String(lastDayOfMonth.getMonth() + 1).padStart(2, '0');
+      const day = String(lastDayOfMonth.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
 
-      console.log(`Fetching QB Balance Sheet as of last data month (${anchorDate})...`);
       try {
-        const anchorBsRes = await axios.get(
-          `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
+        console.log(`Fetching QB CashFlow report for end_date=${dateStr}...`);
+        const cfRes = await axios.get(
+          `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
           {
-            params: { as_of_date: anchorDate },
+            params: { end_date: dateStr },
             headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
           }
         );
-        anchorBalance = findCashTotal(anchorBsRes.data.Rows?.Row) || 0;
-        console.log(`✅ Cash balance as of ${anchorDate}: $${anchorBalance}`);
-      } catch (err) {
-        console.warn(`Failed to fetch balance as of ${anchorDate}, using today's balance instead`);
-        anchorBalance = 0; // Will use today's balance as fallback
-      }
-    }
 
-    // Fetch current Balance Sheet to get today's cash balance (use as fallback or if data is recent)
-    console.log('Fetching QB Balance Sheet for current cash balance...');
-    const balanceSheetRes = await axios.get(
-      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
-      {
-        params: { as_of_date: today },
-        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
-      }
-    );
-
-    const currentCash = findCashTotal(balanceSheetRes.data.Rows?.Row) || 0;
-    console.log(`✅ Current cash balance as of ${today}: $${currentCash}`);
-
-    // Use anchor balance if available, otherwise fall back to current
-    const startingBalance = anchorBalance > 0 ? anchorBalance : currentCash;
-    console.log(`Using starting balance of $${startingBalance} for calculation`);
-
-    // Calculate cash balance for each month by working backwards
-    const balances = [];
-
-    // Start from the anchor balance (either end of last data month or today)
-    let runningBalance = startingBalance;
-
-    // Work backwards through months to calculate ending balance for each
-    for (let i = months.length - 1; i >= 0; i--) {
-      const monthData = months[i];
-      const pl = monthData.pl || 0;
-
-      // The P&L represents the change during the month
-      // To get the balance at END of month working backwards from a later point,
-      // we subtract the monthly P&L (if positive profit, earlier balance was lower)
-      runningBalance -= pl;
-
-      // Get the last day of this month
-      const monthIndex = MONTH_NAMES.indexOf(monthData.name);
-      const monthDate = new Date(monthData.year, monthIndex + 1, 0);
-      const year = monthDate.getFullYear();
-      const month = String(monthDate.getMonth() + 1).padStart(2, '0');
-      const day = String(monthDate.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
-
-      balances.unshift({
-        date: dateStr,
-        balance: round2(runningBalance),
-      });
-
-      console.log(`  ${dateStr}: calculated balance $${round2(runningBalance)} (after subtracting P&L of $${pl})`);
-    }
-
-    // Add today's balance if it's different from the last calculated month
-    if (months.length > 0) {
-      const lastMonth = months[months.length - 1];
-      const monthIndex = MONTH_NAMES.indexOf(lastMonth.name);
-      const lastDayOfMonth = new Date(lastMonth.year, monthIndex + 1, 0);
-      const lastDataStr = lastDayOfMonth.toISOString().split('T')[0];
-
-      if (today !== lastDataStr) {
+        const cash = findCashFromCashFlow(cfRes.data.Rows?.Row) || 0;
+        currentCash = cash;
         balances.push({
-          date: today,
-          balance: round2(currentCash),
+          date: dateStr,
+          balance: round2(cash),
         });
+        console.log(`  ✅ ${dateStr}: $${round2(cash)}`);
+      } catch (err) {
+        console.warn(`Failed to fetch CashFlow for ${dateStr}: ${err.message}`);
       }
     }
 
-    console.log(`✅ Calculated ${balances.length} month-end cash balances`);
+    console.log(`✅ Fetched ${balances.length} month-end cash balances from QB`);
 
-    console.log(`✅ Built ${balances.length} balance records, ending at ${today} with $${currentCash}`);
     res.json({
       success: true,
       currentCash: round2(currentCash),
