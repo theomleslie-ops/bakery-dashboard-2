@@ -88,12 +88,8 @@ const extractBills = async ({ weeks = 12 } = {}) => {
     `;
 
     try {
-      const response = await qbClient.makeAuthenticatedRequest('/query', {
-        method: 'GET',
-        qs: { query },
-      });
-
-      const allQBBills = response.QueryResponse?.Bill || [];
+      const response = await qbClient.query(query);
+      const allQBBills = response.Bill || [];
       console.log(`  ✓ Retrieved ${allQBBills.length} total bills since ${cutoffISO}`);
 
       // Filter bills by vendor name in JavaScript
