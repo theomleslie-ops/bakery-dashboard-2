@@ -1948,9 +1948,9 @@
                     );
                   })}
 
-                  {/* X-axis labels - show first, last, and evenly distributed */}
+                  {/* X-axis labels - show every 2 months */}
                   {balances.map((b, i) => {
-                    const shouldShow = (i === 0) || (i === balances.length - 1) || (i % Math.max(1, Math.floor(balances.length / 8)) === 0);
+                    const shouldShow = (i === 0) || (i === balances.length - 1) || (i % 2 === 0);
                     if (shouldShow) {
                       const x = 60 + (i / (balances.length - 1)) * 890;
                       const [year, month, day] = b.date.split('-');
