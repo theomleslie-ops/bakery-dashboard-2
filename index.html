@@ -1577,6 +1577,7 @@
       const [loading, setLoading] = useState(true);
       const [data, setData] = useState(null);
       const [error, setError] = useState(null);
+      const [period, setPeriod] = useState('lifetime');
 
       useEffect(() => {
         const fetchData = async () => {
@@ -1599,7 +1600,6 @@
       if (!data || !data.top20) return <div style={{ padding: '20px' }}>No data available.</div>;
 
       const summary = data.summary || {};
-      const [period, setPeriod] = React.useState('lifetime');
 
       return (
         <div className="container" style={{ padding: '20px' }}>
