@@ -110,8 +110,12 @@ const extractBills = async ({ weeks = 12 } = {}) => {
 
       // Group by vendor, then fetch full detail for each bill
       const vendorBillIds = {};
+      const allVendorNames = {};  // Track ALL vendors we see
+
       for (const billSummary of billSummaries) {
         const vendorName = billSummary.VendorRef?.name || '';
+        allVendorNames[vendorName] = (allVendorNames[vendorName] || 0) + 1;
+
         let vendorKey = null;
 
         for (const [key, expectedVendorName] of Object.entries(VENDOR_NAMES)) {
@@ -125,6 +129,14 @@ const extractBills = async ({ weeks = 12 } = {}) => {
           if (!vendorBillIds[vendorKey]) vendorBillIds[vendorKey] = [];
           vendorBillIds[vendorKey].push(billSummary.Id);
         }
+      }
+
+      // Log ALL vendors found, so we can see what's missing
+      console.log(`  📋 All vendors found in QB:`);
+      for (const [vendorName, count] of Object.entries(allVendorNames)) {
+        const isQueried = Object.values(VENDOR_NAMES).some(vn => vendorName.toLowerCase().includes(vn.toLowerCase()));
+        const status = isQueried ? '✓' : '✗ (NOT QUERIED)';
+        console.log(`    ${status} ${vendorName}: ${count} bills`);
       }
 
       // Fetch full detail for each bill from target vendors
