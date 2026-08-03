@@ -1,0 +1,205 @@
+{
+  "generated_at": "2026-08-03T04:18:40.439091",
+  "period": "Real Square sales data",
+  "summary": {
+    "total_units": 33355,
+    "total_revenue": 240916.5,
+    "total_cogs": 59026.59,
+    "total_profit": 181889.91,
+    "blended_margin_pct": 75.5
+  },
+  "products": [
+    {
+      "rank": 1,
+      "product": "Country Round",
+      "units": 1984,
+      "sale_price": 12.0,
+      "cost_per_unit": 0.62,
+      "revenue": 23808.0,
+      "cogs": 1230.08,
+      "profit": 22577.92,
+      "margin_pct": 94.8
+    },
+    {
+      "rank": 2,
+      "product": "Breakfast Bar",
+      "units": 3124,
+      "sale_price": 7.5,
+      "cost_per_unit": 4.59,
+      "revenue": 23430.0,
+      "cogs": 14339.16,
+      "profit": 9090.84,
+      "margin_pct": 38.8
+    },
+    {
+      "rank": 3,
+      "product": "NO-NUT Choc Chip Cookie",
+      "units": 3424,
+      "sale_price": 6.0,
+      "cost_per_unit": 2.05,
+      "revenue": 20544.0,
+      "cogs": 7019.2,
+      "profit": 13524.8,
+      "margin_pct": 65.8
+    },
+    {
+      "rank": 4,
+      "product": "Double Choc Chip Cookie",
+      "units": 2799,
+      "sale_price": 6.5,
+      "cost_per_unit": 2.05,
+      "revenue": 18193.5,
+      "cogs": 5737.95,
+      "profit": 12455.55,
+      "margin_pct": 68.5
+    },
+    {
+      "rank": 5,
+      "product": "Country PC",
+      "units": 2973,
+      "sale_price": 6.0,
+      "cost_per_unit": 0.28,
+      "revenue": 17838.0,
+      "cogs": 832.44,
+      "profit": 17005.56,
+      "margin_pct": 95.3
+    },
+    {
+      "rank": 6,
+      "product": "ORIGINAL Choc Chip Cookie",
+      "units": 2702,
+      "sale_price": 6.5,
+      "cost_per_unit": 2.05,
+      "revenue": 17563.0,
+      "cogs": 5539.1,
+      "profit": 12023.9,
+      "margin_pct": 68.5
+    },
+    {
+      "rank": 7,
+      "product": "Oatmeal Raisin Cookie",
+      "units": 2490,
+      "sale_price": 6.0,
+      "cost_per_unit": 2.05,
+      "revenue": 14940.0,
+      "cogs": 5104.5,
+      "profit": 9835.5,
+      "margin_pct": 65.8
+    },
+    {
+      "rank": 8,
+      "product": "Baguette",
+      "units": 1145,
+      "sale_price": 10.0,
+      "cost_per_unit": 0.47,
+      "revenue": 11450.0,
+      "cogs": 538.15,
+      "profit": 10911.85,
+      "margin_pct": 95.3
+    },
+    {
+      "rank": 9,
+      "product": "Forest Scone",
+      "units": 1852,
+      "sale_price": 6.0,
+      "cost_per_unit": 0.7,
+      "revenue": 11112.0,
+      "cogs": 1296.4,
+      "profit": 9815.6,
+      "margin_pct": 88.3
+    },
+    {
+      "rank": 11,
+      "product": "Chocolate Sourdough Scone",
+      "units": 1818,
+      "sale_price": 6.0,
+      "cost_per_unit": 0.88,
+      "revenue": 10908.0,
+      "cogs": 1599.84,
+      "profit": 9308.16,
+      "margin_pct": 85.3
+    },
+    {
+      "rank": 12,
+      "product": "Long Braid",
+      "units": 678,
+      "sale_price": 16.0,
+      "cost_per_unit": 3.7,
+      "revenue": 10848.0,
+      "cogs": 2508.6,
+      "profit": 8339.4,
+      "margin_pct": 76.9
+    },
+    {
+      "rank": 13,
+      "product": "Epi",
+      "units": 899,
+      "sale_price": 12.0,
+      "cost_per_unit": 0.47,
+      "revenue": 10788.0,
+      "cogs": 422.53,
+      "profit": 10365.47,
+      "margin_pct": 96.1
+    },
+    {
+      "rank": 14,
+      "product": "Mini Banana Bread Loaf",
+      "units": 1524,
+      "sale_price": 7.0,
+      "cost_per_unit": 0.46,
+      "revenue": 10668.0,
+      "cogs": 701.04,
+      "profit": 9966.96,
+      "margin_pct": 93.4
+    },
+    {
+      "rank": 16,
+      "product": "PB Mound Cookie",
+      "units": 1688,
+      "sale_price": 6.0,
+      "cost_per_unit": 2.05,
+      "revenue": 10128.0,
+      "cogs": 3460.4,
+      "profit": 6667.6,
+      "margin_pct": 65.8
+    },
+    {
+      "rank": 17,
+      "product": "Nutella Bun",
+      "units": 1660,
+      "sale_price": 6.0,
+      "cost_per_unit": 1.79,
+      "revenue": 9960.0,
+      "cogs": 2971.4,
+      "profit": 6988.6,
+      "margin_pct": 70.2
+    },
+    {
+      "rank": 19,
+      "product": "Ham & Cheese Baton",
+      "units": 1056,
+      "sale_price": 9.0,
+      "cost_per_unit": 1.05,
+      "revenue": 9504.0,
+      "cogs": 1108.8,
+      "profit": 8395.2,
+      "margin_pct": 88.3
+    },
+    {
+      "rank": 20,
+      "product": "Blueberry Corn Muffin",
+      "units": 1539,
+      "sale_price": 6.0,
+      "cost_per_unit": 3.0,
+      "revenue": 9234.0,
+      "cogs": 4617.0,
+      "profit": 4617.0,
+      "margin_pct": 50.0
+    }
+  ],
+  "notes": {
+    "real_prices": "Breakfast Bar ingredients, base doughs, specialty items from actual invoices",
+    "estimated_prices": "Bananas, walnuts, feta, flax seeds, teff flour, etc.",
+    "missing_recipes": "Olive PC, Cinn SWIRL, Jalapeno & Cheddar Baton"
+  }
+}
