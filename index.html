@@ -1635,8 +1635,8 @@
               {sorted.map((r, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ padding: '10px' }}>{r.recipe}</td>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>${r.batchCost.toFixed(2)}</td>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>{r.totalKg.toFixed(2)}</td>
+                  <td style={{ padding: '10px', textAlign: 'right' }}>${(r.batchCost || 0).toFixed(2)}</td>
+                  <td style={{ padding: '10px', textAlign: 'right' }}>{(r.totalKg || 0).toFixed(2)}</td>
                   <td style={{ padding: '10px', textAlign: 'right' }}>{r.unitsPerBatch ? r.unitsPerBatch.toFixed(2) : '—'}</td>
                   <td style={{ padding: '10px', textAlign: 'right' }}>${r.costPerUnit ? r.costPerUnit.toFixed(2) : '—'}</td>
                 </tr>
