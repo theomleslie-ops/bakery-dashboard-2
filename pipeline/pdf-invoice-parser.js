@@ -126,29 +126,17 @@ const parseInvoiceText = (text, billId) => {
     // Extract description: everything after qty+unit, before prices get messy
     let description = mergedLine.substring(qtyUnitMatch[0].length).trim();
 
-    // Extract product name: remove item codes at start, pack formats at end, prices
-    // Format: [qty+unit] [item-codes] PRODUCT NAME [pack-format] [plt#] [prices]
+    // Keep description mostly as-is, but remove the most obvious junk
+    // The merged line format is: qty unit [item-codes] PRODUCT-NAME [pack-format] [plt#] [prices]
+    // Don't be too aggressive - ingredient matching can handle some noise
 
-    // Remove leading numeric item codes (pure digits or letters+digits patterns)
-    description = description
-      .replace(/^\s*\d+\s+/g, '') // Remove leading numbers
-      .replace(/^\s*[A-Z]{1,3}\d+\s+/g, '') // Remove codes like "GF298", "VN150758"
-      .trim();
-
-    // Remove pack format patterns and everything after them
-    // Patterns: "3/5.75 LB", "1/50 LB BAG", etc.
-    const packFormatIdx = description.search(/\d+\/\d+\s*[A-Z]/i);
-    if (packFormatIdx !== -1) {
-      description = description.substring(0, packFormatIdx).trim();
-    }
-
-    // Remove Plt# patterns (e.g., "Plt#: 4", "Plt: 1")
+    // Remove Plt# patterns (safe to remove)
     description = description.replace(/\bPlt#?:?\s*\d+/gi, '').trim();
 
-    // Remove prices (decimal numbers like "42.00", "75.81")
-    description = description.replace(/\s+\d+\.\d{2}(?:\s+\d+\.\d{2})?$/g, '').trim();
+    // Remove trailing prices (patterns like " 42.00" or " 42.00 CS 42.00")
+    description = description.replace(/\s+\d+\.\d{2}(?:\s+\w+\s+\d+\.\d{2})?$/gi, '').trim();
 
-    // Collapse extra spaces
+    // Collapse multiple spaces
     description = description.replace(/\s+/g, ' ').trim();
 
     // Filter out garbage: too short, only whitespace/numbers
