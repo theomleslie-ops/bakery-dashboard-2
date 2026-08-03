@@ -2575,6 +2575,14 @@ app.get('/api/product-margins', async (req, res) => {
     for (const r of recipeCosts.recipes || []) {
       costByRecipe[r.recipe.toLowerCase()] = r.costPerUnit;
     }
+    console.log(`✓ Loaded ${Object.keys(costByRecipe).length} recipes into costByRecipe`);
+
+    // Debug: log some sample recipes to verify structure
+    const sampleRecipes = ['country round', 'breakfast bars bottom', 'country dough', 'chocolate chips cookies (no nuts)'];
+    for (const recipe of sampleRecipes) {
+      const cost = costByRecipe[recipe];
+      console.log(`  ${recipe}: ${cost != null ? cost : 'NOT FOUND'}`);
+    }
 
     // Hardcoded product-to-recipe mappings (20 confirmed mappings)
     const overrides = {
