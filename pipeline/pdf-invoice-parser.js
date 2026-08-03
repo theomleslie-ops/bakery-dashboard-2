@@ -13,21 +13,18 @@ const parseInvoiceText = (text, billId) => {
   const items = [];
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-  // Search for missing ingredients to debug extraction
-  const searchKeywords = ['FLOUR', 'BUTTER', 'SUGAR', 'YEAST', 'CHOCOLATE'];
-  const foundKeywords = [];
+  // Search for flour items to debug extraction
+  const floorLines = [];
   for (let idx = 0; idx < lines.length; idx++) {
     const lineUpper = lines[idx].toUpperCase();
-    for (const kw of searchKeywords) {
-      if (lineUpper.includes(kw)) {
-        foundKeywords.push({ keyword: kw, lineIdx: idx, line: lines[idx] });
-      }
+    if (lineUpper.includes('FLOUR') || lineUpper.includes('GALAHAD')) {
+      floorLines.push({ idx, line: lines[idx] });
     }
   }
-  if (foundKeywords.length > 0) {
-    console.log(`      🔍 FOUND MISSING INGREDIENTS in bill ${billId}:`);
-    for (const f of foundKeywords) {
-      console.log(`         [${f.lineIdx}] ${f.keyword}: "${f.line}"`);
+  if (floorLines.length > 0) {
+    console.log(`      🌾 FOUND FLOUR in bill ${billId}:`);
+    for (const f of floorLines) {
+      console.log(`         [${f.idx}] "${f.line}"`);
     }
   }
 
@@ -160,6 +157,11 @@ const parseInvoiceText = (text, billId) => {
       quantity: qty,
       unitPrice: Math.round(unitPrice * 100) / 100,
     });
+
+    // Debug: log flour items that were successfully extracted
+    if (description.toUpperCase().includes('FLOUR') || description.toUpperCase().includes('GALAHAD')) {
+      console.log(`        → EXTRACTED FLOUR: "${description}" (${qty} @ $${unitPrice})`);
+    }
 
     i++;
   }
