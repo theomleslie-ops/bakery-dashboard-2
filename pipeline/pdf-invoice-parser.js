@@ -131,15 +131,15 @@ const parseInvoiceText = (text, billId) => {
     // Extract description: everything after qty+unit, before prices get messy
     let description = mergedLine.substring(qtyUnitMatch[0].length).trim();
 
-    // Cleanup: remove pack formats, UOM, prices, and metadata (but keep product names)
+    // Conservative cleanup: only remove specific patterns we're confident about
     description = description
-      .replace(/\b[A-Z]{2}\d+\b\s*/g, '') // Remove item codes like "VN150758", "BF100" (2+ letters followed by digits)
-      .replace(/\d+\/\d+\s*[A-Z]+/g, '') // Remove pack formats like "4/1 GAL", "3/5.75 LB"
-      .replace(/\bPlt#?[\s\d:]*\d+\b/gi, '') // Remove "Plt#: 4", "Plt# 5" style patterns
-      .replace(/\b(plt|pallet|case|box|bag|pack)\b/gi, '') // Remove packaging keywords
-      .replace(/\b(?:CS|PC|LB|BC|EA|KG|G|OZ|ML|L|QT|GL|PT|CT|CA|DZ|BX)\b(?:\s+#?[\d:]*)?/gi, '') // Remove UOM (but be careful with letters in names)
-      .replace(/(?:^|\s)\d+\.\d{2}(?:\s+\d+\.\d{2})?(?:\s|$)/g, ' ') // Remove prices like "65.00" or "75.81 75.81"
-      .replace(/\s+/g, ' ')  // Collapse spaces
+      .replace(/\bGF\d+\b/g, '') // Remove Chef's Warehouse item codes like GF298
+      .replace(/\bVN\d+\b/g, '') // Remove vendor codes like VN150758
+      .replace(/\bBF\d+\b/g, '') // Remove item codes like BF100
+      .replace(/\b[A-Z]{2,3}\d{3,}\b/g, '') // Remove general item codes (2-3 letters + 3+ digits)
+      .replace(/\d+\/\d+\s*[A-Z]+\b/g, '') // Remove pack formats like "4/1 GAL", "3/5.75 LB"
+      .replace(/Plt#?:?\s*\d+/gi, '') // Remove "Plt#: 4", "Plt: 5"
+      .replace(/\s+/g, ' ')  // Collapse multiple spaces
       .trim();
 
     // Filter out garbage: too short, only whitespace/numbers
