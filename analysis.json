@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-03T13:43:39.482798",
+  "generated_at": "2026-08-03T13:49:28.542342",
   "period": "Real Square sales data",
   "summary": {
     "total_units": 33355,
     "total_revenue": 240916.5,
-    "total_cogs": 49547.34,
-    "total_profit": 191369.16,
-    "blended_margin_pct": 79.4
+    "total_cogs": 52326.71,
+    "total_profit": 188589.79,
+    "blended_margin_pct": 78.3
   },
   "products": [
     {
@@ -14,11 +14,11 @@
       "product": "Country Round",
       "units": 1984,
       "sale_price": 12.0,
-      "cost_per_unit": 0.62,
+      "cost_per_unit": 1.34,
       "revenue": 23808.0,
-      "cogs": 1230.08,
-      "profit": 22577.92,
-      "margin_pct": 94.8
+      "cogs": 2658.56,
+      "profit": 21149.44,
+      "margin_pct": 88.8
     },
     {
       "rank": 2,
@@ -58,11 +58,11 @@
       "product": "Country PC",
       "units": 2973,
       "sale_price": 6.0,
-      "cost_per_unit": 0.28,
+      "cost_per_unit": 0.37,
       "revenue": 17838.0,
-      "cogs": 832.44,
-      "profit": 17005.56,
-      "margin_pct": 95.3
+      "cogs": 1100.01,
+      "profit": 16737.99,
+      "margin_pct": 93.8
     },
     {
       "rank": 6,
@@ -91,11 +91,11 @@
       "product": "Baguette",
       "units": 1145,
       "sale_price": 10.0,
-      "cost_per_unit": 0.47,
+      "cost_per_unit": 1.0,
       "revenue": 11450.0,
-      "cogs": 538.15,
-      "profit": 10911.85,
-      "margin_pct": 95.3
+      "cogs": 1145.0,
+      "profit": 10305.0,
+      "margin_pct": 90.0
     },
     {
       "rank": 9,
@@ -135,11 +135,11 @@
       "product": "Epi",
       "units": 899,
       "sale_price": 12.0,
-      "cost_per_unit": 0.47,
+      "cost_per_unit": 1.0,
       "revenue": 10788.0,
-      "cogs": 422.53,
-      "profit": 10365.47,
-      "margin_pct": 96.1
+      "cogs": 899.0,
+      "profit": 9889.0,
+      "margin_pct": 91.7
     },
     {
       "rank": 14,
