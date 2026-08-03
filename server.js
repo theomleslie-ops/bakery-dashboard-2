@@ -2608,12 +2608,12 @@ app.get('/api/product-margins', async (req, res) => {
     ];
 
     const result = {};
+    const debugMatches = [];
     for (const window of windows) {
       const sales = bucketOrdersByItem(salesData.orders, window.days);
       const top20 = rankProductsByRevenue(sales, 20);
 
       const withMargins = [];
-      const debugMatches = [];
       for (const item of top20) {
         // Find recipe match: Priority 1 = explicit overrides, Priority 2 = fuzzy matching
         let costPerUnit = null;
