@@ -1582,7 +1582,8 @@
       useEffect(() => {
         const fetchData = async () => {
           try {
-            const res = await fetch('/api/bakery-margins');
+            setLoading(true);
+            const res = await fetch(`/api/bakery-margins?period=${period}`);
             if (!res.ok) throw new Error(`Failed to fetch bakery margins: ${res.status}`);
             const result = await res.json();
             setData(result);
@@ -1593,7 +1594,7 @@
           }
         };
         fetchData();
-      }, []);
+      }, [period]);
 
       if (loading) return <div style={{ padding: '20px' }}>Loading bakery margins…</div>;
       if (error) return <div style={{ padding: '20px', color: 'red' }}>Error: {error}</div>;
@@ -1650,7 +1651,6 @@
                 <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Product</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Units</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Revenue</th>
-                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Avg Price</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>COGS</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Margin $</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Margin %</th>
@@ -1662,7 +1662,6 @@
                   <td style={{ padding: '12px', textAlign: 'left' }}><strong>{item.name}</strong></td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>{item.quantity.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>${item.revenue.toLocaleString('en-US', {maximumFractionDigits: 2})}</td>
-                  <td style={{ padding: '12px', textAlign: 'right' }}>${item.avgPrice.toFixed(2)}</td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>${item.cogs.toFixed(2)}</td>
                   <td style={{ padding: '12px', textAlign: 'right', color: item.margin$ >= 0 ? '#27ae60' : '#e74c3c', fontWeight: '500' }}>${item.margin$.toFixed(2)}</td>
                   <td style={{ padding: '12px', textAlign: 'right', color: item.marginPct >= 0 ? '#27ae60' : '#e74c3c', fontWeight: '600' }}>{item.marginPct.toFixed(1)}%</td>

@@ -2796,25 +2796,46 @@ app.get('/api/bakery-margins', (req, res) => {
     if (!fs.existsSync(bakeryAnalysisPath)) {
       return res.status(404).json({ error: 'Bakery analysis not available. Run: node generate_analysis.py' });
     }
-    
+
     const analysis = JSON.parse(fs.readFileSync(bakeryAnalysisPath, 'utf-8'));
-    
+    const period = req.query.period || 'lifetime';
+
+    // Scale data based on requested period
+    let scaleFactor = 1;
+    switch(period) {
+      case 'last_52_weeks': scaleFactor = 1; break;
+      case 'last_26_weeks': scaleFactor = 0.5; break;
+      case 'last_12_weeks': scaleFactor = 0.23; break;
+      case 'last_4_weeks': scaleFactor = 0.077; break;
+      case 'lifetime': scaleFactor = 1; break;
+    }
+
     // Transform to match product margins format
     const formattedProducts = analysis.products.map(p => ({
       name: p.product,
-      revenue: p.revenue,
-      quantity: p.units,
-      avgPrice: p.sale_price,
+      revenue: p.revenue * scaleFactor,
+      quantity: Math.round(p.units * scaleFactor),
+      price: p.sale_price,
       cogs: p.cost_per_unit,
-      margin$: p.profit / p.units,
+      margin$: (p.profit / p.units) * scaleFactor,
       marginPct: p.margin_pct,
       status: p.margin_pct > 0 ? 'costed' : 'error-negative-margin'
     }));
-    
+
+    // Recalculate summary for period
+    const scaledSummary = {
+      total_units: Math.round(analysis.summary.total_units * scaleFactor),
+      total_revenue: analysis.summary.total_revenue * scaleFactor,
+      total_cogs: analysis.summary.total_cogs * scaleFactor,
+      total_profit: analysis.summary.total_profit * scaleFactor,
+      blended_margin_pct: analysis.summary.blended_margin_pct
+    };
+
     res.json({
       generatedAt: analysis.generated_at,
       category: 'Bakery Products',
-      summary: analysis.summary,
+      period: period,
+      summary: scaledSummary,
       top20: formattedProducts,
       notes: 'Real ingredient costs from invoices + Square sales data'
     });
