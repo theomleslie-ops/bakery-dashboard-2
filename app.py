@@ -27,7 +27,7 @@ def home():
     """API home endpoint"""
     return jsonify({
         "service": "Bakery Costing & Margin Analysis",
-        "version": "1.1",
+        "version": "1.2",
         "endpoints": {
             "/api/summary": "Blended margin summary",
             "/api/products": "All 20 products with costs and margins",
