@@ -3037,6 +3037,8 @@ app.get('/api/ingredient-costs', (req, res) => {
 app.get('/api/debug/raw-pdf-text/:billId', async (req, res) => {
   try {
     const billId = req.params.billId;
+    const startLine = parseInt(req.query.start || '0', 10);
+    const count = parseInt(req.query.count || '50', 10);
 
     // Download and extract from the actual PDF
     const pdfBuffer = await qbClient.downloadInvoicePdf(billId);
@@ -3046,17 +3048,18 @@ app.get('/api/debug/raw-pdf-text/:billId', async (req, res) => {
 
     const text = await qbClient.extractPdfText(pdfBuffer);
 
-    // Split into lines and show first 60 lines with visible line breaks
+    // Split into lines
     const lines = text.split('\n');
-    const sample = lines.slice(0, 60);
+    const sample = lines.slice(startLine, startLine + count);
 
     res.json({
       billId,
       pdfSize: pdfBuffer.length,
       totalLines: lines.length,
       totalChars: text.length,
-      firstLinesRaw: sample.map((line, i) => ({
-        lineNum: i + 1,
+      requestedRange: { start: startLine, count, returned: sample.length },
+      linesRaw: sample.map((line, i) => ({
+        lineNum: startLine + i + 1,
         content: line,
         length: line.length,
       })),
