@@ -2579,13 +2579,22 @@ app.get('/api/product-margins', async (req, res) => {
     // Load manual recipe overrides (normalize quotes and use lowercase keys)
     const overridesFile = path.join(DATA_DIR, 'pipeline', 'ingredient-overrides.json');
     const overrides = {};
+    let overridesLoadedCount = 0;
     if (fs.existsSync(overridesFile)) {
-      const overridesData = JSON.parse(fs.readFileSync(overridesFile, 'utf-8'));
-      for (const mapping of overridesData.mappings || []) {
-        // Use lowercase key for case-insensitive lookup
-        const key = normalizeQuotes(mapping.squareItem).toLowerCase();
-        overrides[key] = mapping.recipe;
+      try {
+        const overridesData = JSON.parse(fs.readFileSync(overridesFile, 'utf-8'));
+        for (const mapping of overridesData.mappings || []) {
+          // Use lowercase key for case-insensitive lookup
+          const key = normalizeQuotes(mapping.squareItem).toLowerCase();
+          overrides[key] = mapping.recipe;
+          overridesLoadedCount++;
+        }
+        console.log(`✓ Loaded ${overridesLoadedCount} recipe overrides`);
+      } catch (e) {
+        console.error(`✗ Failed to parse overrides: ${e.message}`);
       }
+    } else {
+      console.error(`✗ Overrides file not found: ${overridesFile}`);
     }
 
     // Try to fetch Square data, fallback to empty if not available
@@ -2705,7 +2714,10 @@ app.get('/api/product-margins', async (req, res) => {
       generatedAt: new Date().toISOString(),
       squareSalesCache: salesData.fetchedAt,
       windows: result,
-      debug: { matchingResults: debugMatches.slice(0, 10) }
+      debug: {
+        overridesLoaded: overridesLoadedCount,
+        matchingResults: debugMatches.slice(0, 10)
+      }
     });
   } catch (e) {
     console.error('Product margins error:', e.message, e.stack);
