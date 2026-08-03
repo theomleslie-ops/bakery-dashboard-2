@@ -2733,7 +2733,14 @@ app.get('/api/product-margins', async (req, res) => {
       squareSalesCache: salesData.fetchedAt,
       windows: result,
       debug: {
+        recipesLoaded: Object.keys(costByRecipe).length,
         overridesLoaded: overridesLoadedCount,
+        sampleRecipeLookups: {
+          'country round': costByRecipe['country round'],
+          'breakfast bars bottom': costByRecipe['breakfast bars bottom'],
+          'country dough': costByRecipe['country dough'],
+          'chocolate chips cookies (no nuts)': costByRecipe['chocolate chips cookies (no nuts)'],
+        },
         matchingResults: debugMatches.slice(0, 10)
       }
     });
