@@ -3085,6 +3085,32 @@ app.get('/api/debug/pdf-text/:billId', (req, res) => {
   }
 });
 
+// Debug endpoint: list all attachments for a bill
+app.get('/api/debug/attachments/:billId', async (req, res) => {
+  try {
+    const billId = req.params.billId;
+    const attachments = (await qbClient.query(`SELECT * FROM Attachable WHERE AttachableRef.EntityRef.Value = '${billId}'`)).Attachable || [];
+
+    res.json({
+      billId,
+      totalAttachments: attachments.length,
+      attachments: attachments.map(att => ({
+        id: att.Id,
+        fileName: att.FileName,
+        contentType: att.ContentType,
+        size: att.Size,
+        hasDownloadUri: !!att.TempDownloadUri,
+      })),
+    });
+  } catch (err) {
+    console.error('Error listing attachments:', err.message);
+    res.status(500).json({
+      error: 'Failed to list attachments',
+      message: err.message,
+    });
+  }
+});
+
 // Cash balance trend - fetches Statement of Cash Flows from QB
 app.get('/api/cash-balance', async (req, res) => {
   try {
