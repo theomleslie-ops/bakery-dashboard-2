@@ -1,6 +1,7 @@
 // Parse itemized line items from vendor invoice PDFs
 // Handles common invoice formats (table-based line items with Qty, Unit Price, Amount)
 
+const path = require('path');
 const qbClient = require('./qb-client');
 
 // Parse extracted PDF text to find line items
@@ -136,9 +137,15 @@ const extractLineItemsFromPdf = async (billId, retryCount = 0, maxRetries = 3) =
       return items;
     }
 
-    // PDF was readable but parsing failed - log detailed sample for debugging
-    const textPreview = text.substring(0, 500).replace(/\n/g, ' | ');
-    console.warn(`      ⚠️  Could not parse items from PDF bill ${billId} (${text.length} chars). Sample:\n        "${textPreview}..."`);
+    // PDF was readable but parsing failed - save full text for debugging
+    const debugFile = path.join(__dirname, '..', `debug-pdf-${billId}.txt`);
+    try {
+      require('fs').writeFileSync(debugFile, text);
+      console.warn(`      ⚠️  Could not parse PDF bill ${billId} (${text.length} chars). Full text saved to: debug-pdf-${billId}.txt`);
+    } catch (e) {
+      const textPreview = text.substring(0, 500).replace(/\n/g, ' | ');
+      console.warn(`      ⚠️  Could not parse items from PDF bill ${billId} (${text.length} chars). Sample:\n        "${textPreview}..."`);
+    }
     return null;
   } catch (e) {
     if (e.response?.status === 429) {
