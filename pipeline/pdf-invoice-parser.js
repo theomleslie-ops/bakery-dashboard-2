@@ -34,34 +34,53 @@ const parseInvoiceText = (text) => {
 
     // Extract all numbers from line (for finding prices)
     const allNumbers = line.match(/\d+(?:\.\d{1,4})?/g) || [];
-    if (allNumbers.length < 2) continue; // Need at least qty and price
+    if (allNumbers.length < 2) continue;
 
-    // Parse numbers: qty (already found), skip some middle ones (shipped qty, codes), find prices near end
     const numericValues = allNumbers.map(n => parseFloat(n));
-
-    // Description is text between qty+unit and first price
-    // For now, extract everything after the qty+unit part
     const afterQtyUnit = line.substring(qtyUnitMatch[0].length).trim();
 
-    // Look for item code (alphanumeric, usually 4-10 chars, starts with letter or digit)
-    // Then everything up to the first price
-    let description = '';
-    let unitPrice = null;
+    // In a structured invoice: qty | shipped | item_code | descr | unit_price | uom | ext_price
+    // Numbers appear as: qty, shipped, item_code_numbers, unit_price, extended_price
+    // Strategy: find the two largest price values (unit_price and extended_price)
+    // extended_price should be larger than unit_price
+    // The smaller of these two is likely the unit price
 
-    // Try to find a price value (should be between 0.5 and 5000 for ingredients)
-    // Usually one of the last 1-3 numeric values is the unit price
-    for (let i = numericValues.length - 1; i > 0; i--) {
-      const val = numericValues[i];
-      if (val >= 0.5 && val < 5000) {
-        unitPrice = val;
-        // Description is text before this price number
-        const priceIndex = afterQtyUnit.lastIndexOf(val.toString());
-        if (priceIndex > 0) {
-          description = afterQtyUnit.substring(0, priceIndex).trim();
+    let unitPrice = null;
+    let description = '';
+
+    // Find all valid prices (between 0.5 and 5000)
+    const validPrices = [];
+    const priceIndices = [];
+    for (let i = 0; i < numericValues.length; i++) {
+      if (numericValues[i] >= 0.5 && numericValues[i] < 5000) {
+        validPrices.push(numericValues[i]);
+        priceIndices.push(i);
+      }
+    }
+
+    if (validPrices.length >= 1) {
+      // If we have 2+ prices, unit_price is usually the smaller one (before extended)
+      // If we have just 1, that's probably the unit price
+      if (validPrices.length >= 2) {
+        // Take the 2nd-to-last valid price (unit price is before extended price)
+        unitPrice = validPrices[validPrices.length - 2];
+        const unitPriceNumStr = unitPrice.toString();
+        const unitPricePos = afterQtyUnit.lastIndexOf(unitPriceNumStr);
+        if (unitPricePos > 0) {
+          description = afterQtyUnit.substring(0, unitPricePos).trim();
         } else {
           description = afterQtyUnit;
         }
-        break;
+      } else {
+        // Only one price, use it
+        unitPrice = validPrices[0];
+        const priceNumStr = unitPrice.toString();
+        const pricePos = afterQtyUnit.lastIndexOf(priceNumStr);
+        if (pricePos > 0) {
+          description = afterQtyUnit.substring(0, pricePos).trim();
+        } else {
+          description = afterQtyUnit;
+        }
       }
     }
 
