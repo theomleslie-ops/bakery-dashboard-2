@@ -4,17 +4,15 @@
 
 const qbClient = require('./qb-client');
 
-// Vendor name patterns to match
+// Vendor name patterns to match actual QB vendor names
 const VENDOR_PATTERNS = {
-  chefs_warehouse: /chef'?s?\s*warehouse/i,
-  greenleaf: /green\s*leaf|greenleaf|green\s*leafs?/i,
-  allen_brothers: /allen\s*brothers?|allen\s*bros?/i,
+  chefs_warehouse: /chef'?s?\s*warehouse/i,  // Matches "Chef's Warehouse West Coast, LLC" and variants
+  greenleaf: /green\s*leaf|greenleaf/i,      // Matches "Green Leaf"
 };
 
 const VENDOR_NAMES = {
-  chefs_warehouse: "Chef's Warehouse",
-  greenleaf: 'Green Leaf',
-  allen_brothers: 'Allen Brothers',
+  chefs_warehouse: "Chef's Warehouse West Coast, LLC",  // Actual QB vendor name
+  greenleaf: 'Green Leaf',                               // Actual QB vendor name
 };
 
 // Parse a bill from QB API response
@@ -76,25 +74,19 @@ const extractBills = async ({ weeks = 12 } = {}) => {
   cutoffDate.setDate(cutoffDate.getDate() - (weeks * 7));
   const cutoffISO = cutoffDate.toISOString().split('T')[0];
 
-  // Build QBO query for bills from the three vendors
-  const vendorList = Object.values(VENDOR_NAMES).map(v => `'${v}'`).join(',');
-  const query = `
-    SELECT * FROM Bill
-    WHERE TxnDate >= '${cutoffISO}'
-    AND VendorRef IN (${vendorList})
-    ORDERBY TxnDate DESC
-  `;
-
   let allBills = [];
-  let bills = [];
 
   try {
-    // Try querying each vendor separately in case names don't match exactly
+    // Query each vendor separately using partial name matching
     for (const [key, vendorName] of Object.entries(VENDOR_NAMES)) {
+      console.log(`  Querying ${vendorName}…`);
+
+      // QB query: search for bills where vendor name LIKE the pattern
+      // Using % wildcards for flexible matching
       const vendorQuery = `
         SELECT * FROM Bill
         WHERE TxnDate >= '${cutoffISO}'
-        AND VendorRef.name LIKE '%${vendorName}%'
+        AND VendorRef.name LIKE '%${vendorName.split(' ')[0]}%'
         ORDERBY TxnDate DESC
       `;
 
@@ -105,10 +97,14 @@ const extractBills = async ({ weeks = 12 } = {}) => {
         });
 
         const vendorBills = response.QueryResponse?.Bill || [];
-        allBills.push(...vendorBills);
-        console.log(`  Found ${vendorBills.length} bills from ${vendorName}`);
+        if (vendorBills.length > 0) {
+          allBills.push(...vendorBills);
+          console.log(`    ✓ Found ${vendorBills.length} bills from ${vendorName}`);
+        } else {
+          console.log(`    ⊘ No bills found for ${vendorName}`);
+        }
       } catch (e) {
-        console.warn(`  ⚠️  Error querying ${vendorName}: ${e.message}`);
+        console.warn(`    ⚠️  Error querying ${vendorName}: ${e.message}`);
       }
     }
   } catch (e) {
