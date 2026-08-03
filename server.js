@@ -2514,6 +2514,20 @@ const matchRecipeToSquareItem = (recipeName, squareItemName) => {
   return overlap.length / recipeToks.length >= 0.5;
 };
 
+// Simple recipe costs endpoint (raw data)
+app.get('/api/recipe-costs', (req, res) => {
+  try {
+    const recipeCostsFile = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
+    if (!fs.existsSync(recipeCostsFile)) {
+      return res.status(503).json({ error: 'Recipe costs not available. Run: npm run margins' });
+    }
+    const data = JSON.parse(fs.readFileSync(recipeCostsFile, 'utf-8'));
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Main product margins endpoint
 app.get('/api/product-margins', async (req, res) => {
   try {

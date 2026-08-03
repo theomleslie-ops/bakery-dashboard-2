@@ -1582,7 +1582,8 @@
       useEffect(() => {
         const fetchRecipes = async () => {
           try {
-            const response = await fetch('/data/pipeline/recipe-costs.json');
+            const response = await fetch('/api/recipe-costs');
+            if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
             const data = await response.json();
             setRecipes(data.recipes || []);
           } catch (e) {
