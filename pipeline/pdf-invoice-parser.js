@@ -73,29 +73,23 @@ const parseInvoiceText = (text, billId) => {
     for (let j = 1; j <= 4 && i + j < lines.length; j++) {
       const nextLine = lines[i + j];
 
-      // Skip headers/footers
-      if (skipPatterns.test(nextLine)) {
+      // Skip headers and short lines
+      if (skipPatterns.test(nextLine) || nextLine.length < 3) {
         break;
       }
 
-      // Check if this line looks like a NEW item start (not just a price line)
-      // Price lines look like "34.00 CS 34.00" - small number + unit + small number
-      // Real items have qty + unit + more text/numbers with item code
+      // Stop if we hit another item start (but allow price lines like "34.00 CS 34.00")
+      // Only break if: starts with qty + unit + SUBSTANTIAL content (like item code or product name)
       const qtyMatch = nextLine.match(new RegExp(`^(\\d+(?:\\.\\d+)?)\\s+(${unitPattern})\\b`, 'i'));
-      if (qtyMatch) {
-        const potentialQty = parseFloat(qtyMatch[1]);
-        // If qty is large (>100) or followed by item code/text (not just prices), it's a new item
-        if (potentialQty >= 100 || /\D[A-Z0-9]{3,}/.test(nextLine.substring(qtyMatch[0].length))) {
-          break; // This is a real new item, stop merging
-        }
-        // Otherwise it's probably a price line (small qty + unit + numbers), keep merging
+      if (qtyMatch && qtyMatch[1] >= 10) {
+        // Quantity >= 10 suggests a new item (ordered quantities are typically higher)
+        // Price lines typically have quantities < 10 (like 34.00)
+        break;
       }
 
-      // Include the line if it looks like part of the item
-      if (nextLine.length > 0) {
-        mergedLine = mergedLine + ' ' + nextLine;
-        linesConsumed = j;
-      }
+      // Include the line
+      mergedLine = mergedLine + ' ' + nextLine;
+      linesConsumed = j;
     }
 
     i += linesConsumed; // Skip the lines we merged
