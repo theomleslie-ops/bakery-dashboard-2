@@ -2790,7 +2790,7 @@ const getRebuildStatus = () => {
 };
 
 // Bakery margin analysis endpoint
-app.get('/api/bakery-margins', (req, res) => {
+app.get('/api/bakery-margins', async (req, res) => {
   try {
     const bakeryAnalysisPath = path.join(__dirname, 'analysis.json');
     if (!fs.existsSync(bakeryAnalysisPath)) {
@@ -2800,44 +2800,112 @@ app.get('/api/bakery-margins', (req, res) => {
     const analysis = JSON.parse(fs.readFileSync(bakeryAnalysisPath, 'utf-8'));
     const period = req.query.period || 'lifetime';
 
-    // Scale data based on requested period
-    let scaleFactor = 1;
+    // Load cost per unit mapping from analysis
+    const costMap = {};
+    analysis.products.forEach(p => {
+      costMap[p.product] = p.cost_per_unit;
+    });
+
+    // Calculate date range for period
+    const now = new Date();
+    let beginDate = null;
     switch(period) {
-      case 'last_52_weeks': scaleFactor = 1; break;
-      case 'last_26_weeks': scaleFactor = 0.5; break;
-      case 'last_12_weeks': scaleFactor = 0.23; break;
-      case 'last_4_weeks': scaleFactor = 0.077; break;
-      case 'lifetime': scaleFactor = 1; break;
+      case 'last_52_weeks': beginDate = new Date(now.getTime() - 52 * 7 * 24 * 60 * 60 * 1000); break;
+      case 'last_26_weeks': beginDate = new Date(now.getTime() - 26 * 7 * 24 * 60 * 60 * 1000); break;
+      case 'last_12_weeks': beginDate = new Date(now.getTime() - 12 * 7 * 24 * 60 * 60 * 1000); break;
+      case 'last_4_weeks': beginDate = new Date(now.getTime() - 4 * 7 * 24 * 60 * 60 * 1000); break;
+      case 'lifetime': beginDate = new Date('2020-01-01'); break;
     }
 
-    // Transform to match product margins format
-    const formattedProducts = analysis.products.map(p => ({
-      name: p.product,
-      revenue: p.revenue * scaleFactor,
-      quantity: Math.round(p.units * scaleFactor),
-      price: p.sale_price,
-      cogs: p.cost_per_unit,
-      margin$: (p.profit / p.units) * scaleFactor,
-      marginPct: p.margin_pct,
-      status: p.margin_pct > 0 ? 'costed' : 'error-negative-margin'
-    }));
+    // Query Square for orders in period
+    const { Client, Environment } = require('square');
+    const squareClient = new Client({
+      accessToken: process.env.SQUARE_ACCESS_TOKEN,
+      environment: Environment.Production
+    });
 
-    // Recalculate summary for period
-    const scaledSummary = {
-      total_units: Math.round(analysis.summary.total_units * scaleFactor),
-      total_revenue: analysis.summary.total_revenue * scaleFactor,
-      total_cogs: analysis.summary.total_cogs * scaleFactor,
-      total_profit: analysis.summary.total_profit * scaleFactor,
-      blended_margin_pct: analysis.summary.blended_margin_pct
+    const ordersApi = squareClient.ordersApi;
+    const locationIds = [
+      'L41E1NSH9N1GC', 'LVTS3K9QFN95F', 'L5J0D4FWK7FFY', 'L2326PJNQ7KS9',
+      'LWSX9K7SC3V37', 'L91Q2PN8KATAB', 'LGEFKKMZTYRJK'
+    ];
+
+    const productSales = {};
+    let totalRevenue = 0, totalCogs = 0;
+
+    for (const locationId of locationIds) {
+      try {
+        const response = await ordersApi.searchOrders(locationId, {
+          query: {
+            filter: {
+              dateTimeFilter: {
+                createdAt: {
+                  startAt: beginDate.toISOString()
+                }
+              }
+            }
+          }
+        });
+
+        const orders = response.result.orders || [];
+        for (const order of orders) {
+          if (!order.lineItems) continue;
+          for (const item of order.lineItems) {
+            const productName = item.name;
+            if (!productSales[productName]) {
+              productSales[productName] = { units: 0, revenue: 0 };
+            }
+            productSales[productName].units += item.quantity || 1;
+            productSales[productName].revenue += (item.grossSalesMoney?.amount || 0) / 100;
+          }
+        }
+      } catch (e) {
+        console.warn(`Error querying location ${locationId}:`, e.message);
+      }
+    }
+
+    // Calculate margins for period data
+    const formattedProducts = [];
+    for (const [productName, sales] of Object.entries(productSales)) {
+      const costPerUnit = costMap[productName] || 0;
+      const cogs = sales.units * costPerUnit;
+      const profit = sales.revenue - cogs;
+      const marginPct = sales.revenue > 0 ? (profit / sales.revenue * 100) : 0;
+
+      totalRevenue += sales.revenue;
+      totalCogs += cogs;
+
+      formattedProducts.push({
+        name: productName,
+        revenue: sales.revenue,
+        quantity: sales.units,
+        price: sales.units > 0 ? sales.revenue / sales.units : 0,
+        cogs: costPerUnit,
+        margin$: profit / sales.units,
+        marginPct: marginPct,
+        status: marginPct > 0 ? 'costed' : 'error-negative-margin'
+      });
+    }
+
+    // Sort by revenue descending
+    formattedProducts.sort((a, b) => b.revenue - a.revenue);
+    const top20 = formattedProducts.slice(0, 20);
+
+    const summary = {
+      total_units: Math.round(Object.values(productSales).reduce((sum, p) => sum + p.units, 0)),
+      total_revenue: totalRevenue,
+      total_cogs: totalCogs,
+      total_profit: totalRevenue - totalCogs,
+      blended_margin_pct: totalRevenue > 0 ? Math.round((totalRevenue - totalCogs) / totalRevenue * 100 * 10) / 10 : 0
     };
 
     res.json({
-      generatedAt: analysis.generated_at,
+      generatedAt: new Date().toISOString(),
       category: 'Bakery Products',
       period: period,
-      summary: scaledSummary,
-      top20: formattedProducts,
-      notes: 'Real ingredient costs from invoices + Square sales data'
+      summary: summary,
+      top20: top20,
+      notes: 'Real-time sales data from Square + verified recipe costs'
     });
   } catch (e) {
     console.error('Bakery margins error:', e.message);
