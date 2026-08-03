@@ -98,6 +98,21 @@ const extractBills = async ({ weeks = 12 } = {}) => {
         if (vendorBills.length > 0) {
           allBills.push(...vendorBills);
           console.log(`    ✓ ${vendorBills.length} bills from ${vendorName}`);
+
+          // DEBUG: Log structure of first bill
+          if (vendorBills.length > 0) {
+            const firstBill = vendorBills[0];
+            console.log(`\n    DEBUG: First ${vendorName} bill structure:`);
+            console.log(`      DocNumber: ${firstBill.DocNumber}`);
+            console.log(`      TxnDate: ${firstBill.TxnDate}`);
+            console.log(`      TotalAmt: ${firstBill.TotalAmt}`);
+            console.log(`      Line array exists: ${!!firstBill.Line}`);
+            console.log(`      Line array length: ${(firstBill.Line || []).length}`);
+            if (firstBill.Line && firstBill.Line.length > 0) {
+              console.log(`      First line: ${JSON.stringify(firstBill.Line[0], null, 2).substring(0, 300)}...`);
+            }
+            console.log();
+          }
         } else {
           console.log(`    ⊘ No bills from ${vendorName}`);
         }
