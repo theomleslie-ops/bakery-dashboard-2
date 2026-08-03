@@ -2784,6 +2784,42 @@ const getRebuildStatus = () => {
   return { status: 'idle' };
 };
 
+// Bakery margin analysis endpoint
+app.get('/api/bakery-margins', (req, res) => {
+  try {
+    const bakeryAnalysisPath = path.join(__dirname, 'analysis.json');
+    if (!fs.existsSync(bakeryAnalysisPath)) {
+      return res.status(404).json({ error: 'Bakery analysis not available. Run: node generate_analysis.py' });
+    }
+    
+    const analysis = JSON.parse(fs.readFileSync(bakeryAnalysisPath, 'utf-8'));
+    
+    // Transform to match product margins format
+    const formattedProducts = analysis.products.map(p => ({
+      name: p.product,
+      revenue: p.revenue,
+      quantity: p.units,
+      avgPrice: p.sale_price,
+      cogs: p.cost_per_unit,
+      margin$: p.profit / p.units,
+      marginPct: p.margin_pct,
+      status: p.margin_pct > 0 ? 'costed' : 'error-negative-margin'
+    }));
+    
+    res.json({
+      generatedAt: analysis.generated_at,
+      category: 'Bakery Products',
+      summary: analysis.summary,
+      top20: formattedProducts,
+      notes: 'Real ingredient costs from invoices + Square sales data'
+    });
+  } catch (e) {
+    console.error('Bakery margins error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
 app.get('/api/rebuild-margins', async (req, res) => {
   try {
     const sheetsOAuth = require('./pipeline/sheets-oauth');
