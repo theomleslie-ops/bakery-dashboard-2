@@ -153,20 +153,28 @@ const extractBills = async ({ weeks = 12 } = {}) => {
           allBills.push(...fullBills);
           console.log(`    ✓ ${fullBills.length} bills from ${vendorName} (with full line detail)`);
 
-          // DEBUG: Log structure of first bill
+          // DEBUG: Log ALL fields from first bill to check for source document reference
           const firstBill = fullBills[0];
-          console.log(`\n    DEBUG: First ${vendorName} bill structure:`);
-          console.log(`      DocNumber: ${firstBill.DocNumber}`);
-          console.log(`      TxnDate: ${firstBill.TxnDate}`);
-          console.log(`      TotalAmt: ${firstBill.TotalAmt}`);
-          console.log(`      Line array exists: ${!!firstBill.Line}`);
-          console.log(`      Line array length: ${(firstBill.Line || []).length}`);
-          if (firstBill.Line && firstBill.Line.length > 0) {
-            console.log(`      First 2 lines:`);
-            for (let i = 0; i < Math.min(2, firstBill.Line.length); i++) {
-              const line = firstBill.Line[i];
-              console.log(`        Line ${i}: DetailType=${line.DetailType}, Desc="${(line.Description || '').substring(0, 40)}", Amt=${line.Amount}, Qty=${line.ItemBasedExpenseLineDetail?.Qty || 'N/A'}`);
+          console.log(`\n    DEBUG: First ${vendorName} bill (ID: ${firstBill.Id}) all fields:`);
+          const fieldNames = Object.keys(firstBill).sort();
+          console.log(`      Fields (${fieldNames.length}): ${fieldNames.join(', ')}`);
+
+          // Look specifically for source document or file references
+          const sourceFields = fieldNames.filter(f =>
+            f.toLowerCase().includes('source') ||
+            f.toLowerCase().includes('document') ||
+            f.toLowerCase().includes('file') ||
+            f.toLowerCase().includes('ref') ||
+            f.toLowerCase().includes('url') ||
+            f.toLowerCase().includes('link')
+          );
+          if (sourceFields.length > 0) {
+            console.log(`      Source/Document/File fields: ${sourceFields.join(', ')}`);
+            for (const field of sourceFields) {
+              console.log(`        ${field}: ${JSON.stringify(firstBill[field]).substring(0, 200)}`);
             }
+          } else {
+            console.log(`      ⚠️  No source/document/file/url fields found on Bill object`);
           }
           console.log();
         }
