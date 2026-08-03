@@ -1,115 +1,136 @@
 // Parse itemized line items from vendor invoice PDFs
-// Handles common invoice formats (table-based line items with Qty, Unit Price, Amount)
+// Handles Chef's Warehouse invoice format where each item spans 3 lines:
+// Line 1: qty unit | qty unit | item# | description
+// Line 2: pack size / origin info
+// Line 3: unit_price | uom | extended_price
 
 const path = require('path');
 const qbClient = require('./qb-client');
 
 // Parse extracted PDF text to find line items
-// Matches Chef's Warehouse invoice structure: QTY UNIT | ITEM_CODE | DESCRIPTION | PRICE | UOM | ...
-// v2: Strict pattern matching for tabular invoices (fixes garbage extraction)
+// Reconstructs multi-line item rows before pattern matching
 const parseInvoiceText = (text) => {
   const items = [];
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-  // Skip non-item patterns: headers, footers, metadata, route codes, totals
-  const skipPatterns = /^(ordered|shipped|item|description|price|uom|extended|invoice|bill|number|date|po|po#|ship|terms|payment|account|thank|notes|subtotal|total|tax|amount due|grand total|balance|please|reference|vendor|from|to|attention|page|tel|fax|route|ca-[a-z]+|received|date:|po number|thank you|continued|notes:)/i;
+  // Non-food items and packaging to exclude
+  const excludeKeywords = [
+    'LINER', 'FOIL', 'GLOVE', 'BAG', 'CLEANING', 'PLASTIC', 'WRAP',
+    'TAPE', 'LABEL', 'BOX', 'CRATE', 'CONTAINER', 'PALLET', 'DUNNAGE',
+    'BROOM', 'MOP', 'SOAP', 'SANITIZER', 'DISINFECT'
+  ];
+  const excludePattern = new RegExp(`\\b(${excludeKeywords.join('|')})\\b`, 'i');
 
-  for (const line of lines) {
-    if (line.length < 10 || skipPatterns.test(line)) continue;
+  // Skip headers/footers
+  const skipPatterns = /^(ordered|shipped|item|description|price|uom|extended|invoice|bill|number|date|po|po#|ship|terms|payment|account|thank|notes|subtotal|total|tax|amount due|grand total|balance|please|reference|vendor|from|to|attention|page|tel|fax|route|ca-|received|date:|po number|thank you|continued|notes:|delivery|instructions)/i;
 
-    // Target pattern: QTY UNIT [more fields] PRICE
-    // Examples from Chef's Warehouse:
-    // "8 PC | 8 PC | BF100 | WHOLE MILK GALLON | 5.71 | PC | 45.68"
-    // When extracted from PDF, pipes may be spaces: "8 PC 8 PC BF100 WHOLE MILK GALLON 5.71 PC 45.68"
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
 
-    // Key: Must start with a quantity (small number 1-999) followed by a unit code
+    // Skip headers and short lines
+    if (line.length < 10 || skipPatterns.test(line)) {
+      i++;
+      continue;
+    }
+
+    // Check if this line starts with qty+unit (item start marker)
     const unitCodes = ['PC', 'CS', 'LB', 'EA', 'BX', 'DZ', 'CT', 'CA', 'KG', 'G', 'OZ', 'QT', 'GL', 'PT', 'ML', 'L'];
     const unitPattern = unitCodes.join('|');
     const qtyUnitMatch = line.match(new RegExp(`^(\\d+(?:\\.\\d+)?)\\s+(${unitPattern})\\b`, 'i'));
 
-    if (!qtyUnitMatch) continue;
+    if (!qtyUnitMatch) {
+      i++;
+      continue;
+    }
 
     const qty = parseFloat(qtyUnitMatch[1]);
-    if (qty < 0.01 || qty > 10000) continue; // Reasonable qty range
+    if (qty < 0.01 || qty > 10000) {
+      i++;
+      continue;
+    }
 
-    // Extract all numbers from line (for finding prices)
-    const allNumbers = line.match(/\d+(?:\.\d{1,4})?/g) || [];
-    if (allNumbers.length < 2) continue;
-
-    const numericValues = allNumbers.map(n => parseFloat(n));
+    // Extract description from this line (everything after qty+unit)
     const afterQtyUnit = line.substring(qtyUnitMatch[0].length).trim();
 
-    // In a structured invoice: qty | shipped | item_code | descr | unit_price | uom | ext_price
-    // Numbers appear as: qty, shipped, item_code_numbers, unit_price, extended_price
-    // Strategy: find the two largest price values (unit_price and extended_price)
-    // extended_price should be larger than unit_price
-    // The smaller of these two is likely the unit price
+    // Next line should be pack size / origin info (optional)
+    // We'll merge the next 2 lines if they exist and look like continuation lines
+    let mergedLine = line;
+    if (i + 2 < lines.length) {
+      const nextLine = lines[i + 1];
+      const pricingLine = lines[i + 2];
 
-    let unitPrice = null;
-    let description = '';
+      // Pricing line should contain price numbers
+      const priceMatch = pricingLine.match(/\d+\.?\d*/);
 
-    // Find all valid prices (between 0.5 and 5000)
+      // If next line doesn't look like a header and pricing line has numbers, merge
+      if (priceMatch && !skipPatterns.test(nextLine)) {
+        mergedLine = line + ' ' + nextLine + ' ' + pricingLine;
+        i += 2; // Skip the next two lines
+      }
+    }
+
+    // Extract all numbers from merged line
+    const allNumbers = mergedLine.match(/\d+(?:\.\d{1,4})?/g) || [];
+    const numericValues = allNumbers.map(n => parseFloat(n));
+
+    // Find valid prices (0.5 to 5000)
     const validPrices = [];
-    const priceIndices = [];
-    for (let i = 0; i < numericValues.length; i++) {
-      if (numericValues[i] >= 0.5 && numericValues[i] < 5000) {
-        validPrices.push(numericValues[i]);
-        priceIndices.push(i);
+    for (const val of numericValues) {
+      if (val >= 0.5 && val < 5000) {
+        validPrices.push(val);
       }
     }
 
-    if (validPrices.length >= 1) {
-      // If we have 2+ prices, unit_price is usually the smaller one (before extended)
-      // If we have just 1, that's probably the unit price
-      if (validPrices.length >= 2) {
-        // Take the 2nd-to-last valid price (unit price is before extended price)
-        unitPrice = validPrices[validPrices.length - 2];
-        const unitPriceNumStr = unitPrice.toString();
-        const unitPricePos = afterQtyUnit.lastIndexOf(unitPriceNumStr);
-        if (unitPricePos > 0) {
-          description = afterQtyUnit.substring(0, unitPricePos).trim();
-        } else {
-          description = afterQtyUnit;
-        }
-      } else {
-        // Only one price, use it
-        unitPrice = validPrices[0];
-        const priceNumStr = unitPrice.toString();
-        const pricePos = afterQtyUnit.lastIndexOf(priceNumStr);
-        if (pricePos > 0) {
-          description = afterQtyUnit.substring(0, pricePos).trim();
-        } else {
-          description = afterQtyUnit;
-        }
-      }
+    // Unit price is typically 2nd-to-last (last is usually extended price)
+    let unitPrice = null;
+    if (validPrices.length >= 2) {
+      unitPrice = validPrices[validPrices.length - 2];
+    } else if (validPrices.length === 1) {
+      unitPrice = validPrices[0];
     }
 
-    if (!unitPrice || !description) continue;
+    if (!unitPrice) {
+      i++;
+      continue;
+    }
 
-    // Clean description
+    // Description is the part after qty+unit, before numbers get too messy
+    let description = afterQtyUnit;
+
+    // Remove UOM codes and numbers that aren't part of item name
     description = description
-      .replace(/\s*\|\s*/g, ' ')  // Replace pipes with spaces
-      .replace(/\s+/g, ' ')        // Collapse multiple spaces
-      .substring(0, 100)           // Limit length
+      .replace(/\d+\.?\d*\s*(PC|CS|LB|EA|BX|DZ|CT|CA|KG|G|OZ|QT|GL|PT|ML|L|UOM)\b/gi, '') // Remove UOM patterns
+      .replace(/\d+\.?\d*/g, '') // Remove remaining numbers
+      .replace(/\s+/g, ' ')       // Collapse spaces
       .trim();
 
-    // Filter out non-item descriptions
-    if (description.length < 3 || /^[\d\s\-\.]+$/.test(description)) continue;
-
-    // Validate price is reasonable
-    if (unitPrice > 0 && unitPrice < 5000) {
-      items.push({
-        description,
-        quantity: qty,
-        unitPrice: Math.round(unitPrice * 100) / 100,
-      });
+    // Filter out garbage: too short, only numbers, suspicious patterns
+    if (!description || description.length < 3) {
+      i++;
+      continue;
     }
+
+    // Exclude non-food items
+    if (excludePattern.test(description)) {
+      i++;
+      continue;
+    }
+
+    // Add the item
+    items.push({
+      description,
+      quantity: qty,
+      unitPrice: Math.round(unitPrice * 100) / 100,
+    });
+
+    i++;
   }
 
-  // Deduplicate by description (same item from different pages)
+  // Deduplicate by description (same item from different invoices)
   const seen = new Set();
-  return items.filter(i => {
-    const key = i.description.toLowerCase();
+  return items.filter(item => {
+    const key = item.description.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
