@@ -2744,19 +2744,19 @@ app.get('/api/cash-balance', async (req, res) => {
     const qbClient = require('./pipeline/qb-client');
     const tokens = await qbClient.getValidTokens();
 
-    // Helper to extract cash balance from cash flow report
-    // CashFlow report has "Net Cash Provided by Operating Activities" or similar rows
-    // We need the final "Cash at End of Period" or total cash row
-    const findCashFromCashFlow = (rows) => {
+    // Helper to extract total cash from balance sheet bank accounts section
+    const findCashTotal = (rows) => {
       if (!rows) return null;
       for (const row of rows) {
         const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        if (label.toUpperCase().includes('CASH') && (label.toUpperCase().includes('END') || label.toUpperCase().includes('ENDING'))) {
+        // Look for "Bank Accounts" group
+        if (label.toUpperCase().includes('BANK')) {
           const val = row.Summary?.ColData?.[1]?.value || row.ColData?.[1]?.value;
-          if (val) return parseFloat(val);
+          if (val !== undefined && val !== null) return parseFloat(val);
         }
+        // Recurse into nested rows
         if (row.Rows?.Row) {
-          const found = findCashFromCashFlow(row.Rows.Row);
+          const found = findCashTotal(row.Rows.Row);
           if (found !== null) return found;
         }
       }
@@ -2794,21 +2794,12 @@ app.get('/api/cash-balance', async (req, res) => {
       console.log(`Range: ${months[0].name} ${months[0].year} to ${months[months.length - 1].name} ${months[months.length - 1].year}`);
     }
 
-    // Get balance sheet for Feb 28, 2025 as anchor point (known to be accurate)
-    const anchorDate = '2025-02-28';
-    const anchorBalance = 6676.32; // From QB Balance Sheet: Bank Accounts total as of Feb 28, 2025
-
+    // Query QB Balance Sheet for each month's end date to get cash snapshot
     const balances = [];
     let currentCash = 0;
 
-    // Split months into two groups: Feb 2025+ (use CashFlow) and before (calculate from anchor)
-    const moneyFeb2025Index = months.findIndex(m => m.year === 2025 && m.name === 'February');
-    const afterFeb = moneyFeb2025Index >= 0 ? months.slice(moneyFeb2025Index) : [];
-    const beforeFeb = moneyFeb2025Index >= 0 ? months.slice(0, moneyFeb2025Index) : months;
-
-    // Phase 1: For Feb 2025 and later, use CashFlow reports
-    console.log(`Fetching CashFlow data for ${afterFeb.length} months (Feb 2025+)...`);
-    for (const monthData of afterFeb) {
+    console.log('Querying QB Balance Sheet for each month...');
+    for (const monthData of months) {
       const monthIndex = MONTH_NAMES.indexOf(monthData.name);
       const lastDayOfMonth = new Date(monthData.year, monthIndex + 1, 0);
       const year = lastDayOfMonth.getFullYear();
@@ -2817,15 +2808,15 @@ app.get('/api/cash-balance', async (req, res) => {
       const dateStr = `${year}-${month}-${day}`;
 
       try {
-        const cfRes = await axios.get(
-          `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
+        const bsRes = await axios.get(
+          `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
           {
-            params: { end_date: dateStr },
+            params: { as_of_date: dateStr },
             headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
           }
         );
 
-        const cash = findCashFromCashFlow(cfRes.data.Rows?.Row) || 0;
+        const cash = findCashTotal(bsRes.data.Rows?.Row) || 0;
         currentCash = cash;
         balances.push({
           date: dateStr,
@@ -2833,35 +2824,11 @@ app.get('/api/cash-balance', async (req, res) => {
         });
         console.log(`  ✅ ${dateStr}: $${round2(cash)}`);
       } catch (err) {
-        console.warn(`Failed to fetch CashFlow for ${dateStr}: ${err.message}`);
+        console.warn(`Failed to fetch Balance Sheet for ${dateStr}: ${err.message}`);
       }
     }
 
-    // Phase 2: For months before Feb 2025, calculate backwards from anchor using P&L
-    console.log(`\nCalculating backwards from Feb 28, 2025 anchor ($${anchorBalance}) for ${beforeFeb.length} earlier months...`);
-    let runningBalance = anchorBalance;
-    for (let i = beforeFeb.length - 1; i >= 0; i--) {
-      const monthData = beforeFeb[i];
-      const pl = monthData.pl || 0;
-
-      // Working backwards: subtract PL to get previous month's ending balance
-      runningBalance -= pl;
-
-      const monthIndex = MONTH_NAMES.indexOf(monthData.name);
-      const monthDate = new Date(monthData.year, monthIndex + 1, 0);
-      const year = monthDate.getFullYear();
-      const month = String(monthDate.getMonth() + 1).padStart(2, '0');
-      const day = String(monthDate.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
-
-      balances.unshift({
-        date: dateStr,
-        balance: round2(runningBalance),
-      });
-      console.log(`  ${dateStr}: $${round2(runningBalance)} (worked back from P&L of $${pl})`);
-    }
-
-    console.log(`✅ Built ${balances.length} total month-end cash balances`);
+    console.log(`✅ Fetched ${balances.length} month-end cash balances from QB`);
 
     res.json({
       success: true,
