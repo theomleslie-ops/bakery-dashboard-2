@@ -30,8 +30,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(cors());
 app.use(express.json());
 
-// Data storage paths
-const DATA_DIR = 'data';
+// Data storage paths (use absolute path to work correctly on Railway)
+const DATA_DIR = path.join(__dirname, 'data');
 try {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 } catch (e) {
