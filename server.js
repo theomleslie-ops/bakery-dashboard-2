@@ -2537,10 +2537,11 @@ app.get('/api/debug/overrides', (req, res) => {
     }
     const data = JSON.parse(fs.readFileSync(overridesFile, 'utf-8'));
 
-    // Build overrides object like the main endpoint does
+    // Build overrides object like the main endpoint does (with lowercase keys)
     const overrides = {};
     for (const mapping of data.mappings || []) {
-      overrides[normalizeQuotes(mapping.squareItem)] = mapping.recipe;
+      const key = normalizeQuotes(mapping.squareItem).toLowerCase();
+      overrides[key] = mapping.recipe;
     }
 
     res.json({
@@ -2548,8 +2549,8 @@ app.get('/api/debug/overrides', (req, res) => {
       rawMappings: data.mappings.slice(0, 3),
       overrideKeys: Object.keys(overrides),
       sampleLookup: {
-        "Country Round": overrides["Country Round"],
-        "Breakfast Bar": overrides["Breakfast Bar"]
+        "country round": overrides["country round"],
+        "breakfast bar": overrides["breakfast bar"]
       }
     });
   } catch (e) {
@@ -2575,13 +2576,15 @@ app.get('/api/product-margins', async (req, res) => {
       costByRecipe[r.recipe.toLowerCase()] = r.costPerUnit;
     }
 
-    // Load manual recipe overrides (normalize quotes for consistent matching)
+    // Load manual recipe overrides (normalize quotes and use lowercase keys)
     const overridesFile = path.join(DATA_DIR, 'pipeline', 'ingredient-overrides.json');
     const overrides = {};
     if (fs.existsSync(overridesFile)) {
       const overridesData = JSON.parse(fs.readFileSync(overridesFile, 'utf-8'));
       for (const mapping of overridesData.mappings || []) {
-        overrides[normalizeQuotes(mapping.squareItem)] = mapping.recipe;
+        // Use lowercase key for case-insensitive lookup
+        const key = normalizeQuotes(mapping.squareItem).toLowerCase();
+        overrides[key] = mapping.recipe;
       }
     }
 
@@ -2616,14 +2619,12 @@ app.get('/api/product-margins', async (req, res) => {
         let matchedRecipe = null;
         const recipes = Object.keys(costByRecipe);
 
-        // Priority 1: Check manual overrides (normalize quotes)
-        const normalizedItemName = normalizeQuotes(item.name);
+        // Priority 1: Check manual overrides (normalize quotes and case-insensitive)
+        const normalizedItemName = normalizeQuotes(item.name).toLowerCase();
         if (overrides[normalizedItemName]) {
           matchedRecipe = overrides[normalizedItemName];
           costPerUnit = costByRecipe[matchedRecipe.toLowerCase()];
           console.log(`✓ Override match for "${item.name}" → "${matchedRecipe}" = $${costPerUnit}`);
-        } else if (item.name === 'Chocolate Sourdough "Scone"' || item.name.includes('Sourdough')) {
-          console.log(`✗ Override FAILED for "${item.name}", normalized: "${normalizedItemName}", available keys: ${Object.keys(overrides).slice(0, 3).join(', ')}...`);
         }
 
         // Priority 2: Try exact match
