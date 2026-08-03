@@ -79,12 +79,16 @@ const parseInvoiceText = (text, billId) => {
       }
 
       // Stop if we hit another item start (but allow price lines like "34.00 CS 34.00")
-      // Only break if: starts with qty + unit + SUBSTANTIAL content (like item code or product name)
+      // Price lines have decimal quantities (34.00), item starts have whole numbers (5, 27)
+      // UNLESS it's a pack size line like "3/5.75 LB"
       const qtyMatch = nextLine.match(new RegExp(`^(\\d+(?:\\.\\d+)?)\\s+(${unitPattern})\\b`, 'i'));
-      if (qtyMatch && qtyMatch[1] >= 10) {
-        // Quantity >= 10 suggests a new item (ordered quantities are typically higher)
-        // Price lines typically have quantities < 10 (like 34.00)
-        break;
+      if (qtyMatch) {
+        const qtyStr = qtyMatch[1];
+        // If qty is a whole number (no decimal), it's likely a new item, not a price line
+        if (!qtyStr.includes('.')) {
+          break; // This is a new item start
+        }
+        // Otherwise it's a decimal (price line), keep merging
       }
 
       // Include the line
