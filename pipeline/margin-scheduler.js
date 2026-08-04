@@ -102,13 +102,13 @@ const runCalculation = async () => {
         quickbooks: sources.quickbooks,
         square_sales: sources.square_sales,
         notes: {
-          google_sheets: sources.google_sheets ? 'Recipes, ingredient yields, pre-ferment formulas' : 'NOT AVAILABLE',
+          google_sheets: sources.google_sheets ? 'Recipes and ingredient yields' : 'NOT AVAILABLE',
           quickbooks: sources.quickbooks ? 'QB bills for ingredient costs (primary)' : 'NOT AVAILABLE (using Google Sheets fallback)',
           square_sales: sources.square_sales ? 'Product sales units and prices' : 'NOT AVAILABLE',
-          hardcoded: 'Product-to-recipe mappings and base dough definitions (business logic)',
+          hardcoded: 'Product-to-recipe mappings, base dough definitions, and pre-ferment formulas (business logic)',
         },
       },
-      data_policy: 'All numbers derive from three sources: QuickBooks (costs), Google Sheets (recipes/formulas), and Square (sales). No overrides or file-based numbers except hardcoded business logic.',
+      data_policy: 'All numbers derive from three sources: QuickBooks (costs), Google Sheets (recipes), and Square (sales). Pre-ferment formulas and product mappings are hardcoded business logic.',
     };
 
     const analysisPath = path.join(__dirname, '..', 'analysis.json');
