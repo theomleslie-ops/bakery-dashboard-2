@@ -2888,16 +2888,20 @@ app.get('/api/bakery-margins', (req, res) => {
     }
 
     // Transform to match product margins format
-    const formattedProducts = analysis.products.map(p => ({
-      name: p.product,
-      revenue: p.revenue * scaleFactor,
-      quantity: Math.round(p.units * scaleFactor),
-      price: p.sale_price,
-      cogs: p.sale_price - (p.profit / p.units),
-      margin$: (p.profit / p.units) * scaleFactor,
-      marginPct: p.margin_pct,
-      status: p.margin_pct > 0 ? 'costed' : 'error-negative-margin'
-    }));
+    const formattedProducts = analysis.products.map(p => {
+      const scaledQuantity = Math.round(p.units * scaleFactor);
+      const profitPerUnit = p.profit / p.units;
+      return {
+        name: p.product,
+        revenue: p.revenue * scaleFactor,
+        quantity: scaledQuantity,
+        price: p.sale_price,
+        cogs: p.sale_price - profitPerUnit,
+        margin$: profitPerUnit * scaledQuantity,
+        marginPct: p.margin_pct,
+        status: p.margin_pct > 0 ? 'costed' : 'error-negative-margin'
+      };
+    });
 
     // Recalculate summary for period
     const scaledSummary = {
