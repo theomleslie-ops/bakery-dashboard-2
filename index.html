@@ -1232,44 +1232,6 @@
           .catch((err) => { setError('Failed to load locations: ' + err.message); setStatus('error'); });
       }, []);
 
-      // Auto-refresh from Drive on component mount
-      useEffect(() => {
-        const autoRefresh = async () => {
-          try {
-            const baseUrl = window.location.origin;
-            await fetch(`${baseUrl}/api/refresh-production-from-drive`, { method: 'POST' });
-          } catch (err) {
-            console.warn('Auto-refresh failed:', err.message);
-          }
-        };
-        autoRefresh();
-      }, []);
-
-      // Periodic refresh (every 10 minutes) and on tab focus
-      useEffect(() => {
-        const autoRefresh = async () => {
-          try {
-            const baseUrl = window.location.origin;
-            await fetch(`${baseUrl}/api/refresh-production-from-drive`, { method: 'POST' });
-            if (location) fetchData(location);
-          } catch (err) {
-            console.warn('Auto-refresh failed:', err.message);
-          }
-        };
-
-        // Refresh every 10 minutes
-        const interval = setInterval(autoRefresh, 10 * 60 * 1000);
-
-        // Refresh when tab comes into focus
-        const handleFocus = () => autoRefresh();
-        window.addEventListener('focus', handleFocus);
-
-        return () => {
-          clearInterval(interval);
-          window.removeEventListener('focus', handleFocus);
-        };
-      }, [location]);
-
       const fetchData = async (loc) => {
         try {
           setStatus('loading');

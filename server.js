@@ -3701,4 +3701,34 @@ const server = app.listen(PORT, async () => {
       }
     }
   });
+
+  // Refresh production data from Google Drive weekly (Mondays at 4am)
+  cron.schedule('0 4 * * 1', async () => {
+    console.log('🔄 Starting weekly production data refresh from Google Drive...');
+    try {
+      const production = await fetchProductionData();
+      const existing = loadProduction();
+      const merged = { ...existing };
+
+      for (const location in production) {
+        const existingRows = merged[location] || [];
+        const newDates = new Set(production[location].map(r => r.date));
+        merged[location] = existingRows.filter(r => !newDates.has(r.date)).concat(production[location]);
+      }
+
+      saveData(PRODUCTION_FILE, merged);
+
+      for (const loc of WASTE_LOCATIONS) {
+        cacheManager.invalidate(`waste_${loc.name}`);
+      }
+
+      const totalRows = Object.values(merged).reduce((sum, arr) => sum + arr.length, 0);
+      console.log(`✅ Production data refresh complete: ${totalRows} total rows`);
+    } catch (err) {
+      console.error('❌ Production data refresh failed:', err.message);
+      if (err.code === 'GOOGLE_NOT_CONNECTED') {
+        console.error('   → Google Drive not connected, skipping production refresh');
+      }
+    }
+  });
 });
