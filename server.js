@@ -2844,14 +2844,17 @@ app.get('/api/bakery-margins', async (req, res) => {
       return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
     }
 
-    // Fetch LIVE orders from Square for this period (NO scaling)
+    // Fetch LIVE orders from Square in parallel (NO scaling)
     const allOrders = [];
-    for (const location of WASTE_LOCATIONS) {
+    const MAX_PAGES = 3; // Limit pages per location to keep response time reasonable
+
+    const locationFetches = WASTE_LOCATIONS.map(async (location) => {
       let cursor = null;
       let page = 0;
+      const locationOrders = [];
 
       try {
-        while (page < 100) {
+        while (page < MAX_PAGES) {
           const req_body = {
             location_ids: [location.squareLocationId],
             limit: 250,
@@ -2875,13 +2878,13 @@ app.get('/api/bakery-margins', async (req, res) => {
               Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
               'Content-Type': 'application/json',
             },
-            timeout: 10000,
+            timeout: 8000,
           });
 
           const orders = response.data.orders || [];
           for (const order of orders) {
             for (const line of order.line_items || []) {
-              allOrders.push({
+              locationOrders.push({
                 itemName: line.name || 'Unknown',
                 quantity: line.quantity ? parseInt(line.quantity) : 1,
                 grossSales: Math.round((line.gross_sales_money?.amount || 0) / 100 * 100) / 100,
@@ -2896,6 +2899,19 @@ app.get('/api/bakery-margins', async (req, res) => {
       } catch (e) {
         console.warn(`⚠️ Location ${location.name}: ${e.message}`);
       }
+      return locationOrders;
+    });
+
+    try {
+      const results = await Promise.race([
+        Promise.all(locationFetches),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 20000))
+      ]);
+      for (const orders of results) {
+        allOrders.push(...orders);
+      }
+    } catch (e) {
+      console.warn(`⚠️ Order fetch timeout or error: ${e.message}`);
     }
 
     // Aggregate by item name
