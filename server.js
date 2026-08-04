@@ -318,29 +318,59 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
 // Refresh production data from Google Drive (Little Sky Production folder)
 app.post('/api/refresh-production-from-drive', async (req, res) => {
   try {
+    const refreshTimestamp = new Date().toISOString();
+    console.log(`\n[${refreshTimestamp}] Starting refresh-production-from-drive`);
+
     const production = await fetchProductionData();
+    console.log(`  Fetched production data from Drive:`, Object.keys(production).map(loc => ({
+      location: loc,
+      rows: production[loc].length,
+      dateRange: production[loc].length > 0 ?
+        `${production[loc][0].date} to ${production[loc][production[loc].length - 1].date}` : 'empty'
+    })));
 
     // Merge with existing production data (don't overwrite other locations/dates)
     const existing = loadProduction();
+    console.log(`  Existing production data:`, Object.keys(existing).map(loc => ({
+      location: loc,
+      rows: existing[loc] ? existing[loc].length : 0
+    })));
+
     const merged = { ...existing };
 
     for (const location in production) {
       const existingRows = merged[location] || [];
       const newDates = new Set(production[location].map(r => r.date));
-      // Replace dates from Drive, keep other dates
+      const rowsBeforeMerge = existingRows.length;
+      const rowsRemoved = existingRows.filter(r => newDates.has(r.date)).length;
       merged[location] = existingRows.filter(r => !newDates.has(r.date)).concat(production[location]);
+      console.log(`  Location ${location}: ${rowsBeforeMerge} -> ${merged[location].length} rows (removed ${rowsRemoved} old entries, added ${production[location].length} new)`);
     }
 
     saveData(PRODUCTION_FILE, merged);
+    console.log(`  Saved merged production data to disk`);
 
     // Invalidate cache for all locations
     for (const loc of WASTE_LOCATIONS) {
       cacheManager.invalidate(`waste_${loc.name}`);
     }
+    console.log(`  Invalidated waste cache for ${WASTE_LOCATIONS.length} locations`);
+
+    // Check analysis.json status
+    const analysisPath = path.join(__dirname, 'analysis.json');
+    const analysisExists = fs.existsSync(analysisPath);
+    if (analysisExists) {
+      const stat = fs.statSync(analysisPath);
+      console.log(`  analysis.json exists, last modified: ${new Date(stat.mtime).toISOString()}`);
+    } else {
+      console.log(`  WARNING: analysis.json does not exist!`);
+    }
 
     const totalRows = Object.values(merged).reduce((sum, arr) => sum + arr.length, 0);
+    console.log(`[${refreshTimestamp}] Refresh complete. Total rows: ${totalRows}\n`);
     res.json({ success: true, message: 'Production data refreshed from Google Drive', totalRows });
   } catch (err) {
+    console.error(`[${new Date().toISOString()}] Refresh error:`, err.message);
     if (err.code === 'GOOGLE_NOT_CONNECTED') {
       return res.status(401).json({ error: 'Google Drive not connected. Authorize at /api/google/connect first.' });
     }
@@ -2830,6 +2860,9 @@ app.get('/api/bakery-margins', (req, res) => {
     if (!fs.existsSync(bakeryAnalysisPath)) {
       return res.status(404).json({ error: 'Bakery analysis not available. Run: node generate_analysis.py' });
     }
+
+    const stat = fs.statSync(bakeryAnalysisPath);
+    console.log(`[${new Date().toISOString()}] GET /api/bakery-margins (period=${req.query.period || 'lifetime'}), analysis.json from ${new Date(stat.mtime).toISOString()}`);
 
     const analysis = JSON.parse(fs.readFileSync(bakeryAnalysisPath, 'utf-8'));
     const period = req.query.period || 'lifetime';
