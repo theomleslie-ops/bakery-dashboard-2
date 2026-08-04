@@ -2899,7 +2899,7 @@ app.get('/api/bakery-margins', (req, res) => {
         quantity: scaledQuantity,
         price: price_per_unit,
         cogs: cogs_per_unit,
-        margin$: margin_per_unit * scaledQuantity,
+        margin$: margin_per_unit,
         marginPct: p.margin_pct,
         status: p.margin_pct > 0 ? 'costed' : 'error-negative-margin'
       };
