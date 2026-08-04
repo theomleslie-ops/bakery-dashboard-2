@@ -2869,14 +2869,22 @@ app.get('/api/bakery-margins', (req, res) => {
     const analysis = JSON.parse(fs.readFileSync(bakeryAnalysisPath, 'utf-8'));
     const period = req.query.period || 'lifetime';
 
-    // Scale data based on requested period
+    // Scale data based on requested period (analysis.json contains ~1 year of data)
     let scaleFactor = 1;
     switch(period) {
+      case '1_week': scaleFactor = 1/52; break;
+      case '2_weeks': scaleFactor = 2/52; break;
+      case '2_months': scaleFactor = 8.57/52; break;
+      case '6_months': scaleFactor = 26/52; break;
+      case '1_year': scaleFactor = 1; break;
+      case '3_years': scaleFactor = 1; break; // No data beyond 1 year available
+      case '5_years': scaleFactor = 1; break; // No data beyond 1 year available
+      case 'lifetime': scaleFactor = 1; break;
+      // Legacy period values for backwards compatibility
       case 'last_52_weeks': scaleFactor = 1; break;
       case 'last_26_weeks': scaleFactor = 0.5; break;
       case 'last_12_weeks': scaleFactor = 0.23; break;
       case 'last_4_weeks': scaleFactor = 0.077; break;
-      case 'lifetime': scaleFactor = 1; break;
     }
 
     // Transform to match product margins format
