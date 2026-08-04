@@ -2623,9 +2623,9 @@ app.get('/api/product-margins', async (req, res) => {
     console.log('📊 Calculating LIVE product margins from QB + Google Sheets + Square...');
     const startTime = Date.now();
 
-    // Step 1: Fetch live Square sales data for all time windows (5 years max)
-    console.log('  Step 1: Fetching live Square sales...');
-    let allSquareOrders = [];
+    // Step 1: Fetch live Square item sales using item reports API
+    console.log('  Step 1: Fetching live Square item sales reports...');
+    let itemSalesData = {};
     let squareFetchedAt = null;
 
     try {
@@ -2633,85 +2633,59 @@ app.get('/api/product-margins', async (req, res) => {
         throw new Error('SQUARE_ACCESS_TOKEN not configured');
       }
 
-      // Fetch 5 years of data to cover all time windows
-      const fiveYearsAgo = new Date(Date.now() - 5 * 365 * 86400_000).toISOString().slice(0, 10);
+      // Fetch item sales for each time window
+      const windows = [
+        { name: '1 week', days: 7 },
+        { name: '2 weeks', days: 14 },
+        { name: '2 months', days: 60 },
+        { name: '6 months', days: 180 },
+        { name: '1 year', days: 365 },
+        { name: '3 years', days: 1095 },
+        { name: '5 years', days: 1825 },
+      ];
 
-      // Fetch from all locations in parallel
-      const locationFetches = WASTE_LOCATIONS.map(async (location) => {
-        let cursor = null;
-        let page = 0;
-        const MAX_PAGES = 100;
-        const locationOrders = [];
+      for (const window of windows) {
+        const beginTime = new Date(Date.now() - window.days * 24 * 60 * 60 * 1000).toISOString();
+        const endTime = new Date().toISOString();
 
         try {
-          while (page < MAX_PAGES) {
-            const req = {
-              location_ids: [location.squareLocationId],
-              limit: 250,
-              sort_order: 'DESC',
-              query: {
-                filter: {
-                  state_filter: { states: ['COMPLETED'] },
-                  date_time_filter: {
-                    closed_at: {
-                      start_at: new Date(`${fiveYearsAgo}T00:00:00Z`).toISOString(),
-                      end_at: new Date().toISOString(),
-                    },
-                  },
-                },
-              },
+          const res = await axios.get(`https://connect.squareup.com/v2/reports/sales_by_item`, {
+            headers: {
+              Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            params: {
+              begin_time: beginTime,
+              end_time: endTime,
+            },
+            timeout: 10000,
+          });
+
+          const rows = res.data.rows || [];
+          itemSalesData[window.name] = {};
+
+          for (const row of rows) {
+            const itemName = row.name || 'Unknown';
+            const quantity = parseInt(row.quantity_sold || 0);
+            const revenue = parseFloat(row.gross_sales || 0) / 100; // Convert cents to dollars
+
+            itemSalesData[window.name][itemName] = {
+              quantity: quantity,
+              revenue: Math.round(revenue * 100) / 100,
             };
-            if (cursor) req.query.cursor = cursor;
-
-            let res;
-            try {
-              res = await axios.post(`https://connect.squareup.com/v2/orders/search`, req, {
-                headers: {
-                  Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
-                  'Content-Type': 'application/json',
-                },
-                timeout: 10000,
-              });
-            } catch (apiErr) {
-              if (apiErr.response?.status === 429) {
-                console.warn(`    ⚠️  Rate limited at page ${page}`);
-                break;
-              }
-              throw apiErr;
-            }
-
-            const orders = res.data.orders || [];
-            for (const order of orders) {
-              for (const line of order.line_items || []) {
-                locationOrders.push({
-                  itemName: line.name || 'Unknown',
-                  quantity: line.quantity ? parseInt(line.quantity) : 1,
-                  grossSales: Math.round((line.gross_sales_money?.amount || 0) / 100 * 100) / 100,
-                  timestamp: order.closed_at || new Date().toISOString(),
-                  location: location.name,
-                });
-              }
-            }
-
-            cursor = res.data.cursor;
-            page++;
-            if (!cursor) break;
           }
+
+          console.log(`    ✓ ${window.name}: ${Object.keys(itemSalesData[window.name]).length} items`);
         } catch (e) {
-          console.warn(`    ⚠️  Location ${location.name}: ${e.message}`);
+          console.warn(`    ⚠️  Failed to fetch ${window.name} report: ${e.message}`);
+          itemSalesData[window.name] = {};
         }
-
-        return locationOrders;
-      });
-
-      const allLocationOrders = await Promise.all(locationFetches);
-      allSquareOrders = allLocationOrders.flat();
+      }
 
       squareFetchedAt = new Date().toISOString();
-      console.log(`    ✓ Fetched ${allSquareOrders.length} line items from Square (5 year history)`);
+      console.log(`    ✓ Fetched item sales reports for all time windows`);
     } catch (e) {
-      console.warn(`    ⚠️  Square fetch failed: ${e.message}`);
-      // Continue with empty data
+      console.warn(`    ⚠️  Square reports fetch failed: ${e.message}`);
     }
 
     // Step 2: Calculate costs using live QB + Google Sheets pipeline
@@ -2757,72 +2731,41 @@ app.get('/api/product-margins', async (req, res) => {
       productCostMap[productKey] = p.cost_per_unit || p.costPerUnit || 0;
     }
 
-    // For each time window, filter actual Square data and compute top 20
-    const windows = [
-      { name: '1 week', days: 7 },
-      { name: '2 weeks', days: 14 },
-      { name: '2 months', days: 60 },
-      { name: '6 months', days: 180 },
-      { name: '1 year', days: 365 },
-      { name: '3 years', days: 1095 },
-      { name: '5 years', days: 1825 },
-    ];
-
+    // For each time window, use Square item report data and compute top 20
     const result = {};
 
-    for (const window of windows) {
-      // Filter Square orders for this time window
-      const windowCutoffTime = Date.now() - window.days * 24 * 60 * 60 * 1000;
-      const windowOrders = allSquareOrders.filter(order => {
-        const orderTime = new Date(order.timestamp).getTime();
-        return orderTime >= windowCutoffTime;
+    for (const windowName in itemSalesData) {
+      const windowItems = itemSalesData[windowName];
+
+      // Convert item sales to product list with margins
+      const productList = Object.entries(windowItems).map(([name, data]) => {
+        const cost = productCostMap[(name || '').toLowerCase()] || 0;
+        const revenue = data.revenue;
+        const cogs = data.quantity * cost;
+        const profit = revenue - cogs;
+        const marginPct = revenue > 0 ? (profit / revenue * 100) : 0;
+
+        return {
+          name: name,
+          revenue: Math.round(revenue * 100) / 100,
+          quantity: Math.round(data.quantity * 100) / 100,
+          avgPrice: data.quantity > 0 ? Math.round((revenue / data.quantity) * 100) / 100 : 0,
+          cogs: Math.round(cost * 100) / 100,
+          margin$: Math.round(cost * 100) / 100,
+          marginPct: Math.round(marginPct * 10) / 10,
+          status: profit < 0 ? 'error-negative-margin' : (cost > 0 ? 'costed' : 'needs-cost'),
+        };
       });
 
-      // Aggregate by product name for this window
-      const ordersByItem = {};
-      for (const order of windowOrders) {
-        if (!ordersByItem[order.itemName]) {
-          ordersByItem[order.itemName] = { qty: 0, revenue: 0 };
-        }
-        ordersByItem[order.itemName].qty += order.quantity;
-        ordersByItem[order.itemName].revenue += order.grossSales;
-      }
-
-      // Convert to product list
-      const windowSquareSalesData = Object.entries(ordersByItem).map(([name, data]) => ({
-        product: name,
-        units: Math.round(data.qty * 100) / 100,
-        price: data.qty > 0 ? Math.round((data.revenue / data.qty) * 100) / 100 : 0,
-      }));
-
-      // Rank products by revenue
-      const ranked = windowSquareSalesData
-        .map(item => {
-          const cost = productCostMap[(item.product || '').toLowerCase()] || 0;
-          const revenue = item.units * item.price;
-          const cogs = item.units * cost;
-          const profit = revenue - cogs;
-          const marginPct = revenue > 0 ? (profit / revenue * 100) : 0;
-
-          return {
-            name: item.product,
-            revenue: Math.round(revenue * 100) / 100,
-            quantity: Math.round(item.units * 100) / 100,
-            avgPrice: Math.round(item.price * 100) / 100,
-            cogs: Math.round(cost * 100) / 100,
-            margin$: Math.round(profit * 100) / 100,
-            marginPct: Math.round(marginPct * 10) / 10,
-            status: profit < 0 ? 'error-negative-margin' : (cost > 0 ? 'costed' : 'needs-cost'),
-          };
-        })
+      // Rank by revenue and get top 20
+      const ranked = productList
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 20);
 
-      result[window.name] = {
+      result[windowName] = {
         fetchedAt: squareFetchedAt || new Date().toISOString(),
-        window: `${window.days} days`,
         top20: ranked,
-        ordersInWindow: windowOrders.length,
+        itemsInReport: Object.keys(windowItems).length,
       };
     }
 
