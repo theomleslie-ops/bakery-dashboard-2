@@ -1192,8 +1192,32 @@
       const [wasteData, setWasteData] = useState(null);
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
+      const [refreshing, setRefreshing] = useState(false);
+      const [refreshMessage, setRefreshMessage] = useState('');
 
       useEffect(() => { setSelectedPeriod(null); }, [granularity, location]);
+
+      const refreshFromDrive = async () => {
+        try {
+          setRefreshing(true);
+          setRefreshMessage('');
+          const baseUrl = window.location.origin;
+          const response = await fetch(`${baseUrl}/api/refresh-production-from-drive`, { method: 'POST' });
+          const result = await response.json();
+          if (result.error) {
+            setRefreshMessage(`Error: ${result.error}`);
+          } else {
+            setRefreshMessage(`✓ Refreshed: ${result.totalRows} rows loaded from Google Drive`);
+            // Re-fetch waste data for current location
+            if (location) fetchData(location);
+          }
+        } catch (err) {
+          setRefreshMessage(`Error: ${err.message}`);
+        } finally {
+          setRefreshing(false);
+          setTimeout(() => setRefreshMessage(''), 5000);
+        }
+      };
 
       useEffect(() => {
         const baseUrl = window.location.origin;
@@ -1246,12 +1270,15 @@
           <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
             <div>
               <h1>🗑️ Waste</h1>
-              <p className="subtitle">Produced (uploaded CSV) vs. sold (live from Square), by item and location</p>
+              <p className="subtitle">Produced (from Google Drive) vs. sold (live from Square), by item and location</p>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button className={granularity === 'day' ? 'active' : ''} onClick={() => setGranularity('day')}>Daily</button>
               <button className={granularity === 'week' ? 'active' : ''} onClick={() => setGranularity('week')}>Weekly</button>
               <button className={granularity === 'month' ? 'active' : ''} onClick={() => setGranularity('month')}>Monthly</button>
+              <button onClick={refreshFromDrive} disabled={refreshing} title="Pull latest production data from Google Drive" style={{ background: refreshing ? '#ccc' : '#6b4423' }}>
+                {refreshing ? '⟳ Refreshing...' : '🔄 Refresh from Drive'}
+              </button>
             </div>
           </header>
           <div className="controls">
@@ -1272,8 +1299,9 @@
             </div>
           </div>
           {error && <div className="error">{error}</div>}
+          {refreshMessage && <div style={{ background: refreshMessage.includes('Error') ? '#fee' : '#efe', color: refreshMessage.includes('Error') ? '#c33' : '#3a3', padding: '12px', borderRadius: '6px', marginBottom: '20px', fontSize: '13px' }}>{refreshMessage}</div>}
           {status === 'loading' && <div className="loading">Loading production &amp; Square sales data…</div>}
-          {status === 'empty' && <div className="empty">No production data uploaded yet for {location}. Send the production CSV and I'll load it in.</div>}
+          {status === 'empty' && <div className="empty">No production data. Click "Refresh from Drive" or upload a production CSV and I'll load it in.</div>}
           {status === 'ready' && totals && (
             <>
               <div className="metrics">

@@ -15,6 +15,7 @@ const claudeMCP = require('./pipeline/claude-mcp');
 const composioConnectors = require('./pipeline/composio-connectors');
 const marginSchedulerModule = require('./pipeline/margin-scheduler');
 const ingredientSchedulerModule = require('./pipeline/ingredient-scheduler');
+const { fetchProductionData } = require('./pipeline/google-drive-production');
 
 let marginScheduler = null;
 let ingredientScheduler = null;
@@ -312,6 +313,39 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
     .on('error', (err) => {
       res.status(400).json({ error: err.message });
     });
+});
+
+// Refresh production data from Google Drive (Little Sky Production folder)
+app.post('/api/refresh-production-from-drive', async (req, res) => {
+  try {
+    const production = await fetchProductionData();
+
+    // Merge with existing production data (don't overwrite other locations/dates)
+    const existing = loadProduction();
+    const merged = { ...existing };
+
+    for (const location in production) {
+      const existingRows = merged[location] || [];
+      const newDates = new Set(production[location].map(r => r.date));
+      // Replace dates from Drive, keep other dates
+      merged[location] = existingRows.filter(r => !newDates.has(r.date)).concat(production[location]);
+    }
+
+    saveData(PRODUCTION_FILE, merged);
+
+    // Invalidate cache for all locations
+    for (const loc of WASTE_LOCATIONS) {
+      cacheManager.invalidate(`waste_${loc.name}`);
+    }
+
+    const totalRows = Object.values(merged).reduce((sum, arr) => sum + arr.length, 0);
+    res.json({ success: true, message: 'Production data refreshed from Google Drive', totalRows });
+  } catch (err) {
+    if (err.code === 'GOOGLE_NOT_CONNECTED') {
+      return res.status(401).json({ error: 'Google Drive not connected. Authorize at /api/google/connect first.' });
+    }
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // ============= P&L BY CHANNEL UPLOADS =============
