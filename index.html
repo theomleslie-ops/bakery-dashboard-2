@@ -263,13 +263,25 @@
       const [viewMode, setViewMode] = useState('dollars');
       const [weeksRange, setWeeksRange] = useState(16);
       useEffect(() => { fetchData(); }, [weeksRange]);
+      const filterIncompleteLastPeriod = (periods) => {
+        if (periods.length < 2) return periods;
+        const lastPeriod = periods[periods.length - 1];
+        const prevPeriods = periods.slice(0, -1);
+        const avgRevenue = prevPeriods.reduce((sum, p) => sum + (p.revenue || 0), 0) / prevPeriods.length;
+        const lastRevenue = lastPeriod.revenue || 0;
+        if (avgRevenue > 0 && lastRevenue < avgRevenue * 0.6) {
+          return prevPeriods;
+        }
+        return periods;
+      };
       const fetchData = async () => {
         try {
           const baseUrl = window.location.origin;
           const limitedWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
           const response = await fetch(`${baseUrl}/api/dashboard?weeks=${limitedWeeks}`);
           const result = await response.json();
-          setData((result.periodData || []).map(w => ({ ...w, month: w.label })));
+          const filtered = filterIncompleteLastPeriod(result.periodData || []);
+          setData(filtered.map(w => ({ ...w, month: w.label })));
           setPeriodSource(result.periodSource || '');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
@@ -681,7 +693,7 @@
             throw new Error('Missing financial data from server');
           }
           setPeriodSource(dashData.periodSource || '');
-          const combined = dashData.periodData
+          let combined = dashData.periodData
             .filter(w => w.revenue > 0)
             .map(w => {
               const foodPercent = (w.cogs / w.revenue) * 100;
@@ -695,6 +707,13 @@
                 totalPercent: foodPercent + laborPercent,
               };
             });
+          if (combined.length > 1) {
+            const lastRevenue = combined[combined.length - 1].revenue;
+            const avgRevenue = combined.slice(0, -1).reduce((sum, p) => sum + p.revenue, 0) / (combined.length - 1);
+            if (avgRevenue > 0 && lastRevenue < avgRevenue * 0.6) {
+              combined = combined.slice(0, -1);
+            }
+          }
           setWeeks(combined);
           setStatus(combined.length > 0 ? 'ready' : 'empty');
         } catch (err) {
@@ -1573,10 +1592,22 @@
           const response = await fetch(`${baseUrl}/api/market-performance?weeks=${MARKET_MAX_WEEKS}`);
           const result = await response.json();
           if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
-          setAllWeekStarts(result.weekStarts || []);
-          setAllMarkets(result.markets || []);
-          setSelected(new Set((result.markets || []).slice(0, 8).map(m => m.name)));
-          setStatus((result.markets || []).length > 0 ? 'ready' : 'empty');
+          let weekStarts = result.weekStarts || [];
+          let markets = result.markets || [];
+          if (weekStarts.length > 1 && markets.length > 0) {
+            const lastWeekIdx = weekStarts.length - 1;
+            const lastWeekTotal = markets.reduce((sum, m) => sum + (m.revenue[lastWeekIdx] || 0), 0);
+            const prevWeekIdx = lastWeekIdx - 1;
+            const prevWeekTotal = markets.reduce((sum, m) => sum + (m.revenue[prevWeekIdx] || 0), 0);
+            if (prevWeekTotal > 0 && lastWeekTotal < prevWeekTotal * 0.6) {
+              weekStarts = weekStarts.slice(0, -1);
+              markets = markets.map(m => ({ ...m, revenue: m.revenue.slice(0, -1) }));
+            }
+          }
+          setAllWeekStarts(weekStarts);
+          setAllMarkets(markets);
+          setSelected(new Set(markets.slice(0, 8).map(m => m.name)));
+          setStatus(markets.length > 0 ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
@@ -1755,7 +1786,15 @@
           const baseUrl = window.location.origin;
           const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}&offset=${offset}`);
           const result = await response.json();
-          setData((result.periodData || []).map(w => ({ month: w.startDate || w.label, revenue: w.revenue || 0, cogs: w.cogs || 0 })));
+          let periodData = result.periodData || [];
+          if (periodData.length > 1) {
+            const lastRevenue = periodData[periodData.length - 1].revenue || 0;
+            const avgRevenue = periodData.slice(0, -1).reduce((sum, p) => sum + (p.revenue || 0), 0) / (periodData.length - 1);
+            if (avgRevenue > 0 && lastRevenue < avgRevenue * 0.6) {
+              periodData = periodData.slice(0, -1);
+            }
+          }
+          setData(periodData.map(w => ({ month: w.startDate || w.label, revenue: w.revenue || 0, cogs: w.cogs || 0 })));
         } catch (err) {
           setError('Failed to load QB data: ' + err.message);
         }
