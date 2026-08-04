@@ -11,7 +11,6 @@ const recipes = require('./recipes');
 const costing = require('./costing');
 
 const OUT_DIR = path.join(__dirname, '..', 'data', 'pipeline');
-const YIELD_OVERRIDES_FILE = path.join(OUT_DIR, 'yield-overrides.json');
 const INGREDIENT_OVERRIDES_FILE = path.join(OUT_DIR, 'ingredient-overrides.json');
 const PRICE_OVERRIDES_FILE = path.join(OUT_DIR, 'ingredient-price-overrides.json');
 const EXCLUSIONS_FILE = path.join(OUT_DIR, 'recipe-exclusions.json');
@@ -44,10 +43,9 @@ const main = async ({ weeks = 12 } = {}) => {
 
   // Step 2: Parse recipes from Google Sheets
   console.log('\nStep 2: Parsing recipe sheets from Google Drive…');
-  const yieldOverrides = load(YIELD_OVERRIDES_FILE, {});
   let recipeData;
   try {
-    recipeData = await recipes.pullRecipes('Recipe LSB', { yieldOverrides });
+    recipeData = await recipes.pullRecipes('Recipe LSB');
     console.log(`  ✓ Parsed ${recipeData.recipes.length} recipes`);
     if (recipeData.skipped.length > 0) {
       console.log(`  ⊘ Skipped ${recipeData.skipped.length}: ${recipeData.skipped.slice(0, 3).join(', ')}${recipeData.skipped.length > 3 ? '…' : ''}`);

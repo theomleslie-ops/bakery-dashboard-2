@@ -3,10 +3,9 @@
 //
 // These are BATCH recipes — the ingredient column is kilograms for a whole batch, not one unit.
 // To get a cost per SOLD unit we also need the finished weight of one unit (portionKg / "yield").
-// Yield is resolved in priority order so coverage can climb toward 100% without brittle guessing:
+// Yield is resolved in priority order:
 //   1. a structured yield cell in the sheet ("grams per unit" / "units per batch")  ← most reliable
-//   2. data/pipeline/yield-overrides.json  ({ "<recipe>": <grams per unit> })        ← we maintain
-//   3. best-effort parse of the freeform PROCESS notes                                ← last resort
+//   2. best-effort parse of the freeform PROCESS notes                                ← fallback
 // A recipe with no yield from any source is still returned (portionKg = null) so it surfaces in the
 // coverage report as "needs-yield" rather than being silently dropped.
 const path = require('path');
@@ -62,7 +61,7 @@ const parseStructuredYield = (flat, totalKg) => {
 };
 
 // Parse one recipe sheet's first tab. Returns null if it isn't a recognizable recipe sheet.
-const parseRecipeTab = (title, rows, { yieldOverrides = {} } = {}) => {
+const parseRecipeTab = (title, rows) => {
   const flat = (rows || []).map((r) => (r || []).map(norm));
 
   const looksLikeRecipe = flat.some((r) => r.some((c) => /RECIPE SHEET/i.test(c)))
@@ -113,9 +112,6 @@ const parseRecipeTab = (title, rows, { yieldOverrides = {} } = {}) => {
     const structured = parseStructuredYield(flat, totalKg);
     if (structured) {
       ({ portionKg, basis: portionBasis } = structured);
-    } else if (Number.isFinite(toNum(yieldOverrides[recipeName])) && toNum(yieldOverrides[recipeName]) > 0) {
-      portionKg = toNum(yieldOverrides[recipeName]) / 1000;
-      portionBasis = `override ${yieldOverrides[recipeName]}g`;
     } else if (totalFromSheet != null) {
       portionKg = totalFromSheet;
       portionBasis = 'sheet: Total brut/net';
@@ -134,7 +130,7 @@ const parseRecipeTab = (title, rows, { yieldOverrides = {} } = {}) => {
 };
 
 // Pull and parse every recipe sheet in a Drive folder (read as the OAuth user).
-const pullRecipes = async (folderName = 'Recipe LSB', { yieldOverrides = {} } = {}) => {
+const pullRecipes = async (folderName = 'Recipe LSB') => {
   const { sheets, drive } = await sheetsClient.getClients();
   const folder = await sheetsClient.resolveFolderByName(drive, folderName);
   const list = await sheetsClient.listSheetsInFolder(drive, folder.id);
@@ -154,7 +150,7 @@ const pullRecipes = async (folderName = 'Recipe LSB', { yieldOverrides = {} } = 
       continue;
     }
     const firstTab = Object.values(sp.tabs)[0];
-    const parsed = firstTab ? parseRecipeTab(sp.title, firstTab.rows, { yieldOverrides }) : null;
+    const parsed = firstTab ? parseRecipeTab(sp.title, firstTab.rows) : null;
     if (parsed) recipes.push(parsed);
     else skipped.push(sp.title);
   }

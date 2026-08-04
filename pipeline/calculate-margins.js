@@ -237,10 +237,9 @@ const main = async ({ squareSalesData = [] } = {}) => {
 
   // Step 4: Pull recipes from Recipe LSB
   console.log('Step 2: Parsing recipe sheets from Recipe LSB…');
-  const yieldOverrides = load(path.join(OUT_DIR, 'yield-overrides.json'), {});
   let recipeData;
   try {
-    recipeData = await recipes.pullRecipes('Recipe LSB', { yieldOverrides });
+    recipeData = await recipes.pullRecipes('Recipe LSB');
     console.log(`✓ Parsed ${recipeData.recipes.length} recipes`);
     if (recipeData.skipped.length > 0) {
       console.log(`⊘ Skipped ${recipeData.skipped.length}: ${recipeData.skipped.slice(0, 3).join(', ')}${recipeData.skipped.length > 3 ? '…' : ''}`);
