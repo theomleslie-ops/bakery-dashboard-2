@@ -2890,14 +2890,16 @@ app.get('/api/bakery-margins', (req, res) => {
     // Transform to match product margins format
     const formattedProducts = analysis.products.map(p => {
       const scaledQuantity = Math.round(p.units * scaleFactor);
-      const profitPerUnit = p.profit / p.units;
+      const price_per_unit = p.sale_price;
+      const cogs_per_unit = p.sale_price - (p.profit / p.units);
+      const margin_per_unit = price_per_unit - cogs_per_unit;
       return {
         name: p.product,
         revenue: p.revenue * scaleFactor,
         quantity: scaledQuantity,
-        price: p.sale_price,
-        cogs: p.sale_price - profitPerUnit,
-        margin$: profitPerUnit * scaledQuantity,
+        price: price_per_unit,
+        cogs: cogs_per_unit,
+        margin$: margin_per_unit * scaledQuantity,
         marginPct: p.margin_pct,
         status: p.margin_pct > 0 ? 'costed' : 'error-negative-margin'
       };
