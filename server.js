@@ -2822,69 +2822,142 @@ const getRebuildStatus = () => {
   return { status: 'idle' };
 };
 
-// Bakery margin analysis endpoint
-app.get('/api/bakery-margins', (req, res) => {
+// Bakery margin analysis endpoint - LIVE data from Square Orders, NO SCALING
+app.get('/api/bakery-margins', async (req, res) => {
   try {
-    const bakeryAnalysisPath = path.join(__dirname, 'analysis.json');
-    if (!fs.existsSync(bakeryAnalysisPath)) {
-      return res.status(404).json({ error: 'Bakery analysis not available. Run: node generate_analysis.py' });
-    }
-
-    const analysis = JSON.parse(fs.readFileSync(bakeryAnalysisPath, 'utf-8'));
-    const period = req.query.period || 'lifetime';
-
-    // Scale data based on requested period (analysis.json contains ~1 year of data)
-    let scaleFactor = 1;
-    switch(period) {
-      case '1_week': scaleFactor = 1/52; break;
-      case '2_weeks': scaleFactor = 2/52; break;
-      case '2_months': scaleFactor = 8.57/52; break;
-      case '6_months': scaleFactor = 26/52; break;
-      case '1_year': scaleFactor = 1; break;
-      case '3_years': scaleFactor = 1; break; // No data beyond 1 year available
-      case '5_years': scaleFactor = 1; break; // No data beyond 1 year available
-      case 'lifetime': scaleFactor = 1; break;
-      // Legacy period values for backwards compatibility
-      case 'last_52_weeks': scaleFactor = 1; break;
-      case 'last_26_weeks': scaleFactor = 0.5; break;
-      case 'last_12_weeks': scaleFactor = 0.23; break;
-      case 'last_4_weeks': scaleFactor = 0.077; break;
-    }
-
-    // Transform to match product margins format
-    const formattedProducts = analysis.products.map(p => {
-      const scaledQuantity = Math.round(p.units * scaleFactor);
-      const price_per_unit = p.sale_price;
-      const cogs_per_unit = p.sale_price - (p.profit / p.units);
-      const margin_per_unit = price_per_unit - cogs_per_unit;
-      return {
-        name: p.product,
-        revenue: p.revenue * scaleFactor,
-        quantity: scaledQuantity,
-        price: price_per_unit,
-        cogs: cogs_per_unit,
-        margin$: margin_per_unit,
-        marginPct: p.margin_pct,
-        status: p.margin_pct > 0 ? 'costed' : 'error-negative-margin'
-      };
-    });
-
-    // Recalculate summary for period
-    const scaledSummary = {
-      total_units: Math.round(analysis.summary.total_units * scaleFactor),
-      total_revenue: analysis.summary.total_revenue * scaleFactor,
-      total_cogs: analysis.summary.total_cogs * scaleFactor,
-      total_profit: analysis.summary.total_profit * scaleFactor,
-      blended_margin_pct: analysis.summary.blended_margin_pct
+    const period = req.query.period || '1_year';
+    const periodDays = {
+      '1_week': 7,
+      '2_weeks': 14,
+      '2_months': 60,
+      '6_months': 180,
+      '1_year': 365,
+      '3_years': 1095,
+      '5_years': 1825,
     };
 
+    const days = periodDays[period] || 365;
+    const beginTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const endTime = new Date().toISOString();
+
+    if (!process.env.SQUARE_ACCESS_TOKEN) {
+      return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
+    }
+
+    // Fetch LIVE orders from Square for this period (NO scaling)
+    const allOrders = [];
+    for (const location of WASTE_LOCATIONS) {
+      let cursor = null;
+      let page = 0;
+
+      try {
+        while (page < 100) {
+          const req_body = {
+            location_ids: [location.squareLocationId],
+            limit: 250,
+            sort_order: 'DESC',
+            query: {
+              filter: {
+                state_filter: { states: ['COMPLETED'] },
+                date_time_filter: {
+                  closed_at: {
+                    start_at: beginTime,
+                    end_at: endTime,
+                  },
+                },
+              },
+            },
+          };
+          if (cursor) req_body.query.cursor = cursor;
+
+          const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, req_body, {
+            headers: {
+              Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+          });
+
+          const orders = response.data.orders || [];
+          for (const order of orders) {
+            for (const line of order.line_items || []) {
+              allOrders.push({
+                itemName: line.name || 'Unknown',
+                quantity: line.quantity ? parseInt(line.quantity) : 1,
+                grossSales: Math.round((line.gross_sales_money?.amount || 0) / 100 * 100) / 100,
+              });
+            }
+          }
+
+          cursor = response.data.cursor;
+          page++;
+          if (!cursor) break;
+        }
+      } catch (e) {
+        console.warn(`⚠️ Location ${location.name}: ${e.message}`);
+      }
+    }
+
+    // Aggregate by item name
+    const itemMap = {};
+    for (const order of allOrders) {
+      if (!itemMap[order.itemName]) {
+        itemMap[order.itemName] = { quantity: 0, revenue: 0 };
+      }
+      itemMap[order.itemName].quantity += order.quantity;
+      itemMap[order.itemName].revenue += order.grossSales;
+    }
+
+    // Load costs from analysis.json for margin calculation
+    const bakeryAnalysisPath = path.join(__dirname, 'analysis.json');
+    let costMap = {};
+    if (fs.existsSync(bakeryAnalysisPath)) {
+      const analysis = JSON.parse(fs.readFileSync(bakeryAnalysisPath, 'utf-8'));
+      for (const p of analysis.products) {
+        costMap[p.product?.toLowerCase()] = p.cost_per_unit || (p.sale_price - (p.profit / p.units));
+      }
+    }
+
+    // Format products with actual Square data
+    const formattedProducts = Object.entries(itemMap).map(([name, data]) => {
+      const cost = costMap[name?.toLowerCase()] || 0;
+      const revenue = data.revenue;
+      const totalCogs = data.quantity * cost;
+      const profit = revenue - totalCogs;
+      const marginPct = revenue > 0 ? (profit / revenue * 100) : 0;
+
+      return {
+        name: name,
+        revenue: Math.round(revenue * 100) / 100,
+        quantity: data.quantity,
+        price: data.quantity > 0 ? Math.round((revenue / data.quantity) * 100) / 100 : 0,
+        cogs: Math.round(cost * 100) / 100,
+        margin$: Math.round(cost * 100) / 100,
+        marginPct: Math.round(marginPct * 10) / 10,
+        status: profit < 0 ? 'error-negative-margin' : (cost > 0 ? 'costed' : 'needs-cost'),
+      };
+    }).sort((a, b) => b.revenue - a.revenue);
+
+    const totalRevenue = formattedProducts.reduce((sum, p) => sum + p.revenue, 0);
+    const totalUnits = formattedProducts.reduce((sum, p) => sum + p.quantity, 0);
+    const totalCogs = formattedProducts.reduce((sum, p) => sum + (p.quantity * parseFloat(p.cogs)), 0);
+
     res.json({
-      generatedAt: analysis.generated_at,
-      category: 'Bakery Products',
       period: period,
-      summary: scaledSummary,
-      top20: formattedProducts,
-      notes: 'Real ingredient costs from invoices + Square sales data'
+      days: days,
+      dataRange: `${beginTime} to ${endTime}`,
+      fetchedAt: new Date().toISOString(),
+      ordersProcessed: allOrders.length,
+      itemsReturned: formattedProducts.length,
+      summary: {
+        total_units: totalUnits,
+        total_revenue: Math.round(totalRevenue * 100) / 100,
+        total_cogs: Math.round(totalCogs * 100) / 100,
+        total_profit: Math.round((totalRevenue - totalCogs) * 100) / 100,
+        blended_margin_pct: totalRevenue > 0 ? Math.round(((totalRevenue - totalCogs) / totalRevenue * 100) * 10) / 10 : 0,
+      },
+      top20: formattedProducts.slice(0, 20),
+      note: 'LIVE data from Square orders API - NO SCALING or multipliers',
     });
   } catch (e) {
     console.error('Bakery margins error:', e.message);
