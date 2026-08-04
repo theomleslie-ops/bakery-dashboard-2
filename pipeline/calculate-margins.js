@@ -17,22 +17,59 @@ const load = (f, fallback) => {
   try { return JSON.parse(fs.readFileSync(f, 'utf-8')); } catch { return fallback; }
 };
 
-// ============ BAKERY-SPECIFIC COSTING LOGIC ============
+// Read pre-ferment formulas from "Pre-Ferments" sheet in Recipe LSB folder
+const readPreFermentFormulas = async (drive, sheets, folderId) => {
+  const sheetsList = await sheetsOAuth.listSheetsInFolder(drive, folderId);
 
-// Pre-ferment expansion formulas (% by weight)
-const PRE_FERMENT_FORMULAS = {
-  levain: {
-    'High Gluten Flour': 0.262,
-    'Whole Wheat Flour': 0.262,
-    'Water': 0.523,
-    'Levain Mother': 0.006,
-  },
-  poolish: {
-    'High Gluten Flour': 0.496,
-    'Water': 0.496,
-    'Dry Yeast': 0.008,
-  },
+  const pfSheet = sheetsList.find(s => /pre-ferment/i.test(s.name));
+  if (!pfSheet) {
+    console.warn('⚠️  No "Pre-Ferments" sheet found. Recipes with pre-ferment ingredients will fail to cost.');
+    return {};
+  }
+
+  try {
+    let tabs;
+    if (pfSheet.isExcel) {
+      const parsed = await sheetsOAuth.downloadAndParseExcel(drive, pfSheet.id, pfSheet.name);
+      const firstTab = Object.values(parsed.tabs)[0];
+      tabs = firstTab ? firstTab.rows : [];
+    } else {
+      const parsed = await sheetsOAuth.pullSpreadsheet(sheets, pfSheet.id);
+      const firstTab = Object.values(parsed.tabs)[0];
+      tabs = firstTab ? firstTab.rows : [];
+    }
+
+    const formulas = {};
+    let currentPF = null;
+
+    for (let i = 0; i < tabs.length; i++) {
+      const row = tabs[i] || [];
+      const col0 = String(row[0] || '').trim().toLowerCase();
+
+      // Look for pre-ferment name (e.g., "Levain", "Poolish")
+      if (col0 && !/ingredient|component|ratio|%|total/.test(col0) && row[1] === undefined && row[2] === undefined) {
+        currentPF = col0.replace(/[^a-z]/g, '');
+        formulas[currentPF] = {};
+      } else if (currentPF && col0 && /ingredient|component/i.test(col0)) {
+        // Start of ingredient list for this pre-ferment
+        continue;
+      } else if (currentPF && col0 && col0 !== '') {
+        // Read ingredient and ratio
+        const ratio = parseFloat(String(row[1] || '').replace(/[^\d.]/g, ''));
+        if (Number.isFinite(ratio) && ratio > 0 && ratio <= 1) {
+          formulas[currentPF][col0] = ratio;
+        }
+      }
+    }
+
+    return formulas;
+  } catch (e) {
+    console.warn(`⚠️  Failed to read pre-ferment formulas from "${pfSheet.name}": ${e.message}`);
+    return {};
+  }
 };
+
+// ============ BAKERY-SPECIFIC COSTING LOGIC ============
 
 // Product → Base Dough Mapping (hardcoded business logic)
 // Format: product name → { baseDough: recipe name, portionKg }
@@ -52,9 +89,9 @@ const BASE_DOUGH_RECIPES = new Set([
 ]);
 
 // Expand pre-ferment references into raw ingredients
-const expandPreFerment = (ingredientName, kg) => {
+const expandPreFerment = (ingredientName, kg, preFermentFormulas = {}) => {
   const nameLC = ingredientName.toLowerCase().trim();
-  const formula = PRE_FERMENT_FORMULAS[nameLC] || PRE_FERMENT_FORMULAS[nameLC.replace(/[^a-z]/g, '')];
+  const formula = preFermentFormulas[nameLC] || preFermentFormulas[nameLC.replace(/[^a-z]/g, '')];
 
   if (!formula) return null;
 
@@ -132,12 +169,12 @@ const readIngredientsSheet = async (drive, sheets, folderId) => {
 };
 
 // Expand pre-ferments in recipe ingredients before costing
-const expandPreFermentsInRecipe = (recipe) => {
+const expandPreFermentsInRecipe = (recipe, preFermentFormulas = {}) => {
   const expanded = { ...recipe };
   const newIngredients = [];
 
   for (const ing of recipe.ingredients) {
-    const expanded_ing = expandPreFerment(ing.name, ing.kg);
+    const expanded_ing = expandPreFerment(ing.name, ing.kg, preFermentFormulas);
     if (expanded_ing) {
       newIngredients.push(...expanded_ing);
     } else {
@@ -237,10 +274,9 @@ const main = async ({ squareSalesData = [] } = {}) => {
 
   // Step 4: Pull recipes from Recipe LSB
   console.log('Step 2: Parsing recipe sheets from Recipe LSB…');
-  const yieldOverrides = load(path.join(OUT_DIR, 'yield-overrides.json'), {});
   let recipeData;
   try {
-    recipeData = await recipes.pullRecipes('Recipe LSB', { yieldOverrides });
+    recipeData = await recipes.pullRecipes('Recipe LSB');
     console.log(`✓ Parsed ${recipeData.recipes.length} recipes`);
     if (recipeData.skipped.length > 0) {
       console.log(`⊘ Skipped ${recipeData.skipped.length}: ${recipeData.skipped.slice(0, 3).join(', ')}${recipeData.skipped.length > 3 ? '…' : ''}`);
@@ -252,12 +288,18 @@ const main = async ({ squareSalesData = [] } = {}) => {
   }
   console.log();
 
+  // Step 4b: Read pre-ferment formulas from Google Sheets
+  console.log('Step 2b: Reading pre-ferment formulas from Recipe LSB…');
+  const preFermentFormulas = await readPreFermentFormulas(drive, sheets, folder.id);
+  const pfCount = Object.keys(preFermentFormulas).length;
+  console.log(`  ✓ Loaded ${pfCount} pre-ferment formulas from Google Sheets\n`);
+
   // Step 5: Apply bakery-specific preprocessing
   console.log('Step 3: Applying bakery costing logic…');
 
   // Expand pre-ferments in all recipes
-  const expandedRecipes = recipeData.recipes.map(expandPreFermentsInRecipe);
-  console.log(`  ✓ Expanded Levain/Poolish references to component ingredients`);
+  const expandedRecipes = recipeData.recipes.map(r => expandPreFermentsInRecipe(r, preFermentFormulas));
+  console.log(`  ✓ Expanded pre-ferment references to component ingredients`);
 
   // Separate base doughs from regular recipes
   const baseDoughRecipes = [];
