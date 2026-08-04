@@ -2623,9 +2623,9 @@ app.get('/api/product-margins', async (req, res) => {
     console.log('📊 Calculating LIVE product margins from QB + Google Sheets + Square...');
     const startTime = Date.now();
 
-    // Step 1: Fetch live Square sales data (force fresh, bypass all caching)
+    // Step 1: Fetch live Square sales data for all time windows (5 years max)
     console.log('  Step 1: Fetching live Square sales...');
-    let squareSalesData = [];
+    let allSquareOrders = [];
     let squareFetchedAt = null;
 
     try {
@@ -2633,14 +2633,14 @@ app.get('/api/product-margins', async (req, res) => {
         throw new Error('SQUARE_ACCESS_TOKEN not configured');
       }
 
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
-      const allOrders = [];
+      // Fetch 5 years of data to cover all time windows
+      const fiveYearsAgo = new Date(Date.now() - 5 * 365 * 86400_000).toISOString().slice(0, 10);
 
       // Fetch from all locations in parallel
       const locationFetches = WASTE_LOCATIONS.map(async (location) => {
         let cursor = null;
         let page = 0;
-        const MAX_PAGES = 3;
+        const MAX_PAGES = 100;
         const locationOrders = [];
 
         try {
@@ -2654,7 +2654,7 @@ app.get('/api/product-margins', async (req, res) => {
                   state_filter: { states: ['COMPLETED'] },
                   date_time_filter: {
                     closed_at: {
-                      start_at: new Date(`${thirtyDaysAgo}T00:00:00Z`).toISOString(),
+                      start_at: new Date(`${fiveYearsAgo}T00:00:00Z`).toISOString(),
                       end_at: new Date().toISOString(),
                     },
                   },
@@ -2674,7 +2674,7 @@ app.get('/api/product-margins', async (req, res) => {
               });
             } catch (apiErr) {
               if (apiErr.response?.status === 429) {
-                page = MAX_PAGES;
+                console.warn(`    ⚠️  Rate limited at page ${page}`);
                 break;
               }
               throw apiErr;
@@ -2705,29 +2705,13 @@ app.get('/api/product-margins', async (req, res) => {
       });
 
       const allLocationOrders = await Promise.all(locationFetches);
-      allOrders.push(...allLocationOrders.flat());
-
-      // Convert to standardized format
-      const ordersByItem = {};
-      for (const order of allOrders) {
-        if (!ordersByItem[order.itemName]) {
-          ordersByItem[order.itemName] = { qty: 0, revenue: 0 };
-        }
-        ordersByItem[order.itemName].qty += order.quantity;
-        ordersByItem[order.itemName].revenue += order.grossSales;
-      }
-
-      squareSalesData = Object.entries(ordersByItem).map(([name, data]) => ({
-        product: name,
-        units: Math.round(data.qty * 100) / 100,
-        price: data.qty > 0 ? Math.round((data.revenue / data.qty) * 100) / 100 : 0,
-      }));
+      allSquareOrders = allLocationOrders.flat();
 
       squareFetchedAt = new Date().toISOString();
-      console.log(`    ✓ ${squareSalesData.length} products from Square (${allOrders.length} line items)`);
+      console.log(`    ✓ Fetched ${allSquareOrders.length} line items from Square (5 year history)`);
     } catch (e) {
       console.warn(`    ⚠️  Square fetch failed: ${e.message}`);
-      // Continue with empty data - fallback to last 60 days of cached recipe costs
+      // Continue with empty data
     }
 
     // Step 2: Calculate costs using live QB + Google Sheets pipeline
@@ -2773,7 +2757,7 @@ app.get('/api/product-margins', async (req, res) => {
       productCostMap[productKey] = p.cost_per_unit || p.costPerUnit || 0;
     }
 
-    // For each time window, bucket Square data and compute top 20
+    // For each time window, filter actual Square data and compute top 20
     const windows = [
       { name: '1 week', days: 7 },
       { name: '2 weeks', days: 14 },
@@ -2785,16 +2769,34 @@ app.get('/api/product-margins', async (req, res) => {
     ];
 
     const result = {};
-    const cutoffTime = Date.now() - 30 * 24 * 60 * 60 * 1000; // Use all available Square data as baseline
 
     for (const window of windows) {
-      // Filter Square data within the window
-      const windowCutoff = Date.now() - window.days * 24 * 60 * 60 * 1000;
-      // Note: We don't have timestamps on the aggregated squareSalesData, so we use all data
-      // In production, Square data should include timestamps for proper bucketing
+      // Filter Square orders for this time window
+      const windowCutoffTime = Date.now() - window.days * 24 * 60 * 60 * 1000;
+      const windowOrders = allSquareOrders.filter(order => {
+        const orderTime = new Date(order.timestamp).getTime();
+        return orderTime >= windowCutoffTime;
+      });
+
+      // Aggregate by product name for this window
+      const ordersByItem = {};
+      for (const order of windowOrders) {
+        if (!ordersByItem[order.itemName]) {
+          ordersByItem[order.itemName] = { qty: 0, revenue: 0 };
+        }
+        ordersByItem[order.itemName].qty += order.quantity;
+        ordersByItem[order.itemName].revenue += order.grossSales;
+      }
+
+      // Convert to product list
+      const windowSquareSalesData = Object.entries(ordersByItem).map(([name, data]) => ({
+        product: name,
+        units: Math.round(data.qty * 100) / 100,
+        price: data.qty > 0 ? Math.round((data.revenue / data.qty) * 100) / 100 : 0,
+      }));
 
       // Rank products by revenue
-      const ranked = squareSalesData
+      const ranked = windowSquareSalesData
         .map(item => {
           const cost = productCostMap[(item.product || '').toLowerCase()] || 0;
           const revenue = item.units * item.price;
@@ -2820,6 +2822,7 @@ app.get('/api/product-margins', async (req, res) => {
         fetchedAt: squareFetchedAt || new Date().toISOString(),
         window: `${window.days} days`,
         top20: ranked,
+        ordersInWindow: windowOrders.length,
       };
     }
 
