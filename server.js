@@ -2850,7 +2850,7 @@ app.get('/api/bakery-margins', (req, res) => {
       revenue: p.revenue * scaleFactor,
       quantity: Math.round(p.units * scaleFactor),
       price: p.sale_price,
-      cogs: p.cost_per_unit,
+      cogs: p.sale_price * (1 - p.margin_pct),
       margin$: (p.profit / p.units) * scaleFactor,
       marginPct: p.margin_pct,
       status: p.margin_pct > 0 ? 'costed' : 'error-negative-margin'
