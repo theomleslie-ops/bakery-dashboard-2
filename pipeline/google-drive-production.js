@@ -7,10 +7,12 @@ const WASTE_STORE_LOCATIONS = ['ARC', 'LSK', 'State St', 'Catering', 'Delivery 5
 
 // Parse the dates from folder name like "8/3/2026-8/9/2026 Baker Spreadsheets"
 const extractDateRange = (folderName) => {
-  const match = folderName.match(/^(\d+\/\d+\/\d+)-(\d+\/\d+\/\d+)/);
+  const match = folderName.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})-(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (!match) return null;
-  const start = new Date(match[1]);
-  const end = new Date(match[2]);
+  // Convert MM/DD/YYYY to YYYY-MM-DD for proper date parsing
+  const start = new Date(`${match[3]}-${String(match[1]).padStart(2, '0')}-${String(match[2]).padStart(2, '0')}`);
+  const end = new Date(`${match[6]}-${String(match[4]).padStart(2, '0')}-${String(match[5]).padStart(2, '0')}`);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
   return { start, end, folderName };
 };
 
@@ -35,10 +37,18 @@ const findLatestProductionFolder = async (drive) => {
   } while (pageToken);
 
   // Parse dates and find latest
-  const dated = folders.map(f => ({ ...extractDateRange(f.name), folderId: f.id }))
-    .filter(d => d.start && d.end);
+  const dated = [];
+  for (const f of folders) {
+    const parsed = extractDateRange(f.name);
+    if (parsed && parsed.start && parsed.end) {
+      dated.push({ ...parsed, folderId: f.id });
+    }
+  }
 
-  if (!dated.length) throw new Error('No dated production folders found');
+  if (!dated.length) {
+    const folderNames = folders.map(f => f.name).join(', ');
+    throw new Error(`No dated production folders found. Folders: ${folderNames || '(none found)'}`);
+  }
 
   dated.sort((a, b) => b.end - a.end);
   const latest = dated[0];
