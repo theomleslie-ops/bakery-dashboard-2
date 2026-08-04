@@ -397,6 +397,25 @@ const main = async ({ squareSalesData = [] } = {}) => {
   console.log(`   Total COGS: $${result.summary.total_cogs.toLocaleString()}`);
   console.log(`   Blended Margin: ${result.summary.blended_margin_pct}%`);
 
+  // CRITICAL VALIDATION: Catch pathways to zero COGS before returning corrupted data
+  if (baseCoverage.costed.length === 0 && Object.keys(PRODUCT_BASE_DOUGH_MAP).length > 0) {
+    const err = new Error('CRITICAL: No base dough recipes were costed. Check: (1) Recipe LSB folder, (2) recipe sheet format, (3) ingredient prices in QB/Sheets');
+    err.code = 'BASE_DOUGH_COST_FAILED';
+    throw err;
+  }
+
+  if (productCoverage.costed.length === 0 && recipeData.recipes.length > 0) {
+    const err = new Error(`CRITICAL: ${recipeData.recipes.length} recipes found but NONE costed. Likely: ingredient costs missing, ingredient names don't match vendor prices, or yields invalid`);
+    err.code = 'RECIPE_COSTING_FAILED';
+    throw err;
+  }
+
+  if (result.products.every(p => p.cost_per_unit === 0 || p.cost_per_unit == null)) {
+    const err = new Error('CRITICAL: All products have $0 or null cost. recipeCostMap is empty - check Google Sheets recipes and QB ingredient costs');
+    err.code = 'ALL_COSTS_ZERO';
+    throw err;
+  }
+
   return result;
 };
 
