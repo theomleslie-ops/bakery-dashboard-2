@@ -2903,15 +2903,16 @@ app.get('/api/bakery-margins', async (req, res) => {
     });
 
     try {
-      const results = await Promise.race([
-        Promise.all(locationFetches),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 20000))
-      ]);
-      for (const orders of results) {
-        allOrders.push(...orders);
+      const results = await Promise.allSettled(locationFetches);
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          allOrders.push(...result.value);
+        } else {
+          console.warn(`⚠️ Location fetch failed: ${result.reason}`);
+        }
       }
     } catch (e) {
-      console.warn(`⚠️ Order fetch timeout or error: ${e.message}`);
+      console.warn(`⚠️ Order fetch error: ${e.message}`);
     }
 
     // Aggregate by item name
