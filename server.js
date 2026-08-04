@@ -2775,11 +2775,13 @@ app.get('/api/product-margins', async (req, res) => {
 
     // For each time window, bucket Square data and compute top 20
     const windows = [
-      { name: '2 week', days: 14 },
-      { name: '4 week', days: 28 },
-      { name: '2 month', days: 60 },
-      { name: '6 month', days: 180 },
+      { name: '1 week', days: 7 },
+      { name: '2 weeks', days: 14 },
+      { name: '2 months', days: 60 },
+      { name: '6 months', days: 180 },
       { name: '1 year', days: 365 },
+      { name: '3 years', days: 1095 },
+      { name: '5 years', days: 1825 },
     ];
 
     const result = {};
