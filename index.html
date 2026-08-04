@@ -1708,11 +1708,13 @@
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <label style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>Period:</label>
               <select value={period} onChange={(e) => setPeriod(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd', fontSize: '14px', cursor: 'pointer' }}>
-                <option value="lifetime">Lifetime</option>
-                <option value="last_52_weeks">Last 52 Weeks</option>
-                <option value="last_26_weeks">Last 26 Weeks</option>
-                <option value="last_12_weeks">Last 12 Weeks</option>
-                <option value="last_4_weeks">Last 4 Weeks</option>
+                <option value="1_week">1 Week</option>
+                <option value="2_weeks">2 Weeks</option>
+                <option value="2_months">2 Months</option>
+                <option value="6_months">6 Months</option>
+                <option value="1_year">1 Year</option>
+                <option value="3_years">3 Years</option>
+                <option value="5_years">5 Years</option>
               </select>
             </div>
           </div>
