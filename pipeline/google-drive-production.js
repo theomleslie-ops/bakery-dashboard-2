@@ -16,38 +16,48 @@ const extractDateRange = (folderName) => {
   return { start, end, folderName };
 };
 
-// Find the latest weekly production folder
-const findLatestProductionFolder = async (drive) => {
-  const prodFolder = await sheetsOauth.resolveFolderByName(drive, PRODUCTION_FOLDER_NAME);
+// Recursively search for dated production folders
+const findDatedFolders = async (drive, parentId, maxDepth = 3) => {
+  if (maxDepth === 0) return [];
 
-  // List all subfolders to find the one with latest date
+  const dated = [];
   let pageToken;
-  const folders = [];
   do {
     const res = await drive.files.list({
-      q: `'${prodFolder.id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: 'nextPageToken, files(id, name)',
       pageSize: 100,
       includeItemsFromAllDrives: true,
       supportsAllDrives: true,
       pageToken,
     });
-    folders.push(...(res.data.files || []));
+
+    for (const f of (res.data.files || [])) {
+      // Check if this folder matches the date pattern
+      const parsed = extractDateRange(f.name);
+      if (parsed && parsed.start && parsed.end) {
+        dated.push({ ...parsed, folderId: f.id });
+      } else {
+        // Recursively search in subfolders
+        const subDated = await findDatedFolders(drive, f.id, maxDepth - 1);
+        dated.push(...subDated);
+      }
+    }
     pageToken = res.data.nextPageToken;
   } while (pageToken);
 
-  // Parse dates and find latest
-  const dated = [];
-  for (const f of folders) {
-    const parsed = extractDateRange(f.name);
-    if (parsed && parsed.start && parsed.end) {
-      dated.push({ ...parsed, folderId: f.id });
-    }
-  }
+  return dated;
+};
+
+// Find the latest weekly production folder
+const findLatestProductionFolder = async (drive) => {
+  const prodFolder = await sheetsOauth.resolveFolderByName(drive, PRODUCTION_FOLDER_NAME);
+
+  // Recursively search for dated folders
+  const dated = await findDatedFolders(drive, prodFolder.id);
 
   if (!dated.length) {
-    const folderNames = folders.map(f => f.name).join(', ');
-    throw new Error(`No dated production folders found. Folders: ${folderNames || '(none found)'}`);
+    throw new Error('No dated production folders found in "Little Sky Production Data" folder or subfolders');
   }
 
   dated.sort((a, b) => b.end - a.end);
