@@ -18,11 +18,18 @@ const loadSquareSalesData = () => {
     if (!fs.existsSync(analysisPath)) return [];
 
     const analysis = JSON.parse(fs.readFileSync(analysisPath, 'utf-8'));
-    return (analysis.products || []).map(p => ({
+    const products = (analysis.products || []).map(p => ({
       product: p.product,
       units: p.units,
       price: p.sale_price,
     }));
+
+    // Validate data integrity: if products are loaded but have zero units/prices, something broke
+    if (products.length > 0 && products.some(p => !p.product || !Number.isFinite(p.units) || !Number.isFinite(p.price))) {
+      console.warn('[margin-scheduler] ⚠️  Detected corrupted sales data in analysis.json - some products missing units or prices');
+    }
+
+    return products;
   } catch (e) {
     console.warn('[margin-scheduler] Failed to load sales data:', e.message);
     return [];
@@ -92,7 +99,29 @@ const runCalculation = async () => {
     }
 
     const squareSalesData = loadSquareSalesData();
+
+    if (!squareSalesData || squareSalesData.length === 0) {
+      console.log('[margin-scheduler] ⚠️  No Square sales data available - skipping calculation');
+      isRunning = false;
+      return;
+    }
+
+    console.log(`[margin-scheduler] Loaded ${squareSalesData.length} products from Square sales data`);
     const result = await calculateMargins.main({ squareSalesData });
+
+    // Validate result: if products array is empty or missing, something went wrong
+    if (!result.products || result.products.length === 0) {
+      console.error('[margin-scheduler] ❌ Calculation produced empty products array - check recipe/cost data');
+      lastRun = {
+        failedAt: new Date().toISOString(),
+        success: false,
+        error: 'Margin calculation produced empty products (no recipes costed)',
+        code: 'EMPTY_PRODUCTS',
+        dataSourcesAttempted: sources,
+      };
+      isRunning = false;
+      return;
+    }
 
     // Save to analysis.json with metadata about data source availability
     const outputWithMetadata = {
