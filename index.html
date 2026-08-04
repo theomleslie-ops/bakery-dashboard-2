@@ -1719,6 +1719,7 @@
                 <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Product</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Units</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Revenue</th>
+                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Price</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>COGS</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Margin $</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>Margin %</th>
@@ -1730,6 +1731,7 @@
                   <td style={{ padding: '12px', textAlign: 'left' }}><strong>{item.name}</strong></td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>{item.quantity.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>${item.revenue.toLocaleString('en-US', {maximumFractionDigits: 2})}</td>
+                  <td style={{ padding: '12px', textAlign: 'right' }}>${item.price.toFixed(2)}</td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>${item.cogs.toFixed(2)}</td>
                   <td style={{ padding: '12px', textAlign: 'right', color: item.margin$ >= 0 ? '#27ae60' : '#e74c3c', fontWeight: '500' }}>${item.margin$.toFixed(2)}</td>
                   <td style={{ padding: '12px', textAlign: 'right', color: item.marginPct >= 0 ? '#27ae60' : '#e74c3c', fontWeight: '600' }}>{item.marginPct.toFixed(1)}%</td>
