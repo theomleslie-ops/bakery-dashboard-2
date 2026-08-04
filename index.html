@@ -1232,6 +1232,44 @@
           .catch((err) => { setError('Failed to load locations: ' + err.message); setStatus('error'); });
       }, []);
 
+      // Auto-refresh from Drive on component mount
+      useEffect(() => {
+        const autoRefresh = async () => {
+          try {
+            const baseUrl = window.location.origin;
+            await fetch(`${baseUrl}/api/refresh-production-from-drive`, { method: 'POST' });
+          } catch (err) {
+            console.warn('Auto-refresh failed:', err.message);
+          }
+        };
+        autoRefresh();
+      }, []);
+
+      // Periodic refresh (every 10 minutes) and on tab focus
+      useEffect(() => {
+        const autoRefresh = async () => {
+          try {
+            const baseUrl = window.location.origin;
+            await fetch(`${baseUrl}/api/refresh-production-from-drive`, { method: 'POST' });
+            if (location) fetchData(location);
+          } catch (err) {
+            console.warn('Auto-refresh failed:', err.message);
+          }
+        };
+
+        // Refresh every 10 minutes
+        const interval = setInterval(autoRefresh, 10 * 60 * 1000);
+
+        // Refresh when tab comes into focus
+        const handleFocus = () => autoRefresh();
+        window.addEventListener('focus', handleFocus);
+
+        return () => {
+          clearInterval(interval);
+          window.removeEventListener('focus', handleFocus);
+        };
+      }, [location]);
+
       const fetchData = async (loc) => {
         try {
           setStatus('loading');
@@ -1276,32 +1314,34 @@
               <button className={granularity === 'day' ? 'active' : ''} onClick={() => setGranularity('day')}>Daily</button>
               <button className={granularity === 'week' ? 'active' : ''} onClick={() => setGranularity('week')}>Weekly</button>
               <button className={granularity === 'month' ? 'active' : ''} onClick={() => setGranularity('month')}>Monthly</button>
-              <button onClick={refreshFromDrive} disabled={refreshing} title="Pull latest production data from Google Drive" style={{ background: refreshing ? '#ccc' : '#6b4423' }}>
-                {refreshing ? '⟳ Refreshing...' : '🔄 Refresh from Drive'}
-              </button>
             </div>
           </header>
           <div className="controls">
-            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-              <div>
-                <label style={{ fontSize: '13px', color: '#666', marginRight: '8px', fontWeight: '600' }}>Filter:</label>
-                <select value={filterType} onChange={(e) => handleFilterTypeChange(e.target.value)} style={{ padding: '6px', marginRight: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
-                  <option value="location">By Location</option>
-                  <option value="market">By Market</option>
-                </select>
+            <div style={{ display: 'flex', gap: '15px', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                <div>
+                  <label style={{ fontSize: '13px', color: '#666', marginRight: '8px', fontWeight: '600' }}>Filter:</label>
+                  <select value={filterType} onChange={(e) => handleFilterTypeChange(e.target.value)} style={{ padding: '6px', marginRight: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
+                    <option value="location">By Location</option>
+                    <option value="market">By Market</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', color: '#666', marginRight: '8px', fontWeight: '600' }}>Selection:</label>
+                  <select value={location} onChange={(e) => setLocation(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
+                    {currentOptions.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label style={{ fontSize: '13px', color: '#666', marginRight: '8px', fontWeight: '600' }}>Selection:</label>
-                <select value={location} onChange={(e) => setLocation(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px' }}>
-                  {currentOptions.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
-                </select>
-              </div>
+              <button onClick={refreshFromDrive} disabled={refreshing} title="Manually pull latest production data from Google Drive" style={{ fontSize: '11px', padding: '6px 10px', background: refreshing ? '#ddd' : 'transparent', border: '1px solid #d4b5a0', color: '#8b6c57', opacity: 0.7 }}>
+                {refreshing ? '⟳' : '🔄'} Refresh
+              </button>
             </div>
           </div>
           {error && <div className="error">{error}</div>}
           {refreshMessage && <div style={{ background: refreshMessage.includes('Error') ? '#fee' : '#efe', color: refreshMessage.includes('Error') ? '#c33' : '#3a3', padding: '12px', borderRadius: '6px', marginBottom: '20px', fontSize: '13px' }}>{refreshMessage}</div>}
-          {status === 'loading' && <div className="loading">Loading production &amp; Square sales data…</div>}
-          {status === 'empty' && <div className="empty">No production data. Click "Refresh from Drive" or upload a production CSV and I'll load it in.</div>}
+          {status === 'loading' && <div className="loading">Pulling production data from Google Drive &amp; Square sales…</div>}
+          {status === 'empty' && <div className="empty">No production data available for {location}. Check that production files exist in the Drive folder.</div>}
           {status === 'ready' && totals && (
             <>
               <div className="metrics">
