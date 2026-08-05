@@ -2711,7 +2711,7 @@ app.get('/api/product-margins', async (req, res) => {
             itemMap[order.itemName] = { quantity: 0, revenue: 0 };
           }
           itemMap[order.itemName].quantity += order.quantity;
-          itemMap[order.itemName].revenue += order.grossSales;
+          itemMap[order.itemName].revenue += order.revenue;
         }
 
         windowsData[window.name] = itemMap;
@@ -2918,10 +2918,12 @@ app.get('/api/bakery-margins', async (req, res) => {
 
           for (const order of orders) {
             for (const line of order.line_items || []) {
+              // Use total_money for actual revenue (not gross_sales which includes tax adjustments)
+              const revenue = Math.round((line.total_money?.amount || 0) / 100 * 100) / 100;
               locationOrders.push({
                 itemName: line.name || 'Unknown',
                 quantity: line.quantity ? parseInt(line.quantity) : 1,
-                grossSales: Math.round((line.gross_sales_money?.amount || 0) / 100 * 100) / 100,
+                revenue: revenue,
                 closedAt: order.closed_at, // Add timestamp for server-side filtering validation
               });
             }
@@ -2971,7 +2973,7 @@ app.get('/api/bakery-margins', async (req, res) => {
           itemMap[order.itemName] = { quantity: 0, revenue: 0 };
         }
         itemMap[order.itemName].quantity += order.quantity;
-        itemMap[order.itemName].revenue += order.grossSales;
+        itemMap[order.itemName].revenue += order.revenue;
       } else {
         const orderTime = new Date(order.closedAt).getTime();
         if (orderTime >= beginTimeMs && orderTime <= endTimeMs) {
@@ -2979,7 +2981,7 @@ app.get('/api/bakery-margins', async (req, res) => {
             itemMap[order.itemName] = { quantity: 0, revenue: 0 };
           }
           itemMap[order.itemName].quantity += order.quantity;
-          itemMap[order.itemName].revenue += order.grossSales;
+          itemMap[order.itemName].revenue += order.revenue;
         } else {
           filteredOutCount++;
         }
