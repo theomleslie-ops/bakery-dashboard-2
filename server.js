@@ -2847,6 +2847,11 @@ app.get('/api/bakery-margins', async (req, res) => {
     const beginTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     const endTime = new Date().toISOString();
 
+    // Log the actual computed date range for debugging
+    console.log(`📅 Bakery Margins Query - Period: ${period} (${days} days)`);
+    console.log(`   Begin: ${beginTime}`);
+    console.log(`   End:   ${endTime}`);
+
     if (!process.env.SQUARE_ACCESS_TOKEN) {
       clearTimeout(timeoutHandle);
       return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
@@ -2893,6 +2898,10 @@ app.get('/api/bakery-margins', async (req, res) => {
           });
 
           const orders = response.data.orders || [];
+          if (page === 0) {
+            console.log(`   ${location.name}: Page 1 returned ${orders.length} orders`);
+          }
+
           for (const order of orders) {
             for (const line of order.line_items || []) {
               locationOrders.push({
@@ -2907,6 +2916,7 @@ app.get('/api/bakery-margins', async (req, res) => {
           page++;
           if (!cursor) break;
         }
+        console.log(`   ${location.name}: ${page} pages, ${locationOrders.length} total line items`);
       } catch (e) {
         console.warn(`⚠️ Location ${location.name}: ${e.message}`);
       }
@@ -3008,38 +3018,70 @@ app.get('/api/bakery-margins', async (req, res) => {
   }
 });
 
-// Debug endpoint to see raw Square data vs QB
-app.get('/api/bakery-margins-debug', async (req, res) => {
+// Diagnostic endpoint: trace exactly what dates are being queried and what Square returns
+app.get('/api/bakery-margins-diagnostic', async (req, res) => {
   try {
     if (!process.env.SQUARE_ACCESS_TOKEN) {
       return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
     }
 
-    // Fetch just 1 location, 1 week, limited to 3 pages to see actual data structure
-    const location = WASTE_LOCATIONS[0]; // ARC store
-    const beginTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const period = req.query.period || '1_week';
+    const periodDays = {
+      '1_week': 7,
+      '2_weeks': 14,
+      '2_months': 60,
+      '6_months': 180,
+      '1_year': 365,
+      '3_years': 1095,
+      '5_years': 1825,
+    };
+
+    const days = periodDays[period] || 7;
+    const beginTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     const endTime = new Date().toISOString();
+
+    // Fetch just ARC location with detailed pagination tracking
+    const location = WASTE_LOCATIONS[0]; // ARC
+    const diagnostic = {
+      period: period,
+      days: days,
+      computed_begin: beginTime,
+      computed_end: endTime,
+      location: location.name,
+      location_id: location.squareLocationId,
+      pages: [],
+      totals: {
+        orders: 0,
+        line_items: 0,
+        units: 0,
+        revenue: 0,
+      },
+    };
 
     let cursor = null;
     let page = 0;
-    const allLines = [];
-    const MAX_PAGES = 3;
+    const MAX_PAGES = 10; // more pages for diagnostic
 
     while (page < MAX_PAGES) {
-      const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, {
+      const req_body = {
         location_ids: [location.squareLocationId],
-        limit: 100,
+        limit: 250,
         sort_order: 'DESC',
         query: {
           filter: {
             state_filter: { states: ['COMPLETED'] },
             date_time_filter: {
-              closed_at: { start_at: beginTime, end_at: endTime },
+              closed_at: {
+                start_at: beginTime,
+                end_at: endTime,
+              },
             },
           },
         },
-        ...(cursor && { query: { cursor } }),
-      }, {
+      };
+      if (cursor) req_body.query.cursor = cursor;
+
+      const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, req_body, {
         headers: {
           Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
           'Content-Type': 'application/json',
@@ -3048,42 +3090,45 @@ app.get('/api/bakery-margins-debug', async (req, res) => {
       });
 
       const orders = response.data.orders || [];
+      let pageUnits = 0;
+      let pageRevenue = 0;
+      const pageItems = {};
+
       for (const order of orders) {
         for (const line of order.line_items || []) {
-          allLines.push({
-            itemName: line.name,
-            qty: line.quantity,
-            gross_sales_money: line.gross_sales_money?.amount || 0,
-            total_money: line.total_money?.amount || 0,
-            net_sales_money: line.net_sales_money?.amount || 0,
-            total_discount_money: line.total_discount_money?.amount || 0,
-            total_tax_money: line.total_tax_money?.amount || 0,
-            return_quantity: line.return_quantity || 0,
-          });
+          const qty = line.quantity ? parseInt(line.quantity) : 1;
+          const revenue = (line.gross_sales_money?.amount || 0) / 100;
+          pageUnits += qty;
+          pageRevenue += revenue;
+
+          const itemName = line.name || 'Unknown';
+          if (!pageItems[itemName]) pageItems[itemName] = 0;
+          pageItems[itemName] += qty;
         }
       }
+
+      diagnostic.pages.push({
+        page: page + 1,
+        orders: orders.length,
+        line_items: Object.values(pageItems).reduce((a, b) => a + b, 0),
+        units: pageUnits,
+        revenue: Math.round(pageRevenue * 100) / 100,
+        hasMore: !!response.data.cursor,
+      });
+
+      diagnostic.totals.orders += orders.length;
+      diagnostic.totals.line_items += Object.values(pageItems).reduce((a, b) => a + b, 0);
+      diagnostic.totals.units += pageUnits;
+      diagnostic.totals.revenue += pageRevenue;
 
       cursor = response.data.cursor;
       page++;
       if (!cursor) break;
     }
 
-    const grossSum = allLines.reduce((sum, l) => sum + l.gross_sales_money, 0) / 100;
-    const totalSum = allLines.reduce((sum, l) => sum + l.total_money, 0) / 100;
-    const netSum = allLines.reduce((sum, l) => sum + l.net_sales_money, 0) / 100;
+    diagnostic.totals.revenue = Math.round(diagnostic.totals.revenue * 100) / 100;
 
-    res.json({
-      location: location.name,
-      period: 'Last 7 days',
-      ordersProcessed: allLines.length,
-      sums: {
-        using_gross_sales_money: Math.round(grossSum * 100) / 100,
-        using_total_money: Math.round(totalSum * 100) / 100,
-        using_net_sales_money: Math.round(netSum * 100) / 100,
-      },
-      samples: allLines.slice(0, 5),
-      note: 'Compare these sums to your Square dashboard for 1 week at ' + location.name,
-    });
+    res.json(diagnostic);
   } catch (e) {
     res.status(500).json({ error: e.message, stack: e.stack });
   }
