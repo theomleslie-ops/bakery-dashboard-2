@@ -1677,6 +1677,28 @@
       const [data, setData] = useState(null);
       const [error, setError] = useState(null);
       const [period, setPeriod] = useState('1_week');
+      const [daysOffset, setDaysOffset] = useState(0);
+
+      const PERIOD_OPTIONS = [
+        { value: '1_week', label: '1 Week', days: 7 },
+        { value: '2_weeks', label: '2 Weeks', days: 14 },
+        { value: '2_months', label: '2 Months', days: 60 },
+        { value: '6_months', label: '6 Months', days: 180 },
+        { value: '1_year', label: '1 Year', days: 365 },
+      ];
+
+      // Calculate date range for display
+      const calculateDateRange = () => {
+        const periodObj = PERIOD_OPTIONS.find(p => p.value === period) || PERIOD_OPTIONS[0];
+        const days = periodObj.days;
+        const now = new Date();
+        const endDate = new Date(now.getTime() - daysOffset * 24 * 60 * 60 * 1000);
+        const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
+        return { startDate, endDate, days };
+      };
+
+      const { startDate, endDate } = calculateDateRange();
+      const dateStr = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
       useEffect(() => {
         const fetchData = async () => {
@@ -1703,27 +1725,25 @@
 
       return (
         <div className="container" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h2 style={{ margin: 0 }}>🥐 Bakery Margins</h2>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <label style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>Period:</label>
-              <select value={period} onChange={(e) => setPeriod(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd', fontSize: '14px', cursor: 'pointer' }}>
-                <option value="1_week">1 Week</option>
-                <option value="2_weeks">2 Weeks</option>
-                <option value="2_months">2 Months</option>
-                <option value="6_months">6 Months</option>
-                <option value="1_year">1 Year</option>
-                <option value="3_years">3 Years</option>
-                <option value="5_years">5 Years</option>
-              </select>
+          <div style={{ marginBottom: '30px' }}>
+            <h2 style={{ margin: '0 0 20px 0' }}>🥐 Bakery Margins</h2>
+
+            <div className="controls" style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <button onClick={() => setDaysOffset(daysOffset + 7)} style={{ padding: '8px 12px' }}>← Previous</button>
+                <div className="view-toggle">
+                  {PERIOD_OPTIONS.map(opt => (
+                    <button key={opt.value} className={period === opt.value ? 'active' : ''} onClick={() => { setPeriod(opt.value); setDaysOffset(0); }}>{opt.label}</button>
+                  ))}
+                </div>
+                <button onClick={() => setDaysOffset(Math.max(0, daysOffset - 7))} disabled={daysOffset === 0} style={{ padding: '8px 12px' }}>Next →</button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '20px', padding: '15px', background: '#f5f1ed', borderRadius: '6px', fontSize: '14px', color: '#6b4423', fontWeight: '500' }}>
+              📅 {dateStr}
             </div>
           </div>
-
-          {data.generatedAt && (
-            <div style={{ marginBottom: '20px', padding: '15px', background: '#f9f9f9', borderRadius: '4px', fontSize: '14px', color: '#666' }}>
-              Data as of: {new Date(data.generatedAt).toLocaleString()} | Period: <strong>{period.replace(/_/g, ' ').toUpperCase()}</strong>
-            </div>
-          )}
 
           {summary && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '30px' }}>
