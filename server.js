@@ -2951,7 +2951,7 @@ app.get('/api/bakery-margins', async (req, res) => {
         quantity: data.quantity,
         price: data.quantity > 0 ? Math.round((revenue / data.quantity) * 100) / 100 : 0,
         cogs: Math.round(cost * 100) / 100,
-        margin$: Math.round(cost * 100) / 100,
+        margin$: Math.round(profit * 100) / 100,
         marginPct: Math.round(marginPct * 10) / 10,
         status: profit < 0 ? 'error-negative-margin' : (cost > 0 ? 'costed' : 'needs-cost'),
       };
