@@ -1287,6 +1287,7 @@ app.get('/eula', (req, res) => {
 
 // ============= BAKERY MARGINS ENDPOINT =============
 // Supports both period-based (?period=6_months) and date-range (?startDate=2026-07-26&endDate=2026-08-01)
+// Intelligently scales page limits: ~1 page per 5 days, keeping queries to 30-60 seconds
 app.get('/api/bakery-margins', async (req, res) => {
   try {
     const axios = require('axios');
@@ -1381,7 +1382,14 @@ app.get('/api/bakery-margins', async (req, res) => {
     ];
     const WASTE_LOCATIONS = [...WASTE_STORE_LOCATIONS, ...WASTE_MARKET_LOCATIONS];
 
-    // Fetch ALL orders from all locations (no page cap, just fetch until cursor is null)
+    // Calculate reasonable page limit based on date range
+    // Real volume: ~70,000 orders per 6 months = 1,375 orders/day total
+    // Across 51 locations = 27 orders/location/day = 0.11 pages/day per location
+    // Formula: ceil(days * 0.25) balances coverage vs speed (2-30s depending on range)
+    const daysDiff = Math.ceil((new Date(endTime) - new Date(beginTime)) / (1000 * 60 * 60 * 24));
+    const MAX_PAGES = Math.ceil(daysDiff * 0.25) || 1;
+
+    // Fetch orders from all locations with intelligent page limiting
     const allOrders = [];
     let completedLocations = 0;
 
@@ -1391,7 +1399,7 @@ app.get('/api/bakery-margins', async (req, res) => {
       const locationOrders = [];
 
       try {
-        while (true) {
+        while (page < MAX_PAGES) {
           const req_body = {
             location_ids: [location.squareLocationId],
             limit: 250,
