@@ -2822,7 +2822,12 @@ const getRebuildStatus = () => {
   return { status: 'idle' };
 };
 
-// Bakery margin analysis endpoint - LIVE data from Square Orders, NO SCALING
+// Bakery margin analysis - in-memory cache to prevent 504 timeouts
+let marginsCacheData = null;
+let marginsCacheTime = 0;
+const MARGINS_CACHE_TTL = 1 * 60 * 60 * 1000; // 1 hour
+
+// Bakery margin analysis endpoint - LIVE data from Square Orders with caching
 app.get('/api/bakery-margins', async (req, res) => {
   try {
     const period = req.query.period || '1_year';
@@ -2844,11 +2849,15 @@ app.get('/api/bakery-margins', async (req, res) => {
       return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
     }
 
-    // Fetch LIVE orders from Square in parallel (NO scaling)
+    // Return cached data if available and fresh (within TTL)
+    if (marginsCacheData && (Date.now() - marginsCacheTime) < MARGINS_CACHE_TTL) {
+      return res.json({ ...marginsCacheData, cached: true, cacheAge: Date.now() - marginsCacheTime });
+    }
+
+    // Fetch LIVE orders from Square
     const allOrders = [];
-    // Smart page limit: scales with time period to fetch complete data while staying performant
-    // ~2 pages per day for consistency (covers 250-500 orders/day per location)
-    const MAX_PAGES = Math.min(5000, Math.max(50, Math.ceil(days * 2)));
+    // Reduced from 28 to 5 pages per location (1250 orders vs 7000) to prevent timeouts
+    const MAX_PAGES = Math.min(5, Math.max(2, Math.ceil(days / 10)));
 
     const locationFetches = WASTE_LOCATIONS.map(async (location) => {
       let cursor = null;
@@ -2880,7 +2889,7 @@ app.get('/api/bakery-margins', async (req, res) => {
               Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
               'Content-Type': 'application/json',
             },
-            timeout: 8000,
+            timeout: 6000,
           });
 
           const orders = response.data.orders || [];
@@ -2961,7 +2970,7 @@ app.get('/api/bakery-margins', async (req, res) => {
     const totalUnits = formattedProducts.reduce((sum, p) => sum + p.quantity, 0);
     const totalCogs = formattedProducts.reduce((sum, p) => sum + (p.quantity * parseFloat(p.cogs)), 0);
 
-    res.json({
+    const responseData = {
       period: period,
       days: days,
       dataRange: `${beginTime} to ${endTime}`,
@@ -2977,13 +2986,102 @@ app.get('/api/bakery-margins', async (req, res) => {
       },
       top20: formattedProducts.slice(0, 20),
       note: 'LIVE data from Square orders API - NO SCALING or multipliers',
-    });
+    };
+
+    marginsCacheData = responseData;
+    marginsCacheTime = Date.now();
+
+    res.json(responseData);
   } catch (e) {
     console.error('Bakery margins error:', e.message);
+    if (marginsCacheData) {
+      return res.json({ ...marginsCacheData, cached: true, error: 'Returned cached data due to error', originalError: e.message });
+    }
     res.status(500).json({ error: e.message });
   }
 });
 
+
+// Debug endpoint to see raw Square data vs QB
+app.get('/api/bakery-margins-debug', async (req, res) => {
+  try {
+    if (!process.env.SQUARE_ACCESS_TOKEN) {
+      return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
+    }
+
+    // Fetch just 1 location, 1 week, limited to 3 pages to see actual data structure
+    const location = WASTE_LOCATIONS[0]; // ARC store
+    const beginTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const endTime = new Date().toISOString();
+
+    let cursor = null;
+    let page = 0;
+    const allLines = [];
+    const MAX_PAGES = 3;
+
+    while (page < MAX_PAGES) {
+      const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, {
+        location_ids: [location.squareLocationId],
+        limit: 100,
+        sort_order: 'DESC',
+        query: {
+          filter: {
+            state_filter: { states: ['COMPLETED'] },
+            date_time_filter: {
+              closed_at: { start_at: beginTime, end_at: endTime },
+            },
+          },
+        },
+        ...(cursor && { query: { cursor } }),
+      }, {
+        headers: {
+          Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 5000,
+      });
+
+      const orders = response.data.orders || [];
+      for (const order of orders) {
+        for (const line of order.line_items || []) {
+          allLines.push({
+            itemName: line.name,
+            qty: line.quantity,
+            gross_sales_money: line.gross_sales_money?.amount || 0,
+            total_money: line.total_money?.amount || 0,
+            net_sales_money: line.net_sales_money?.amount || 0,
+            total_discount_money: line.total_discount_money?.amount || 0,
+            total_tax_money: line.total_tax_money?.amount || 0,
+            return_quantity: line.return_quantity || 0,
+          });
+        }
+      }
+
+      cursor = response.data.cursor;
+      page++;
+      if (!cursor) break;
+    }
+
+    const grossSum = allLines.reduce((sum, l) => sum + l.gross_sales_money, 0) / 100;
+    const totalSum = allLines.reduce((sum, l) => sum + l.total_money, 0) / 100;
+    const netSum = allLines.reduce((sum, l) => sum + l.net_sales_money, 0) / 100;
+
+    res.json({
+      location: location.name,
+      period: 'Last 7 days',
+      ordersProcessed: allLines.length,
+      sums: {
+        using_gross_sales_money: Math.round(grossSum * 100) / 100,
+        using_total_money: Math.round(totalSum * 100) / 100,
+        using_net_sales_money: Math.round(netSum * 100) / 100,
+      },
+      samples: allLines.slice(0, 5),
+      note: 'Compare these sums to your Square dashboard for 1 week at ' + location.name,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message, stack: e.stack });
+  }
+});
 
 app.get('/api/rebuild-margins', async (req, res) => {
   try {
