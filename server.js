@@ -2960,7 +2960,10 @@ app.get('/api/bakery-margins', async (req, res) => {
     // Server-side date filtering as safety net (in case Square API filter has bugs)
     const beginTimeMs = new Date(beginTime).getTime();
     const endTimeMs = new Date(endTime).getTime();
-    console.log(`   Date range in ms: ${beginTimeMs} to ${endTimeMs}`);
+    console.log(`\n🔒 SERVER-SIDE DATE FILTERING:`);
+    console.log(`   beginTime: ${beginTime} (${beginTimeMs})`);
+    console.log(`   endTime:   ${endTime} (${endTimeMs})`);
+    console.log(`   Range: ${(endTimeMs - beginTimeMs) / (1000 * 60 * 60 * 24).toFixed(1)} days`);
 
     // Aggregate by item name (with server-side date validation)
     const itemMap = {};
@@ -2985,9 +2988,9 @@ app.get('/api/bakery-margins', async (req, res) => {
         filteredOutCount++;
       }
     }
-    if (filteredOutCount > 0) {
-      console.log(`   ⚠️ Filtered out ${filteredOutCount} orders outside date range (Square API filter bug?)`);
-    }
+    console.log(`   Total line items from Square: ${allOrders.length}`);
+    console.log(`   Filtered out outside date range: ${filteredOutCount}`);
+    console.log(`   Kept within date range: ${allOrders.length - filteredOutCount}\n`);
 
     // Load costs from analysis.json for margin calculation
     const bakeryAnalysisPath = path.join(__dirname, 'analysis.json');
