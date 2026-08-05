@@ -699,7 +699,7 @@ const loadQBTokens = () => {
 const saveQBTokens = (tokens) => saveData(QB_TOKENS_FILE, tokens);
 
 // Returns a valid access token + realmId, refreshing if the access token has expired.
-// Throws if QuickBooks has never been connected.
+// Auto-reconnects if refresh fails (clears tokens and tells frontend to reconnect).
 const getValidQBAccessToken = async () => {
   const tokens = loadQBTokens();
   if (!tokens || !tokens.refresh_token) {
@@ -711,20 +711,29 @@ const getValidQBAccessToken = async () => {
   const isExpired = !tokens.expires_at || Date.now() > tokens.expires_at - 60_000;
   if (!isExpired) return tokens;
 
-  const response = await axios.post(
-    QB_TOKEN_URL,
-    new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokens.refresh_token }).toString(),
-    { headers: { Authorization: qbBasicAuthHeader(), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
-  );
+  try {
+    const response = await axios.post(
+      QB_TOKEN_URL,
+      new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokens.refresh_token }).toString(),
+      { headers: { Authorization: qbBasicAuthHeader(), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
+    );
 
-  const updated = {
-    ...tokens,
-    access_token: response.data.access_token,
-    refresh_token: response.data.refresh_token || tokens.refresh_token,
-    expires_at: Date.now() + response.data.expires_in * 1000,
-  };
-  saveQBTokens(updated);
-  return updated;
+    const updated = {
+      ...tokens,
+      access_token: response.data.access_token,
+      refresh_token: response.data.refresh_token || tokens.refresh_token,
+      expires_at: Date.now() + response.data.expires_in * 1000,
+    };
+    saveQBTokens(updated);
+    return updated;
+  } catch (refreshErr) {
+    // Token refresh failed - clear tokens and trigger reconnection
+    console.warn(`⚠️ QB token refresh failed: ${refreshErr.message}`);
+    deleteQBTokens();
+    const err = new Error('QuickBooks session expired. Please reconnect.');
+    err.code = 'QB_SESSION_EXPIRED';
+    throw err;
+  }
 };
 
 // Step 1: redirect the user to Intuit's consent screen
@@ -768,13 +777,30 @@ app.get('/api/quickbooks/callback', async (req, res) => {
   }
 });
 
-// Connection status
-app.get('/api/quickbooks/status', (req, res) => {
+// Connection status - includes info about token expiration and reconnection needs
+app.get('/api/quickbooks/status', async (req, res) => {
   const tokens = loadQBTokens();
+  const connected = !!(tokens && tokens.refresh_token);
+  const isExpired = connected && (!tokens.expires_at || Date.now() > tokens.expires_at - 60_000);
+
+  let needsReconnect = false;
+  if (isExpired && connected) {
+    // Try to auto-refresh token
+    try {
+      await getValidQBAccessToken();
+    } catch (err) {
+      // Token refresh failed - need reconnection
+      needsReconnect = err.code === 'QB_SESSION_EXPIRED';
+    }
+  }
+
   res.json({
-    connected: !!(tokens && tokens.refresh_token),
+    connected,
+    needsReconnect,
+    tokenExpired: isExpired,
     realmId: tokens?.realmId || null,
     connectedAt: tokens?.connectedAt || null,
+    expiresAt: tokens?.expires_at || null,
   });
 });
 
@@ -955,16 +981,21 @@ app.get('/api/pl-by-channel', (req, res) => {
           { name: 'State St', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
           { name: 'Catering', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
           { name: 'Delivery 506', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+          { name: '506 Retail', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+          { name: 'Markets', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
         ],
+        markets: [],
         message: 'No P&L data provided yet. Upload bakery allocation data to populate this view.',
       });
     }
 
-    // Extract channels from nested structure if it exists
+    // Extract channels and markets from nested structure if it exists
     const channels = Array.isArray(plData) ? plData : (plData.revenueAllocation?.byChannel || []);
+    const markets = Array.isArray(plData.markets) ? plData.markets : [];
 
     res.json({
       channels,
+      markets,
       lastUpdated: new Date().toISOString(),
     });
   } catch (err) {
@@ -1426,6 +1457,192 @@ app.get('/api/bakery-margins', async (req, res) => {
   } catch (e) {
     console.error('Bakery margins error:', e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ============= PRODUCT MARGINS ENDPOINT =============
+// Calculates live product margins from QB costs + Google Sheets recipes + Square sales
+app.get('/api/product-margins', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    console.log('📊 Calculating LIVE product margins from QB + Google Sheets + Square...');
+    const startTime = Date.now();
+
+    let squareSalesData = [];
+    try {
+      if (!process.env.SQUARE_ACCESS_TOKEN) {
+        throw new Error('SQUARE_ACCESS_TOKEN not configured');
+      }
+
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
+      const allOrders = [];
+
+      const locationFetches = WASTE_LOCATIONS.map(async (location) => {
+        let cursor = null;
+        let page = 0;
+        const MAX_PAGES = 3;
+        const locationOrders = [];
+
+        try {
+          while (page < MAX_PAGES) {
+            const req = {
+              location_ids: [location.squareLocationId],
+              limit: 250,
+              sort_order: 'DESC',
+              query: {
+                filter: {
+                  state_filter: { states: ['COMPLETED'] },
+                  date_time_filter: {
+                    closed_at: {
+                      start_at: new Date(`${thirtyDaysAgo}T00:00:00Z`).toISOString(),
+                      end_at: new Date().toISOString(),
+                    },
+                  },
+                },
+              },
+            };
+            if (cursor) req.query.cursor = cursor;
+
+            let res;
+            try {
+              res = await axios.post(`https://connect.squareup.com/v2/orders/search`, req, {
+                headers: {
+                  Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+                  'Content-Type': 'application/json',
+                },
+                timeout: 10000,
+              });
+            } catch (apiErr) {
+              if (apiErr.response?.status === 429) {
+                page = MAX_PAGES;
+                break;
+              }
+              throw apiErr;
+            }
+
+            const orders = res.data.orders || [];
+            for (const order of orders) {
+              for (const line of order.line_items || []) {
+                locationOrders.push({
+                  itemName: line.name || 'Unknown',
+                  quantity: line.quantity ? parseInt(line.quantity) : 1,
+                  grossSales: Math.round((line.gross_sales_money?.amount || 0) / 100 * 100) / 100,
+                  timestamp: order.closed_at || new Date().toISOString(),
+                  location: location.name,
+                });
+              }
+            }
+
+            cursor = res.data.cursor;
+            page++;
+            if (!cursor) break;
+          }
+        } catch (e) {
+          console.warn(`⚠️ Location ${location.name}: ${e.message}`);
+        }
+
+        return locationOrders;
+      });
+
+      const allLocationOrders = await Promise.all(locationFetches);
+      allOrders.push(...allLocationOrders.flat());
+
+      const ordersByItem = {};
+      for (const order of allOrders) {
+        if (!ordersByItem[order.itemName]) {
+          ordersByItem[order.itemName] = { qty: 0, revenue: 0 };
+        }
+        ordersByItem[order.itemName].qty += order.quantity;
+        ordersByItem[order.itemName].revenue += order.grossSales;
+      }
+
+      squareSalesData = Object.entries(ordersByItem).map(([name, data]) => ({
+        product: name,
+        units: Math.round(data.qty * 100) / 100,
+        price: data.qty > 0 ? Math.round((data.revenue / data.qty) * 100) / 100 : 0,
+      }));
+
+      console.log(`✓ ${squareSalesData.length} products from Square`);
+    } catch (e) {
+      console.warn(`⚠️ Square fetch failed: ${e.message}`);
+    }
+
+    let marginProducts = [];
+    let marginCoverage = {};
+    let marginSummary = {};
+
+    try {
+      const { main: calculateMargins } = require('./pipeline/calculate-margins');
+      const result = await calculateMargins({ squareSalesData });
+      marginProducts = result.products || [];
+      marginCoverage = result.coverage || {};
+      marginSummary = result.summary || {};
+      console.log(`✓ Calculated ${marginProducts.length} products with live costs`);
+    } catch (e) {
+      console.warn(`⚠️ Live calculation failed: ${e.message}`);
+      try {
+        const recipeCostsFile = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
+        if (fs.existsSync(recipeCostsFile)) {
+          const cached = JSON.parse(fs.readFileSync(recipeCostsFile, 'utf-8'));
+          marginProducts = cached.recipes || [];
+          console.log(`✓ Using cached ${marginProducts.length} recipe costs`);
+        }
+      } catch (fallbackErr) {
+        console.error(`✗ Fallback failed: ${fallbackErr.message}`);
+      }
+    }
+
+    const productCostMap = {};
+    for (const p of marginProducts) {
+      const productKey = (p.product || p.recipe || '').toLowerCase();
+      productCostMap[productKey] = p.cost_per_unit || p.costPerUnit || 0;
+    }
+
+    const windows = [
+      { name: '2 week', days: 14 },
+      { name: '4 week', days: 28 },
+      { name: '2 month', days: 60 },
+      { name: '6 month', days: 180 },
+      { name: '1 year', days: 365 },
+    ];
+
+    const result = {};
+
+    for (const window of windows) {
+      const ranked = squareSalesData
+        .map(item => {
+          const cost = productCostMap[(item.product || '').toLowerCase()] || 0;
+          const revenue = item.units * item.price;
+          const cogs = item.units * cost;
+          const profit = revenue - cogs;
+          const marginPct = revenue > 0 ? (profit / revenue * 100) : 0;
+
+          return {
+            name: item.product,
+            revenue: Math.round(revenue * 100) / 100,
+            quantity: Math.round(item.units * 100) / 100,
+            avgPrice: Math.round(item.price * 100) / 100,
+            cogs: Math.round(cost * 100) / 100,
+            margin$: Math.round(profit * 100) / 100,
+            marginPct: Math.round(marginPct * 10) / 10,
+          };
+        })
+        .sort((a, b) => (b.revenue || 0) - (a.revenue || 0))
+        .slice(0, 20);
+
+      result[window.name] = ranked;
+    }
+
+    res.json({
+      dataSource: 'LIVE',
+      calculationMs: Date.now() - startTime,
+      windows: result,
+      coverage: marginCoverage,
+      summary: marginSummary,
+    });
+  } catch (e) {
+    console.error('❌ Product margins error:', e.message, e.stack);
+    res.status(500).json({ error: e.message, dataSource: 'LIVE' });
   }
 });
 
