@@ -1197,6 +1197,209 @@ app.get('/eula', (req, res) => {
 </body></html>`);
 });
 
+// ============= BAKERY MARGINS ENDPOINT =============
+// Supports both period-based (?period=6_months) and date-range (?startDate=2026-07-26&endDate=2026-08-01)
+app.get('/api/bakery-margins', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const path = require('path');
+    const fs = require('fs');
+
+    // Determine date range
+    let beginTime, endTime;
+
+    if (req.query.startDate && req.query.endDate) {
+      // Date-range query (e.g., ?startDate=2026-07-26&endDate=2026-08-01)
+      beginTime = new Date(req.query.startDate).toISOString();
+      endTime = new Date(req.query.endDate).toISOString();
+    } else {
+      // Period-based query (e.g., ?period=6_months)
+      const period = req.query.period || '1_year';
+      const periodDays = {
+        '1_week': 7,
+        '2_weeks': 14,
+        '6_months': 180,
+        '1_year': 365,
+      };
+      const days = periodDays[period] || 365;
+      beginTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      endTime = new Date().toISOString();
+    }
+
+    if (!process.env.SQUARE_ACCESS_TOKEN) {
+      return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
+    }
+
+    // All 51 locations (6 stores + 45 markets)
+    const WASTE_STORE_LOCATIONS = [
+      { name: 'ARC', squareLocationId: 'L41E1NSH9N1GC' },
+      { name: 'LSK', squareLocationId: 'LVTS3K9QFN95F' },
+      { name: 'State St', squareLocationId: 'L5J0D4FWK7FFY' },
+      { name: 'Catering', squareLocationId: 'L2326PJNQ7KS9' },
+      { name: 'Delivery 506', squareLocationId: 'LWSX9K7SC3V37' },
+      { name: '506 Retail', squareLocationId: 'L91Q2PN8KATAB' },
+    ];
+    const WASTE_MARKET_LOCATIONS = [
+      { name: '25th AVE', squareLocationId: 'LGEFKKMZTYRJK' },
+      { name: 'Alum Rock Village (Sun)', squareLocationId: 'LHFCY22W62WXD' },
+      { name: 'Antioch SUN', squareLocationId: 'LZJJ8SPXW0J44' },
+      { name: 'BELMONT SUN', squareLocationId: 'L2MSATCSX8819' },
+      { name: 'BERRYESSA SAT', squareLocationId: 'LJ8NR5P1YJJWP' },
+      { name: 'BLG SUN', squareLocationId: 'LDGMZQVT9M1M9' },
+      { name: 'BLG-THURS', squareLocationId: 'L1NRS4WB4730D' },
+      { name: 'CSM LSK', squareLocationId: 'LPVPE87DHSHEQ' },
+      { name: 'CSM SAT', squareLocationId: 'L81H7NXQ9R8CN' },
+      { name: 'Commons Popup', squareLocationId: 'LRA4DDBM82571' },
+      { name: 'DALY CITY SAT', squareLocationId: 'LBZ9Y9CPYYMZ3' },
+      { name: 'DALY CITY THU', squareLocationId: 'L6QV57HE8RCXV' },
+      { name: 'DE ANZA SUN', squareLocationId: 'LKQE1MDV738GF' },
+      { name: 'DIVISADERO SUN', squareLocationId: 'LK29JHHDMWP2E' },
+      { name: 'EL CERRITO-TUES', squareLocationId: 'LCGCZZYTVWZM7' },
+      { name: 'Emeryville-THURS', squareLocationId: 'LM4A2T6JCJSZ4' },
+      { name: 'FILLMORE SAT', squareLocationId: 'LZG7H4XVCB8H4' },
+      { name: 'FM SF SUN', squareLocationId: 'L77PQJ8BX5HKD' },
+      { name: 'FOSTER CITY PJCC FRI', squareLocationId: 'L6401TR4NHAPH' },
+      { name: 'FOSTER CITY TUE', squareLocationId: 'L57SXYMF4B4BD' },
+      { name: 'INNER SUNSET SUN', squareLocationId: 'LVTMNASMHZZRS' },
+      { name: 'KAISER SJ TUE', squareLocationId: 'LFXW7H937EBYR' },
+      { name: 'Kaiser Pleasanton', squareLocationId: 'LYSJYK6EHRXJQ' },
+      { name: 'Kitchen', squareLocationId: 'LA0W40J074TNE' },
+      { name: 'LA Farmers THU', squareLocationId: 'L1MFVBMDMXE73' },
+      { name: 'LH-SAT', squareLocationId: 'LSNQQ4C28KDYP' },
+      { name: 'Livermore', squareLocationId: 'LGBG76BMZ52YT' },
+      { name: 'MILPITAS SUN', squareLocationId: 'LWDZ9T8S25MQR' },
+      { name: 'MP SUN', squareLocationId: 'LK43YN23G6RW7' },
+      { name: 'MV LSK', squareLocationId: 'L9J4MWTNF0AF3' },
+      { name: 'MV SUN', squareLocationId: 'L0MTGKJ88AZR1' },
+      { name: 'Main Homebase', squareLocationId: 'LRQ7KSG6GZG28' },
+      { name: 'Micron Popup', squareLocationId: 'LGDAFG4D5MB9X' },
+      { name: 'PA SAT', squareLocationId: 'L0270W2T6H8X7' },
+      { name: 'PV THU', squareLocationId: 'L59S2DFW8C8J1' },
+      { name: 'Princeton Plaza SUN', squareLocationId: 'LK26FV6D18NEP' },
+      { name: 'Princeton Plaza WED', squareLocationId: 'L78MSVC4MFJST' },
+      { name: 'RIVIAN POP UP', squareLocationId: 'L934EX29KM5TS' },
+      { name: 'Robinhood Popup', squareLocationId: 'LE8CK998J8CE0' },
+      { name: 'SA SAT', squareLocationId: 'LV3G1XNKREQKJ' },
+      { name: 'SA WED', squareLocationId: 'L9Y2PHNHMWJ0D' },
+      { name: 'SANTA CLARA MED WED', squareLocationId: 'LBN76CE4AFEWJ' },
+      { name: 'SANTANA WED', squareLocationId: 'L4PVF85BZGKCZ' },
+      { name: 'SMA FRI', squareLocationId: 'L8RDK77VB1R5T' },
+      { name: 'STANFORD FRI', squareLocationId: 'LTPRXKKB4QF8Z' },
+      { name: 'STANFORD TUE', squareLocationId: 'L04P7NWEC60FT' },
+      { name: 'UNION CITY SAT', squareLocationId: 'L23WK9D7PYR60' },
+      { name: 'VISA HQ', squareLocationId: 'L8YRHJD7NVF4Q' },
+      { name: 'WILLOW GLEN SAT', squareLocationId: 'LY2WJ3DKXHV97' },
+      { name: 'Workday Popup', squareLocationId: 'LS5GSMM35XAAV' },
+    ];
+    const WASTE_LOCATIONS = [...WASTE_STORE_LOCATIONS, ...WASTE_MARKET_LOCATIONS];
+
+    // Fetch ALL orders from all locations (no page cap, just fetch until cursor is null)
+    const allOrders = [];
+    let completedLocations = 0;
+
+    const locationFetches = WASTE_LOCATIONS.map(async (location) => {
+      let cursor = null;
+      let page = 0;
+      const locationOrders = [];
+
+      try {
+        while (true) {
+          const req_body = {
+            location_ids: [location.squareLocationId],
+            limit: 250,
+            sort_order: 'DESC',
+            query: {
+              filter: {
+                state_filter: { states: ['COMPLETED'] },
+                date_time_filter: {
+                  closed_at: {
+                    start_at: beginTime,
+                    end_at: endTime,
+                  },
+                },
+              },
+            },
+          };
+          if (cursor) req_body.query.cursor = cursor;
+
+          const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, req_body, {
+            headers: {
+              Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 8000,
+          });
+
+          const orders = response.data.orders || [];
+          for (const order of orders) {
+            for (const line of order.line_items || []) {
+              locationOrders.push({
+                itemName: line.name || 'Unknown',
+                quantity: line.quantity ? parseInt(line.quantity) : 1,
+                grossSales: Math.round((line.gross_sales_money?.amount || 0) / 100 * 100) / 100,
+              });
+            }
+          }
+
+          cursor = response.data.cursor;
+          page++;
+          if (!cursor) break;
+        }
+      } catch (e) {
+        console.warn(`⚠️ Location ${location.name}: ${e.message}`);
+      }
+      completedLocations++;
+      return locationOrders;
+    });
+
+    const results = await Promise.allSettled(locationFetches);
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        allOrders.push(...result.value);
+      }
+    }
+
+    // Aggregate by item name
+    const itemMap = {};
+    for (const order of allOrders) {
+      if (!itemMap[order.itemName]) {
+        itemMap[order.itemName] = { quantity: 0, revenue: 0 };
+      }
+      itemMap[order.itemName].quantity += order.quantity;
+      itemMap[order.itemName].revenue += order.grossSales;
+    }
+
+    // Format products
+    const formattedProducts = Object.entries(itemMap)
+      .map(([name, data]) => ({
+        name: name,
+        revenue: Math.round(data.revenue * 100) / 100,
+        quantity: data.quantity,
+        price: data.quantity > 0 ? Math.round((data.revenue / data.quantity) * 100) / 100 : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const totalRevenue = formattedProducts.reduce((sum, p) => sum + p.revenue, 0);
+    const totalUnits = formattedProducts.reduce((sum, p) => sum + p.quantity, 0);
+
+    res.json({
+      dateRange: `${beginTime} to ${endTime}`,
+      fetchedAt: new Date().toISOString(),
+      ordersProcessed: allOrders.length,
+      locationsQueried: completedLocations,
+      summary: {
+        total_units: totalUnits,
+        total_revenue: Math.round(totalRevenue * 100) / 100,
+      },
+      top20: formattedProducts.slice(0, 20),
+      note: 'LIVE data from Square orders API - ALL locations, COMPLETE data (no pagination cap)',
+    });
+  } catch (e) {
+    console.error('Bakery margins error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Start server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
