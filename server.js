@@ -4,76 +4,25 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
 const path = require('path');
-const { Readable } = require('stream');
 const axios = require('axios');
-const cron = require('node-cron');
 require('dotenv').config();
 
-const qbClient = require('./pipeline/qb-client');
-const qbCache = require('./pipeline/qb-cache');
-const claudeMCP = require('./pipeline/claude-mcp');
-const composioConnectors = require('./pipeline/composio-connectors');
-const marginSchedulerModule = require('./pipeline/margin-scheduler');
-const ingredientSchedulerModule = require('./pipeline/ingredient-scheduler');
-const { fetchProductionData } = require('./pipeline/google-drive-production');
-
-let marginScheduler = null;
-let ingredientScheduler = null;
-
-// Safe lazy-load of initMargins
-const initMargins = async () => {
-  try {
-    const { initMargins: fn } = require('./pipeline/init-margins');
-    return await fn();
-  } catch (e) {
-    console.warn('initMargins unavailable:', e.message);
-  }
-};
+const SheetsIngestor = require('./sheets-ingest');
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ dest: 'uploads/' });
 
 app.use(cors());
 app.use(express.json());
 
-// Data storage paths (use absolute path to work correctly on Railway)
-const DATA_DIR = path.join(__dirname, 'data');
-try {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-} catch (e) {
-  // Ignore errors - directory may already exist or be read-only
-}
-
-// If DATA_DIR is backed by a persistent volume (e.g. Railway), a fresh/empty volume shadows
-// whatever git-tracked files used to live at this path in the image (data/monthly-financial.json
-// is committed to git specifically so it survives redeploys, but a volume mount replaces the whole
-// directory's content on first attach). Restore it from the repo-tracked seed copy if missing.
-const MONTHLY_FINANCIAL_FILE = path.join(DATA_DIR, 'monthly-financial.json');
-const MONTHLY_FINANCIAL_SEED = 'seed-data/monthly-financial.json';
-if (!fs.existsSync(MONTHLY_FINANCIAL_FILE) && fs.existsSync(MONTHLY_FINANCIAL_SEED)) {
-  try {
-    fs.copyFileSync(MONTHLY_FINANCIAL_SEED, MONTHLY_FINANCIAL_FILE);
-  } catch (e) {
-    // Ignore errors - file may already exist or directory may be read-only
-  }
-}
+// Data storage paths
+const DATA_DIR = 'data';
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
 const RECIPES_FILE = path.join(DATA_DIR, 'recipes.json');
 const INGREDIENTS_FILE = path.join(DATA_DIR, 'ingredients.json');
 const FINANCIAL_FILE = path.join(DATA_DIR, 'financial.json');
 const PRODUCTION_FILE = path.join(DATA_DIR, 'production.json');
-
-// Same volume-shadowing concern as MONTHLY_FINANCIAL_FILE above - restore from the repo-tracked
-// seed copy if a fresh/empty data volume has shadowed it.
-const PL_CHANNEL_FILE = path.join(DATA_DIR, 'pl-by-channel.json');
-const PL_CHANNEL_SEED = 'seed-data/pl-by-channel.json';
-if (!fs.existsSync(PL_CHANNEL_FILE) && fs.existsSync(PL_CHANNEL_SEED)) {
-  try {
-    fs.copyFileSync(PL_CHANNEL_SEED, PL_CHANNEL_FILE);
-  } catch (e) {
-    // Ignore errors - file may already exist or directory may be read-only
-  }
-}
 
 // Maps the bakery's named channels (as used elsewhere in the dashboard, e.g. P&L by Channel)
 // to Square location IDs, so uploaded production CSVs can be compared against Square's
@@ -184,10 +133,6 @@ class CacheManager {
     }
   }
 
-  invalidatePrefix(prefix) {
-    [...this.cache.keys()].filter((key) => key.startsWith(prefix)).forEach((key) => this.invalidate(key));
-  }
-
   status() {
     const entries = [];
     this.cache.forEach((entry, key) => {
@@ -228,14 +173,6 @@ const loadProduction = () => {
   }
 };
 
-// Helper: Load pl-by-channel.json ({ channels, markets, revenueAllocation }, each populated
-// independently by its own /api/upload/pl-channel/* endpoint)
-const loadPLChannelData = () => {
-  const data = loadData(PL_CHANNEL_FILE);
-  return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
-};
-const savePLChannelData = (data) => saveData(PL_CHANNEL_FILE, data);
-
 // ============= UPLOAD ENDPOINTS =============
 
 // Upload recipes CSV
@@ -243,15 +180,17 @@ app.post('/api/upload/recipes', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const recipes = [];
-  Readable.from([req.file.buffer])
+  fs.createReadStream(req.file.path)
     .pipe(csv())
     .on('data', (row) => recipes.push(row))
     .on('end', () => {
       saveData(RECIPES_FILE, recipes);
+      fs.unlinkSync(req.file.path);
       cacheManager.invalidate('recipes');
       res.json({ success: true, count: recipes.length, recipes });
     })
     .on('error', (err) => {
+      fs.unlinkSync(req.file.path);
       res.status(400).json({ error: err.message });
     });
 });
@@ -261,22 +200,22 @@ app.post('/api/upload/ingredients', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const ingredients = [];
-  Readable.from([req.file.buffer])
+  fs.createReadStream(req.file.path)
     .pipe(csv())
     .on('data', (row) => ingredients.push(row))
     .on('end', () => {
       saveData(INGREDIENTS_FILE, ingredients);
+      fs.unlinkSync(req.file.path);
       cacheManager.invalidate('ingredients');
       res.json({ success: true, count: ingredients.length, ingredients });
     })
     .on('error', (err) => {
+      fs.unlinkSync(req.file.path);
       res.status(400).json({ error: err.message });
     });
 });
 
-// Upload production CSV for one location (columns: Date, Item, Quantity Produced, and an optional
-// Ordered column - how many of that item were ordered from the kitchen, when tracked separately
-// from what was actually produced/received).
+// Upload production CSV for one location (columns: Date, Item, Quantity Produced).
 // Merges into that location's existing rows in data/production.json by date: dates present in
 // this upload replace whatever was on file for those dates (so re-uploading a corrected day is
 // clean); other dates and other locations are left untouched. This lets weekly production sheets
@@ -286,19 +225,19 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
 
   const location = req.body.location;
   if (!WASTE_LOCATIONS.some((l) => l.name === location)) {
+    fs.unlinkSync(req.file.path);
     return res.status(400).json({ error: `Unknown location "${location}". Expected one of: ${WASTE_LOCATIONS.map((l) => l.name).join(', ')}` });
   }
 
   const rows = [];
-  Readable.from([req.file.buffer])
+  fs.createReadStream(req.file.path)
     .pipe(csv())
     .on('data', (row) => {
       const date = (row['Date'] || '').trim();
       const item = (row['Item'] || '').trim();
       const quantityProduced = parseFloat(row['Quantity Produced']);
-      const ordered = parseFloat(row['Ordered']);
       if (date && item && Number.isFinite(quantityProduced)) {
-        rows.push({ date, item, quantityProduced, ordered: Number.isFinite(ordered) ? ordered : null });
+        rows.push({ date, item, quantityProduced });
       }
     })
     .on('end', () => {
@@ -307,236 +246,98 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
       const newDates = new Set(rows.map((r) => r.date));
       production[location] = existing.filter((r) => !newDates.has(r.date)).concat(rows);
       saveData(PRODUCTION_FILE, production);
+      fs.unlinkSync(req.file.path);
       cacheManager.invalidate(`waste_${location}`);
       res.json({ success: true, location, count: rows.length, totalRows: production[location].length });
     })
     .on('error', (err) => {
+      fs.unlinkSync(req.file.path);
       res.status(400).json({ error: err.message });
     });
 });
 
-// Refresh production data from Google Drive (Little Sky Production folder)
-app.post('/api/refresh-production-from-drive', async (req, res) => {
+// ============= GOOGLE SHEETS SYNC =============
+
+app.get('/api/sheets/auth', async (req, res) => {
   try {
-    const production = await fetchProductionData();
+    const ingestor = new SheetsIngestor();
+    const authUrl = ingestor.getAuthUrl();
+    res.json({
+      message: 'Open this URL in your browser to authenticate',
+      authUrl
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    // Merge with existing production data (don't overwrite other locations/dates)
-    const existing = loadProduction();
-    const merged = { ...existing };
-
-    for (const location in production) {
-      const existingRows = merged[location] || [];
-      const newDates = new Set(production[location].map(r => r.date));
-      // Replace dates from Drive, keep other dates
-      merged[location] = existingRows.filter(r => !newDates.has(r.date)).concat(production[location]);
+app.get('/api/google/callback', async (req, res) => {
+  try {
+    const code = req.query.code;
+    if (!code) {
+      return res.status(400).json({ error: 'No authorization code provided' });
     }
 
-    saveData(PRODUCTION_FILE, merged);
+    const ingestor = new SheetsIngestor();
+    const tokens = await ingestor.exchangeCodeForToken(code);
 
-    // Invalidate cache for all locations
-    for (const loc of WASTE_LOCATIONS) {
+    res.json({
+      success: true,
+      message: 'Authentication successful! Token saved. You can now run /api/sheets/sync',
+      tokens: { access_token: tokens.access_token ? '***' : undefined }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to authenticate', message: err.message });
+  }
+});
+
+app.post('/api/sheets/sync', async (req, res) => {
+  try {
+    const ingestor = new SheetsIngestor();
+    console.log('Starting Google Sheets sync...');
+    const production = await ingestor.ingestProductionData();
+
+    // Flatten the data structure for storage (location -> [{ date, item, quantityProduced }])
+    const flatProduction = {};
+    for (const [location, rows] of Object.entries(production)) {
+      flatProduction[location] = rows;
+    }
+
+    saveData(PRODUCTION_FILE, flatProduction);
+
+    // Invalidate waste cache for all locations
+    WASTE_LOCATIONS.forEach((loc) => {
       cacheManager.invalidate(`waste_${loc.name}`);
-    }
-
-    const totalRows = Object.values(merged).reduce((sum, arr) => sum + arr.length, 0);
-    res.json({ success: true, message: 'Production data refreshed from Google Drive', totalRows });
-  } catch (err) {
-    if (err.code === 'GOOGLE_NOT_CONNECTED') {
-      return res.status(401).json({ error: 'Google Drive not connected. Authorize at /api/google/connect first.' });
-    }
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// ============= P&L BY CHANNEL UPLOADS =============
-// Ingests three Google Sheet exports from the bakery's "Market Performance" workbook (Market
-// Analysis, Non Market Channels, Revenue Allocation). Each sheet has its own fixed multi-row title/
-// subtotal header - there's no single header line csv-parser can key off of - so rows are read
-// positionally (headers: false) and sliced past the known preamble instead of matched by column
-// name. Every number is stored exactly as the sheet reports it; nothing here is recomputed.
-// Each upload fully replaces its own slice of data/pl-by-channel.json (these are point-in-time
-// snapshots re-exported periodically, not append-by-date logs like production.json).
-
-const parseMoney = (v) => {
-  if (v == null) return null;
-  const n = parseFloat(String(v).replace(/[$,]/g, ''));
-  return Number.isFinite(n) ? n : null;
-};
-const parsePct = (v) => {
-  if (v == null) return null;
-  const n = parseFloat(String(v).replace(/[%,]/g, ''));
-  return Number.isFinite(n) ? n : null;
-};
-const parseNum = (v) => {
-  if (v == null) return null;
-  const n = parseFloat(String(v).replace(/,/g, ''));
-  return Number.isFinite(n) ? n : null;
-};
-
-// The Non Market Channels / Revenue Allocation sheets name a few channels differently than the rest
-// of the dashboard (WASTE_STORE_LOCATIONS, LOCATION_CHANNELS) - normalize to the shared names.
-const PL_CHANNEL_NAME_ALIASES = {
-  'Arc Institute': 'ARC',
-  Arc: 'ARC',
-  'State St.': 'State St',
-  'LSB (506)': '506 Retail',
-  'Retail 506': '506 Retail',
-  Delivery: 'Delivery 506',
-};
-const normalizePLChannelName = (raw) => {
-  const trimmed = (raw || '').trim();
-  return PL_CHANNEL_NAME_ALIASES[trimmed] || trimmed;
-};
-
-// Read a CSV positionally (no header row) - returns an array of rows, each an array of cell strings.
-const readCsvRowsPositional = (filePathOrBuffer) => new Promise((resolve, reject) => {
-  const rows = [];
-  const stream = typeof filePathOrBuffer === 'string'
-    ? fs.createReadStream(filePathOrBuffer)
-    : Readable.from([filePathOrBuffer]);
-  stream
-    .pipe(csv({ headers: false }))
-    .on('data', (row) => rows.push(Object.keys(row).map((k) => row[k])))
-    .on('end', () => resolve(rows))
-    .on('error', reject);
-});
-
-// POST /api/upload/pl-channel/market-analysis
-// "Market Analysis" sheet: per-market performance underlying the Markets channel - one row per
-// farmers market/pop-up (e.g. "FM SF SUN"), kept separate rather than rolled up so each market's
-// contribution can be inspected on its own. First 4 rows are title/subtotal/header text, not data.
-app.post('/api/upload/pl-channel/market-analysis', upload.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  try {
-    const rows = await readCsvRowsPositional(req.file.buffer);
-    const markets = rows.slice(4)
-      .filter((r) => (r[0] || '').trim())
-      .map((r) => ({
-        name: r[0].trim(),
-        avgWeeklyRevenue: parseMoney(r[1]),
-        avgTicket: parseMoney(r[2]),
-        avgTickets: parseNum(r[3]),
-        sellers: parseNum(r[4]),
-        drivers: parseNum(r[5]),
-        costs: {
-          seller: parseMoney(r[6]),
-          driver: parseMoney(r[7]),
-          vehicle: parseMoney(r[8]),
-          fees: parseMoney(r[9]),
-          overhead: parseMoney(r[10]),
-          total: parseMoney(r[11]),
-        },
-        contribution: parseMoney(r[12]),
-        contributionPct: parsePct(r[13]),
-        share: parsePct(r[15]),
-        boLaborAllocated: parseMoney(r[16]),
-        adjustedContribution: parseMoney(r[18]),
-        adjustedContributionPct: parsePct(r[19]),
-        annualized: parseMoney(r[21]),
-        aspiration: parseMoney(r[23]),
-        // The sheet's header row only labels 2 columns here ("Aspiration", "Upside/Downside") but
-        // every data row carries 3 trailing values after Annualized - r[24] is a small round-dollar
-        // figure (e.g. $500, $2,000) that reads as a per-market planned weekly increase, distinct
-        // from both Aspiration (r[23]) and the large annualized Upside/Downside figure (r[25]).
-        // Kept uninterpreted since the sheet never names it.
-        weeklyIncreaseTarget: parseMoney(r[24]),
-        upsideDownside: parseMoney(r[25]),
-      }));
-
-    const data = loadPLChannelData();
-    data.markets = markets;
-    data.marketsUpdatedAt = new Date().toISOString();
-    savePLChannelData(data);
-    res.json({ success: true, count: markets.length });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// POST /api/upload/pl-channel/non-market
-// "Non Market Channels" sheet: named channels other than the farmers markets (Arc, State St, LSK,
-// Retail 506, Delivery, Catering), plus a Bakery/Other sub-split of LSK. First 4 rows are title/
-// subtotal/header text, not data.
-app.post('/api/upload/pl-channel/non-market', upload.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  try {
-    const rows = await readCsvRowsPositional(req.file.buffer);
-    const parseChannelRow = (r) => ({
-      name: normalizePLChannelName(r[0]),
-      avgWeeklyRevenue: parseMoney(r[1]),
-      avgTicket: parseMoney(r[2]),
-      avgTickets: parseNum(r[3]),
-      sellers: parseNum(r[4]),
-      drivers: parseNum(r[5]),
-      costs: {
-        seller: parseMoney(r[6]),
-        driver: parseMoney(r[7]),
-        vehicle: parseMoney(r[8]),
-        fees: parseMoney(r[9]),
-        prep: parseMoney(r[10]),
-        overhead: parseMoney(r[11]),
-        total: parseMoney(r[12]),
-      },
-      contribution: parseMoney(r[13]),
-      contributionPct: parsePct(r[14]),
-      boLaborAllocated: parseMoney(r[16]),
-      adjustedContribution: parseMoney(r[18]),
-      adjustedContributionPct: parsePct(r[19]),
-      annualized: parseMoney(r[21]),
     });
 
-    const dataRows = rows.slice(4).filter((r) => (r[0] || '').trim());
-    const subSplitNames = ['LSK - Bakery', 'LSK - Other'];
-    const channels = dataRows.filter((r) => !subSplitNames.includes(r[0].trim())).map(parseChannelRow);
-    const lskSubChannels = dataRows
-      .filter((r) => subSplitNames.includes(r[0].trim()))
-      .map((r) => ({ ...parseChannelRow(r), name: r[0].trim() }));
+    const totalRows = Object.values(flatProduction).reduce((sum, rows) => sum + rows.length, 0);
+    console.log(`Sync complete: ${totalRows} total rows across ${Object.keys(flatProduction).length} locations`);
 
-    const lsk = channels.find((c) => c.name === 'LSK');
-    if (lsk && lskSubChannels.length) lsk.subChannels = lskSubChannels;
-
-    const data = loadPLChannelData();
-    data.channels = channels;
-    data.channelsUpdatedAt = new Date().toISOString();
-    savePLChannelData(data);
-    res.json({ success: true, count: channels.length });
+    res.json({
+      success: true,
+      message: 'Production data synced from Google Sheets',
+      totalRows,
+      locations: Object.keys(flatProduction).length
+    });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Sheets sync error:', err);
+    res.status(500).json({
+      error: 'Failed to sync from Google Sheets',
+      message: err.message
+    });
   }
 });
 
-// POST /api/upload/pl-channel/revenue-allocation
-// "Revenue Allocation" sheet: trailing-12-months revenue and % share by channel (Markets is the
-// combined total of every row in the Market Analysis sheet), for the top-of-tab summary. No fixed
-// header row - data rows are wherever column 1 (name) is populated with a parseable revenue figure
-// in column 2 (excludes the sheet's "Last 12 Months" section-label row, which names a column but
-// carries no value).
-app.post('/api/upload/pl-channel/revenue-allocation', upload.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+app.get('/api/sheets/auth-status', async (req, res) => {
   try {
-    const rows = await readCsvRowsPositional(req.file.buffer);
-    const named = rows.filter((r) => (r[1] || '').trim() && parseMoney(r[2]) != null);
-    const totalRow = named.find((r) => r[1].trim() === 'Total');
-    const byChannel = named
-      .filter((r) => r[1].trim() !== 'Total')
-      .map((r) => ({
-        name: normalizePLChannelName(r[1]),
-        revenue: parseMoney(r[2]),
-        pctShare: parsePct(r[3]),
-        avgWeeklyRevenue: parseMoney(r[5]),
-      }));
-
-    const data = loadPLChannelData();
-    data.revenueAllocation = {
-      periodLabel: 'Last 12 Months',
-      totalRevenue: totalRow ? parseMoney(totalRow[2]) : null,
-      byChannel,
-    };
-    data.revenueAllocationUpdatedAt = new Date().toISOString();
-    savePLChannelData(data);
-    res.json({ success: true, count: byChannel.length });
+    const tokenPath = path.join(__dirname, '.env.local.json');
+    const hasToken = fs.existsSync(tokenPath);
+    res.json({
+      authenticated: hasToken,
+      message: hasToken ? 'Authenticated with Google' : 'Not authenticated. Run /api/sheets/sync to authenticate.'
+    });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -604,14 +405,11 @@ const SQUARE_API_BASE = 'https://connect.squareup.com/v2';
 const SQUARE_API_VERSION = '2026-07-01';
 const DOW_INDEX = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
 
-const squareHeaders = () => {
-  const token = process.env.SQUARE_ACCESS_TOKEN || '';
-  return {
-    Authorization: `Bearer ${token}`,
-    'Square-Version': SQUARE_API_VERSION,
-    'Content-Type': 'application/json',
-  };
-};
+const squareHeaders = () => ({
+  Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+  'Square-Version': SQUARE_API_VERSION,
+  'Content-Type': 'application/json',
+});
 
 const addDays = (dateStr, n) => {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -628,121 +426,40 @@ const getWeekStart = (dateStr, startDow) => {
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
-// Earliest date the overtime report should show, per business preference.
-const OVERTIME_HISTORY_START = '2025-01-01';
-
 const OVERTIME_SNAPSHOT_FILE = path.join(DATA_DIR, 'overtime-snapshot.json');
-const loadOvertimeSnapshot = () => {
-  const data = loadData(OVERTIME_SNAPSHOT_FILE);
-  return Array.isArray(data?.weeks) ? data : null;
-};
-const saveOvertimeSnapshot = (snapshot) => saveData(OVERTIME_SNAPSHOT_FILE, snapshot);
+const loadOvertimeSnapshot = () => loadData(OVERTIME_SNAPSHOT_FILE);
 
 const fetchWorkweekStartDow = async () => {
-  try {
-    // Try Composio first if configured
-    if (process.env.COMPOSIO_API_KEY) {
-      const connStatus = composioConnectors.getConnectionStatus();
-      if (connStatus.square) {
-        // Use Composio to call Square
-        const client = await composioConnectors.initComposio();
-        const connectionId = await composioConnectors.getSquareConnection();
-        const result = await client.executeAction({
-          connectionId,
-          action: 'square_get_labor_workweek_configs',
-        });
-        const config = result?.workweek_configs?.[0];
-        return DOW_INDEX[config?.start_of_week] ?? 1;
-      }
-    }
-    // Fallback to direct API
-    const response = await axios.get(`${SQUARE_API_BASE}/labor/workweek-configs`, { headers: squareHeaders() });
-    const config = response.data.workweek_configs?.[0];
-    return DOW_INDEX[config?.start_of_week] ?? 1;
-  } catch (err) {
-    console.warn('Failed to fetch workweek config:', err.message);
-    return 1; // default to Monday
-  }
+  const response = await axios.get(`${SQUARE_API_BASE}/labor/workweek-configs`, { headers: squareHeaders() });
+  const config = response.data.workweek_configs?.[0];
+  return DOW_INDEX[config?.start_of_week] ?? 1; // default Monday
 };
 
-// Fetch every CLOSED timecard whose shift starts within [startDate, endDateExclusive) for one window
-const fetchTimecardsWindow = async (startDate, endDateExclusive) => {
+// Fetch every CLOSED timecard whose shift starts within [startDate, endDateExclusive), all locations
+const fetchAllTimecards = async (startDate, endDateExclusive) => {
   const timecards = [];
   let cursor;
   let page = 0;
   do {
-    try {
-      // Try Composio first if configured
-      let response;
-      if (process.env.COMPOSIO_API_KEY) {
-        const connStatus = composioConnectors.getConnectionStatus();
-        if (connStatus.square) {
-          const client = await composioConnectors.initComposio();
-          const connectionId = await composioConnectors.getSquareConnection();
-          response = { data: await client.executeAction({
-            connectionId,
-            action: 'square_search_timecards',
-            parameters: {
-              start_at: `${startDate}T00:00:00Z`,
-              end_at: `${endDateExclusive}T00:00:00Z`,
-              status: 'CLOSED',
-              limit: 200,
-              cursor,
-            },
-          }) };
-        }
-      }
-      // Fallback to direct API
-      if (!response) {
-        response = await axios.post(
-          `${SQUARE_API_BASE}/labor/timecards/search`,
-          {
-            query: {
-              filter: {
-                start: { start_at: `${startDate}T00:00:00Z`, end_at: `${endDateExclusive}T00:00:00Z` },
-                status: 'CLOSED',
-              },
-            },
-            limit: 200,
-            cursor,
+    const response = await axios.post(
+      `${SQUARE_API_BASE}/labor/timecards/search`,
+      {
+        query: {
+          filter: {
+            start: { start_at: `${startDate}T00:00:00Z`, end_at: `${endDateExclusive}T00:00:00Z` },
+            status: 'CLOSED',
           },
-          { headers: squareHeaders() }
-        );
-      }
-      timecards.push(...(response.data.timecards || []));
-      cursor = response.data.cursor;
-      page += 1;
-    } catch (err) {
-      console.warn(`Timecard fetch failed on page ${page}:`, err.message);
-      break;
-    }
+        },
+        limit: 200,
+        cursor,
+      },
+      { headers: squareHeaders() }
+    );
+    timecards.push(...(response.data.timecards || []));
+    cursor = response.data.cursor;
+    page += 1;
   } while (cursor && page < 50);
   return timecards;
-};
-
-// Fetch every CLOSED timecard whose shift starts within [startDate, endDateExclusive), all locations.
-// Square returns timecards newest-first, and each window's search is itself capped at 50 pages
-// (10,000 timecards) as a safety valve - with ~50 active locations, a multi-year range can exceed
-// that in one shot and silently truncate before reaching the oldest requested dates. Splitting the
-// range into 28-day windows (fetched with limited concurrency) keeps each window's own result set
-// far below that cap regardless of how many locations or how wide the requested range is.
-const fetchAllTimecards = async (startDate, endDateExclusive) => {
-  const windows = [];
-  let windowStart = startDate;
-  while (windowStart < endDateExclusive) {
-    const windowEnd = addDays(windowStart, 28) < endDateExclusive ? addDays(windowStart, 28) : endDateExclusive;
-    windows.push([windowStart, windowEnd]);
-    windowStart = windowEnd;
-  }
-
-  const CONCURRENCY = 5;
-  const results = [];
-  for (let i = 0; i < windows.length; i += CONCURRENCY) {
-    const batch = windows.slice(i, i + CONCURRENCY);
-    const batchResults = await Promise.all(batch.map(([s, e]) => fetchTimecardsWindow(s, e)));
-    results.push(...batchResults);
-  }
-  return results.flat();
 };
 
 // Fetch team member id -> display name map
@@ -751,36 +468,16 @@ const fetchTeamMemberNames = async () => {
   let cursor;
   let page = 0;
   do {
-    try {
-      let response;
-      if (process.env.COMPOSIO_API_KEY) {
-        const connStatus = composioConnectors.getConnectionStatus();
-        if (connStatus.square) {
-          const client = await composioConnectors.initComposio();
-          const connectionId = await composioConnectors.getSquareConnection();
-          response = { data: await client.executeAction({
-            connectionId,
-            action: 'square_search_team_members',
-            parameters: { limit: 200, cursor },
-          }) };
-        }
-      }
-      if (!response) {
-        response = await axios.post(
-          `${SQUARE_API_BASE}/team-members/search`,
-          { limit: 200, cursor },
-          { headers: squareHeaders() }
-        );
-      }
-      (response.data.team_members || []).forEach((tm) => {
-        names[tm.id] = [tm.given_name, tm.family_name].filter(Boolean).join(' ') || tm.id;
-      });
-      cursor = response.data.cursor;
-      page += 1;
-    } catch (err) {
-      console.warn(`Team member fetch failed on page ${page}:`, err.message);
-      break;
-    }
+    const response = await axios.post(
+      `${SQUARE_API_BASE}/team-members/search`,
+      { limit: 200, cursor },
+      { headers: squareHeaders() }
+    );
+    (response.data.team_members || []).forEach((tm) => {
+      names[tm.id] = [tm.given_name, tm.family_name].filter(Boolean).join(' ') || tm.id;
+    });
+    cursor = response.data.cursor;
+    page += 1;
   } while (cursor && page < 50);
   return names;
 };
@@ -936,61 +633,13 @@ const buildOvertimeReport = (timecards, teamNames, startDow) => {
   });
 };
 
-// Fetch + build one week-by-week overtime report straight from Square, no snapshot involved.
-// The result is written to disk (data/overtime-snapshot.json, git-tracked) and kept indefinitely, so
-// named per-employee wage detail is stripped here - unlike the live report, which keeps it so the
-// dashboard can still surface "who's accumulating OT this week" for the current, unsnapshotted range.
-const buildOvertimeSnapshot = async (startDate, endDateExclusive) => {
-  const [startDow, timecards, teamNames] = await Promise.all([
-    fetchWorkweekStartDow(),
-    fetchAllTimecards(startDate, endDateExclusive),
-    fetchTeamMemberNames(),
-  ]);
-  const weeks = buildOvertimeReport(timecards, teamNames, startDow).map((week) => ({
-    ...week,
-    functions: week.functions.map((fn) => ({ ...fn, employees: [] })),
-  }));
-  return {
-    success: true,
-    weeks,
-    rangeStart: startDate,
-    rangeEnd: endDateExclusive,
-    generatedAt: new Date().toISOString(),
-    employeeDetail: false,
-  };
-};
-
-// POST /api/overtime/snapshot/rebuild?start=YYYY-MM-DD&end=YYYY-MM-DD
-// Rebuilds the cached historical overtime snapshot (data/overtime-snapshot.json) from Square.
-// `end` defaults to the first of the current month, so the snapshot only ever covers fully-closed
-// months - /api/overtime layers the current, still-open month on top of it live at request time,
-// instead of re-fetching years of Square timecards on every request.
-app.post('/api/overtime/snapshot/rebuild', async (req, res) => {
-  if (!process.env.COMPOSIO_API_KEY && !process.env.SQUARE_ACCESS_TOKEN) {
-    return res.status(400).json({ error: 'Square API credentials not configured' });
-  }
-
-  const startDate = req.query.start || OVERTIME_HISTORY_START;
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const endDateExclusive = req.query.end || `${todayStr.slice(0, 7)}-01`;
-
-  try {
-    const snapshot = await buildOvertimeSnapshot(startDate, endDateExclusive);
-    saveOvertimeSnapshot(snapshot);
-    cacheManager.invalidatePrefix('overtime_');
-    res.json({ success: true, rangeStart: snapshot.rangeStart, rangeEnd: snapshot.rangeEnd, weekCount: snapshot.weeks.length });
-  } catch (err) {
-    res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message });
-  }
-});
-
 // GET /api/overtime?weeks=8&end=YYYY-MM-DD
 // `end` is the Monday (workweek start) of the most recent week to include; defaults to
 // the most recently completed workweek. `weeks` is how many workweeks back to include.
-// Weeks covered by the cached snapshot (data/overtime-snapshot.json) are served from disk;
-// only the remaining, more recent slice is fetched live from Square. Cached for 24 hours per query.
+// Cached for 24 hours per query.
 app.get('/api/overtime', async (req, res) => {
-  if (!process.env.COMPOSIO_API_KEY && !process.env.SQUARE_ACCESS_TOKEN) {
+  const token = process.env.SQUARE_ACCESS_TOKEN;
+  if (!token || token === 'your_square_token_here') {
     return res.status(400).json({ error: 'Square API credentials not configured', weeks: [] });
   }
 
@@ -1011,44 +660,15 @@ app.get('/api/overtime', async (req, res) => {
     const defaultLastCompletedWeekStart = addDays(currentWeekStart, -7);
     const lastWeekStart = req.query.end || defaultLastCompletedWeekStart;
 
-    let rangeStart = addDays(lastWeekStart, -7 * (weekCount - 1));
-    if (rangeStart < OVERTIME_HISTORY_START) rangeStart = OVERTIME_HISTORY_START;
+    const rangeStart = addDays(lastWeekStart, -7 * (weekCount - 1));
     const rangeEndExclusive = addDays(lastWeekStart, 7);
 
-    const snapshot = loadOvertimeSnapshot();
-    const weekByStart = new Map();
-    if (snapshot) {
-      snapshot.weeks.forEach((w) => {
-        if (w.weekStart >= rangeStart && w.weekStart < rangeEndExclusive) weekByStart.set(w.weekStart, w);
-      });
-    }
+    const [timecards, teamNames] = await Promise.all([
+      fetchAllTimecards(rangeStart, rangeEndExclusive),
+      fetchTeamMemberNames(),
+    ]);
 
-    // Re-fetch the last cached week (plus one extra week of buffer) live rather than trusting the
-    // snapshot's raw calendar-date boundary. Square's start_at filter matches on UTC instant, but
-    // weeks are grouped by each timecard's location-local calendar date, so a shift starting just
-    // after local midnight-Monday can still land on the "wrong" side of a same-instant UTC split -
-    // getting fetched (and counted) by both the snapshot and the live query. Re-fetching a full extra
-    // week and letting the live result overwrite the cached one for that key sidesteps that entirely.
-    let liveFetchStart = rangeStart;
-    if (snapshot?.rangeEnd && snapshot.rangeEnd > rangeStart) {
-      liveFetchStart = addDays(getWeekStart(snapshot.rangeEnd, startDow), -7);
-      if (liveFetchStart < rangeStart) liveFetchStart = rangeStart;
-    }
-
-    if (liveFetchStart < rangeEndExclusive) {
-      const [timecards, teamNames] = await Promise.all([
-        fetchAllTimecards(liveFetchStart, rangeEndExclusive),
-        fetchTeamMemberNames(),
-      ]);
-      // The same UTC/local mismatch can leak a stray pre-liveFetchStart shift into this fetch too,
-      // producing an incomplete entry for the week just before the intended live window. Only trust
-      // weeks that started at or after liveFetchStart itself - anything earlier stays on the cache.
-      buildOvertimeReport(timecards, teamNames, startDow)
-        .filter((w) => w.weekStart >= liveFetchStart)
-        .forEach((w) => weekByStart.set(w.weekStart, w));
-    }
-
-    const weeks = [...weekByStart.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+    const weeks = buildOvertimeReport(timecards, teamNames, startDow);
     const response = { success: true, weeks, rangeStart, rangeEnd: addDays(rangeEndExclusive, -1), employeeDetail: true };
     cacheManager.set(cacheKey, response, 24 * 60 * 60 * 1000); // Cache for 24 hours
     res.json(response);
@@ -1063,68 +683,58 @@ app.get('/api/overtime', async (req, res) => {
 
 // ============= QUICKBOOKS OAUTH 2.0 =============
 
+const QB_TOKENS_FILE = path.join(DATA_DIR, 'quickbooks-tokens.json');
 const QB_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2';
+const QB_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 
-let qbRefreshJobsStarted = false;
+const getQBBaseUrl = () =>
+  process.env.QUICKBOOKS_ENVIRONMENT === 'sandbox'
+    ? 'https://sandbox-quickbooks.api.intuit.com'
+    : 'https://quickbooks.api.intuit.com';
 
-// Start QB auto-refresh jobs (called on startup and after auth)
-const startQBRefreshJobs = () => {
-  if (qbRefreshJobsStarted) return; // Prevent duplicate jobs
-  qbRefreshJobsStarted = true;
-  console.log('🔄 Starting QB auto-refresh jobs...');
+const getQBRedirectUri = () =>
+  process.env.QUICKBOOKS_REDIRECT_URI || `http://localhost:${PORT}/api/quickbooks/callback`;
 
-  // Refresh cache every 30 minutes (auto-rotates tokens)
-  cron.schedule('*/30 * * * *', async () => {
-    console.log('🔄 Scheduled QB cache refresh...');
-    try {
-      await qbCache.refreshAllQBData();
-    } catch (err) {
-      console.error('QB cache refresh failed:', err.message);
-    }
-  });
+const qbBasicAuthHeader = () =>
+  `Basic ${Buffer.from(`${process.env.QUICKBOOKS_CLIENT_ID}:${process.env.QUICKBOOKS_CLIENT_SECRET}`).toString('base64')}`;
 
-  // Check token health daily (proactive monitoring)
-  cron.schedule('0 2 * * *', () => {
-    const health = qbCache.checkTokenHealth();
-    if (!health.healthy) {
-      console.warn(`⚠️  QB token health issue: ${health.reason}`, health);
-    } else {
-      console.log('✅ QB token health check passed');
-    }
-  });
-};
-
-const getQBRedirectUri = () => {
-  if (process.env.QUICKBOOKS_REDIRECT_URI) {
-    return process.env.QUICKBOOKS_REDIRECT_URI;
-  }
-  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/api/quickbooks/callback`;
-  }
-  return `http://localhost:${PORT}/api/quickbooks/callback`;
-};
-
-// Use qbClient for token loading (canonical source)
-const getValidQBAccessToken = async () => {
-  const composioStatus = composioConnectors.getConnectionStatus();
+const loadQBTokens = () => {
   try {
-    return await qbClient.getValidTokens();
-  } catch (err) {
-    if (err.code === 'QB_NOT_CONNECTED') {
-      let msg = 'QuickBooks not connected.';
-      if (composioStatus.quickbooks) {
-        msg += ' (Composio connected - use QB connector actions)';
-      } else if (process.env.COMPOSIO_API_KEY) {
-        msg += ' Authorize QB in your Composio workspace or visit /api/quickbooks/connect.';
-      } else {
-        msg += ' Visit /api/quickbooks/connect to authorize access.';
-      }
-      const authErr = new Error(msg);
-      authErr.code = 'QB_NOT_CONNECTED';
-      throw authErr;
-    }
+    return JSON.parse(fs.readFileSync(QB_TOKENS_FILE, 'utf-8'));
+  } catch {
+    return null;
+  }
+};
+
+const saveQBTokens = (tokens) => saveData(QB_TOKENS_FILE, tokens);
+
+// Returns a valid access token + realmId, refreshing if the access token has expired.
+// Throws if QuickBooks has never been connected.
+const getValidQBAccessToken = async () => {
+  const tokens = loadQBTokens();
+  if (!tokens || !tokens.refresh_token) {
+    const err = new Error('QuickBooks not connected. Visit /api/quickbooks/connect to authorize.');
+    err.code = 'QB_NOT_CONNECTED';
     throw err;
   }
+
+  const isExpired = !tokens.expires_at || Date.now() > tokens.expires_at - 60_000;
+  if (!isExpired) return tokens;
+
+  const response = await axios.post(
+    QB_TOKEN_URL,
+    new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokens.refresh_token }).toString(),
+    { headers: { Authorization: qbBasicAuthHeader(), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
+  );
+
+  const updated = {
+    ...tokens,
+    access_token: response.data.access_token,
+    refresh_token: response.data.refresh_token || tokens.refresh_token,
+    expires_at: Date.now() + response.data.expires_in * 1000,
+  };
+  saveQBTokens(updated);
+  return updated;
 };
 
 // Step 1: redirect the user to Intuit's consent screen
@@ -1137,287 +747,62 @@ app.get('/api/quickbooks/connect', (req, res) => {
     response_type: 'code',
     scope: 'com.intuit.quickbooks.accounting',
     redirect_uri: getQBRedirectUri(),
-    state: 'connect', // Plain marker for direct connection flow
+    state: Math.random().toString(36).slice(2),
   });
   res.redirect(`${QB_AUTH_URL}?${params.toString()}`);
 });
 
 // Step 2: Intuit redirects back here with a code + realmId
 app.get('/api/quickbooks/callback', async (req, res) => {
-  const { code, realmId, error, state } = req.query;
-  console.log('QB callback received:', { code: code ? '***' : null, realmId, error, state });
-
+  const { code, realmId, error } = req.query;
   if (error) return res.status(400).send(`QuickBooks authorization failed: ${error}`);
   if (!code || !realmId) return res.status(400).send('Missing code or realmId from QuickBooks');
 
   try {
-    console.log('Exchanging code for tokens...');
-    const tokens = await qbClient.exchangeCodeForTokens(code, realmId);
+    const response = await axios.post(
+      QB_TOKEN_URL,
+      new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: getQBRedirectUri() }).toString(),
+      { headers: { Authorization: qbBasicAuthHeader(), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
+    );
 
-    console.log('✅ QB token exchange successful, tokens saved to persistent storage');
-
-    // Also update env vars for this session
-    process.env.QUICKBOOKS_REFRESH_TOKEN = tokens.refresh_token;
-    process.env.QUICKBOOKS_REALM_ID = realmId;
-
-    // Clear any previous token errors
-    qbCache.clearTokenError();
-
-    // Start auto-refresh jobs if not already started
-    startQBRefreshJobs();
-
-    // Redirect back to where user was (or dashboard if no state)
-    let redirectTo = '/?qb=connected';
-    if (state && state !== 'connect' && state !== 'dashboard') {
-      try {
-        // State is base64-encoded URL from auto-reauth flow
-        console.log('Attempting to decode state:', state);
-        redirectTo = Buffer.from(decodeURIComponent(state), 'base64').toString('utf-8');
-        console.log('Decoded redirectTo:', redirectTo);
-      } catch (e) {
-        console.warn('Could not decode state parameter, using default redirect:', e.message);
-      }
-    }
-    console.log('✓ Redirecting to:', redirectTo);
-    res.redirect(redirectTo);
-  } catch (err) {
-    console.error('❌ QB token exchange failed:', {
-      status: err.response?.status,
-      data: err.response?.data,
-      message: err.message,
+    saveQBTokens({
+      access_token: response.data.access_token,
+      refresh_token: response.data.refresh_token,
+      expires_at: Date.now() + response.data.expires_in * 1000,
+      realmId,
+      connectedAt: new Date().toISOString(),
     });
+    res.redirect('/?qb=connected');
+  } catch (err) {
     res.status(500).send(`Failed to connect QuickBooks: ${err.response?.data?.error_description || err.message}`);
   }
 });
 
-// Automatic re-auth: Triggered when tokens need refresh
-// Checks token health and auto-initiates OAuth if needed
-app.get('/api/quickbooks/auto-reauth', (req, res) => {
-  const tokens = qbClient.loadTokens();
-  const tokenError = qbCache.getTokenError();
-  let redirectUrl = req.query.redirectUrl; // Where to redirect after re-auth
-
-  console.log('🔄 Auto re-auth check initiated');
-
-  // If there's a token error or no tokens, start OAuth flow
-  if (tokenError || !tokens || !tokens.refresh_token) {
-    console.log('❌ Token error detected, initiating OAuth flow...');
-    const params = new URLSearchParams({
-      client_id: process.env.QUICKBOOKS_CLIENT_ID,
-      response_type: 'code',
-      scope: 'com.intuit.quickbooks.accounting',
-      redirect_uri: getQBRedirectUri(),
-      state: redirectUrl || 'dashboard', // Pass through the redirectUrl as state
-    });
-    return res.redirect(`${QB_AUTH_URL}?${params.toString()}`);
-  }
-
-  // Tokens look good, clear any previous errors
-  qbCache.clearTokenError();
-
-  // Redirect back to original page or dashboard
-  let returnUrl = '/';
-  if (redirectUrl) {
-    try {
-      // redirectUrl is base64-encoded and URL-encoded
-      returnUrl = Buffer.from(decodeURIComponent(redirectUrl), 'base64').toString('utf-8');
-    } catch (e) {
-      console.warn('Could not decode redirectUrl, using default:', e.message);
-      returnUrl = '/';
-    }
-  }
-  res.redirect(returnUrl);
-});
-
 // Connection status
 app.get('/api/quickbooks/status', (req, res) => {
-  const tokens = qbClient.loadTokens();
-  const composioStatus = composioConnectors.getConnectionStatus();
-  const cacheStatus = qbCache.isCachePopulated();
-  const tokenError = qbCache.getTokenError();
-  const realmId = process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID;
-  const hasRefreshToken = !!(process.env.QUICKBOOKS_REFRESH_TOKEN);
-
-  let tokenHealth = 'unknown';
-  let tokenExpiresIn = null;
-  if (tokens && tokens.expires_at) {
-    const msUntilExpiry = tokens.expires_at - Date.now();
-    tokenExpiresIn = Math.floor(msUntilExpiry / 1000 / 60); // minutes
-    if (msUntilExpiry > 24 * 60 * 60 * 1000) {
-      tokenHealth = 'healthy';
-    } else if (msUntilExpiry > 0) {
-      tokenHealth = 'expiring_soon';
-    } else {
-      tokenHealth = 'expired';
-    }
-  }
-
+  const tokens = loadQBTokens();
   res.json({
-    connected: !!(tokens && tokens.refresh_token) || composioStatus.quickbooks,
-    connectedVia: composioStatus.quickbooks ? 'composio' : (tokens && tokens.refresh_token ? 'file_persistent' : null),
-    realmId: tokens?.realmId || realmId || null,
+    connected: !!(tokens && tokens.refresh_token),
+    realmId: tokens?.realmId || null,
     connectedAt: tokens?.connectedAt || null,
-    envTokensSet: !!(hasRefreshToken && realmId),
-    hasRefreshToken,
-    tokenHealth,
-    tokenExpiresInMinutes: tokenExpiresIn,
-    lastRefreshed: tokens?.last_refreshed || null,
-    hasTokenError: !!tokenError,
-    tokenError: tokenError?.message || null,
-    tokensSource: tokens?.source || null,
-    tokensFile: 'data/quickbooks-tokens.json',
-    cachePopulated: cacheStatus,
-    cacheDir: 'data/qb-cache',
-    persistenceEnabled: true,
   });
-});
-
-// Query QB for bills with line-item detail
-app.get('/api/quickbooks/bills', async (req, res) => {
-  try {
-    const bills = await qbClient.query('SELECT * FROM Bill MAXRESULTS 100');
-    res.json(bills);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
 });
 
 // Disconnect (forget stored tokens)
 app.post('/api/quickbooks/disconnect', (req, res) => {
-  qbClient.disconnect();
-  res.json({ success: true });
-});
-
-// Disconnect Composio connectors
-app.post('/api/square/disconnect', async (req, res) => {
-  try {
-    await composioConnectors.disconnectSquare();
-    res.json({ success: true, message: 'Square connector disconnected' });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to disconnect Square', message: err.message });
-  }
-});
-
-app.post('/api/quickbooks/composio-disconnect', async (req, res) => {
-  try {
-    await composioConnectors.disconnectQuickBooks();
-    res.json({ success: true, message: 'QuickBooks connector disconnected' });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to disconnect QuickBooks', message: err.message });
-  }
-});
-
-// Manual refresh of all QB data (P&L, accounts, expenses)
-app.post('/api/quickbooks/refresh', async (req, res) => {
-  try {
-    const result = await qbCache.refreshAllQBData();
-    res.json({
-      success: true,
-      ...result,
-      message: 'QuickBooks data refreshed successfully',
-    });
-  } catch (err) {
-    if (err.code === 'QB_NOT_CONNECTED') {
-      return res.json({ error: err.message, connected: false });
-    }
-    res.status(500).json({
-      error: 'QuickBooks refresh failed',
-      message: err.response?.data?.fault?.detail?.[0]?.message || err.message,
-    });
-  }
-});
-
-// ============= GOOGLE OAUTH 2.0 (recipe sheets) =============
-// Authenticate as the bakery's own Google user so the pipeline can read the private recipe folder.
-// Same shape as the QuickBooks flow above. Token handling lives in pipeline/sheets-oauth.js.
-const googleSheets = require('./pipeline/sheets-oauth');
-
-// Step 1: redirect the user to Google's consent screen
-app.get('/api/google/connect', (req, res) => {
-  if (!googleSheets.hasCredentials()) {
-    return res.status(400).send('Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env first (create an OAuth client at https://console.cloud.google.com/apis/credentials).');
-  }
-  res.redirect(googleSheets.getAuthUrl());
-});
-
-// Step 2: Google redirects back here with a code
-app.get('/api/google/callback', async (req, res) => {
-  const { code, error } = req.query;
-  if (error) return res.status(400).send(`Google authorization failed: ${error}`);
-  if (!code) return res.status(400).send('Missing authorization code from Google');
-  try {
-    await googleSheets.exchangeCodeForTokens(code);
-    const tokens = googleSheets.loadTokens();
-    if (tokens?.refresh_token) {
-      console.log('📌 Add to Railway environment for persistent backup:');
-      console.log(`GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}`);
-      process.env.GOOGLE_REFRESH_TOKEN = tokens.refresh_token;
-    }
-    res.redirect('/?google=connected');
-  } catch (err) {
-    res.status(500).send(`Failed to connect Google: ${err.message}`);
-  }
-});
-
-// Connection status
-app.get('/api/google/status', (req, res) => {
-  res.json({
-    configured: googleSheets.hasCredentials(),
-    connected: googleSheets.isConnected(),
-    connectedAt: googleSheets.loadTokens()?.connectedAt || null,
-  });
-});
-
-// Disconnect (forget stored tokens)
-app.post('/api/google/disconnect', (req, res) => {
-  googleSheets.disconnect();
+  if (fs.existsSync(QB_TOKENS_FILE)) fs.unlinkSync(QB_TOKENS_FILE);
   res.json({ success: true });
 });
 
 // ============= QUICKBOOKS DATA ENDPOINTS =============
 
-// Fetch a Profit & Loss report from QuickBooks, broken into periods (Week or Month) for a date range
-const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Month') => {
-  try {
-    // Try Composio first if configured
-    if (process.env.COMPOSIO_API_KEY) {
-      try {
-        console.log('Attempting to fetch QB P&L via Composio...');
-        const client = await composioConnectors.initComposio();
-        const connectionId = await composioConnectors.getQuickBooksConnection();
-        console.log('Got QB connection ID from Composio:', connectionId);
-
-        // Try to use Composio's QB action
-        try {
-          const result = await client.executeAction({
-            connectionId,
-            action: 'quickbooks_get_profit_loss_report',
-            parameters: {
-              start_date: startDate,
-              end_date: endDate,
-              summarize_column_by: summarizeColumnBy,
-            },
-          });
-          console.log('✅ Successfully fetched QB P&L via Composio');
-          return result;
-        } catch (err) {
-          console.warn('Composio QB action failed:', err.message, '- trying direct API...');
-        }
-      } catch (err) {
-        console.warn('Composio connection attempt failed:', err.message, '- falling back to legacy auth');
-      }
-    }
-  } catch (err) {
-    console.warn('Composio path failed:', err.message);
-  }
-
-  // Fallback to legacy token auth
-  console.log('Attempting QB P&L fetch with legacy token auth...');
+// Fetch a Profit & Loss report summarized by month for a date range
+const fetchQBProfitAndLoss = async (startDate, endDate) => {
   const tokens = await getValidQBAccessToken();
   const response = await axios.get(
-    `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/ProfitAndLoss`,
+    `${getQBBaseUrl()}/v3/company/${tokens.realmId}/reports/ProfitAndLoss`,
     {
-      params: { start_date: startDate, end_date: endDate, summarize_column_by: summarizeColumnBy },
+      params: { start_date: startDate, end_date: endDate, summarize_column_by: 'Month' },
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
     }
   );
@@ -1441,55 +826,25 @@ const findQBSummaryRow = (rows, group) => {
   return null;
 };
 
-// Walk a QuickBooks report's row tree looking for a row whose account name contains the given
-// text (e.g. 'LABOR/PAYROLL EXPENSES' lives as a line item nested inside the Expenses group,
-// not as its own top-level group, so it can't be found via findQBSummaryRow)
-const findQBRowByLabel = (rows, labelSubstring) => {
-  if (!rows) return null;
-  const needle = labelSubstring.toUpperCase();
-  for (const row of rows) {
-    const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-    if (label.toUpperCase().includes(needle)) return row;
-    if (row.Rows?.Row) {
-      const found = findQBRowByLabel(row.Rows.Row, labelSubstring);
-      if (found) return found;
-    }
-  }
-  return null;
-};
-
-const getQBRowVals = (row) => {
-  const cols = row?.Summary?.ColData || row?.Header?.ColData;
-  return cols?.map((c) => parseFloat(c.value) || 0) || [];
-};
-
-// Convert a QuickBooks ProfitAndLoss report (summarized by Week or Month) into per-period rows.
-// Real dollar figures straight from the ledger for each period - never averaged or estimated
-// from a different granularity.
-const parseQBPeriodPL = (report) => {
+// Convert a QuickBooks ProfitAndLoss report (summarized by month) into our monthlyData shape
+const parseQBMonthlyPL = (report) => {
   const columns = report.Columns?.Column || [];
-  const periodCols = columns
+  const monthCols = columns
     .map((c, i) => ({ index: i, title: c.ColTitle }))
     .filter((c) => c.title && c.title !== 'Total');
 
-  const revenueVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Income'));
-  const cogsVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'COGS'));
-  const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
-  // Match the "LABOR/PAYROLL EXPENSES" line specifically - a plain 'LABOR' substring also
-  // matches unrelated accounts like "Contracted labor", which silently returns the wrong
-  // (all-zero) row once the date range is wide enough for that account to appear in the report.
-  const laborVals = getQBRowVals(findQBRowByLabel(report.Rows?.Row, 'LABOR/PAYROLL'));
-  const netVals = getQBRowVals(report.Rows?.Row?.find((r) => r.group === 'NetIncome'));
+  const getVals = (row) => row?.Summary?.ColData?.map((c) => parseFloat(c.value) || 0) || [];
+  const revenueVals = getVals(findQBSummaryRow(report.Rows?.Row, 'Income'));
+  const cogsVals = getVals(findQBSummaryRow(report.Rows?.Row, 'COGS'));
+  const opexVals = getVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
+  const laborVals = getVals(findQBSummaryRow(report.Rows?.Row, 'Payroll'));
+  const netVals = getVals(report.Rows?.Row?.find((r) => r.group === 'NetIncome'));
 
-  return periodCols.map((col) => {
+  return monthCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
-    // Monthly columns are titled with the bare month name (e.g. "January"); weekly columns are
-    // titled with a date range (e.g. "Jun 28 - Jul 4, 2026") - only rewrite the former.
-    const isBareMonth = monthIdx >= 0 && /^[A-Za-z]+$/.test(col.title.trim());
-    const shortLabelMatch = col.title.match(/^([A-Za-z]+ \d+)/);
     return {
-      label: isBareMonth ? MONTH_SHORTS[monthIdx] : (shortLabelMatch ? shortLabelMatch[1] : col.title),
-      fullLabel: isBareMonth ? MONTH_NAMES[monthIdx] : col.title,
+      month: monthIdx >= 0 ? MONTH_SHORTS[monthIdx] : col.title,
+      name: monthIdx >= 0 ? MONTH_NAMES[monthIdx] : col.title,
       revenue: revenueVals[col.index] || 0,
       cogs: cogsVals[col.index] || 0,
       opex: opexVals[col.index] || 0,
@@ -1499,206 +854,44 @@ const parseQBPeriodPL = (report) => {
   });
 };
 
-// Pair consecutive real weekly periods into 2-week totals - summed, never averaged. Any odd
-// leftover week is kept as its own lone period at the oldest end of the range, so the most
-// recent period is always a full, comparable 2-week pair.
-const pairIntoBiweekly = (weeklyRowsWithDates) => {
-  const periods = [];
-  let i = 0;
-  while (i < weeklyRowsWithDates.length) {
-    const { row: a, date: dateA } = weeklyRowsWithDates[i];
-    const nextItem = weeklyRowsWithDates[i + 1];
-
-    // Check if next week exists and is exactly 7 days after this one (consecutive)
-    if (nextItem && addDays(dateA, 7) === nextItem.date) {
-      const { row: b, date: dateB } = nextItem;
-      periods.push({
-        label: a.label,
-        fullLabel: `${a.fullLabel} + ${b.fullLabel}`,
-        revenue: round2(a.revenue + b.revenue),
-        cogs: round2(a.cogs + b.cogs),
-        opex: round2(a.opex + b.opex),
-        labor: round2(a.labor + b.labor),
-        pl: round2(a.pl + b.pl),
-        startDate: dateA,
-      });
-      i += 2;
-    } else {
-      // Gap detected or last week - keep as single period
-      periods.push({ ...a, startDate: dateA });
-      i += 1;
-    }
-  }
-  return periods;
-};
-
-// ============= QUICKBOOKS WEEKLY P&L SNAPSHOT =============
-// Persists real per-week QuickBooks totals to disk (data/qb-weekly-pl-snapshot.json), keyed by
-// each week's Sunday start date, so a completed week is only ever fetched from QuickBooks once.
-// Only the most recent 2 weeks (which can still be settling - late-posted expenses, corrections)
-// are re-fetched live on every request; everything older is served straight from disk.
-
-const QB_WEEKLY_SNAPSHOT_FILE = path.join(DATA_DIR, 'qb-weekly-pl-snapshot.json');
-const loadQBWeeklySnapshot = () => {
-  const data = loadData(QB_WEEKLY_SNAPSHOT_FILE);
-  return data && data.weeks && typeof data.weeks === 'object' && !Array.isArray(data) ? data : { weeks: {} };
-};
-const saveQBWeeklySnapshot = (snapshot) => saveData(QB_WEEKLY_SNAPSHOT_FILE, snapshot);
-
-// Fetch one QuickBooks weekly report and key each column by its real Sunday start date.
-// `startDate` MUST be a Sunday and `endDateExclusive` MUST be `startDate` plus a whole number of
-// weeks - QuickBooks only returns clean, unpadded weekly columns from a Sunday-aligned start, so
-// the i-th column is reliably `startDate + 7*i` days without needing to parse its title text.
-const fetchQBWeeklyRows = async (startDate, endDateExclusive) => {
-  const report = await fetchQBProfitAndLoss(startDate, addDays(endDateExclusive, -1), 'Week');
-  const parsed = parseQBPeriodPL(report);
-  const rows = {};
-  parsed.forEach((row, i) => { rows[addDays(startDate, 7 * i)] = row; });
-  return rows;
-};
-
-// Get real per-week QuickBooks P&L totals for [rangeStart, rangeEndInclusive] (both Sundays),
-// backfilling from QuickBooks into the on-disk snapshot only for weeks not already cached, and
-// refreshing the most recent 2 weeks live if QB is connected. If QB is not connected, serves from cache.
-// Returns array of {row, date} objects to preserve week correspondence for pairing.
-const getQBWeeklyRows = async (rangeStart, rangeEndInclusive) => {
-  const snapshot = loadQBWeeklySnapshot();
-  const earliestCached = Object.keys(snapshot.weeks).sort()[0];
-
-  // Only try to fetch from QB if connected
-  const isQBConnected = () => {
-    try { const t = qbClient.loadTokens(); return !!(t && t.refresh_token); } catch { return false; }
-  };
-
-  if (isQBConnected()) {
-    if (!earliestCached || rangeStart < earliestCached) {
-      const backfillEnd = earliestCached && earliestCached > rangeStart ? earliestCached : addDays(rangeEndInclusive, 7);
-      Object.assign(snapshot.weeks, await fetchQBWeeklyRows(rangeStart, backfillEnd));
-    }
-
-    const liveStart = addDays(rangeEndInclusive, -7);
-    Object.assign(snapshot.weeks, await fetchQBWeeklyRows(liveStart, addDays(rangeEndInclusive, 7)));
-
-    saveQBWeeklySnapshot(snapshot);
-  }
-
-  const rows = [];
-  for (let d = rangeStart; d <= rangeEndInclusive; d = addDays(d, 7)) {
-    if (snapshot.weeks[d]) rows.push({ row: snapshot.weeks[d], date: d });
-  }
-  return rows;
-};
-
-// Get raw P/L Statement from QuickBooks (serves from persistent cache first)
+// Get raw P/L Statement from QuickBooks
 app.get('/api/quickbooks/pl', async (req, res) => {
   try {
-    // Try persistent disk cache first
-    const cached = qbCache.loadCache('pl-30d');
-    if (cached) {
-      return res.json({
-        success: true,
-        data: cached.data,
-        source: 'QuickBooks (persistent cache)',
-        cachedAt: cached.cachedAt,
-      });
-    }
-
-    // Fall back to live API fetch
-    const today = new Date();
-    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const startDate = req.query.start_date || thirtyDaysAgo.toISOString().split('T')[0];
-    const endDate = req.query.end_date || today.toISOString().split('T')[0];
-
-    const data = await fetchQBProfitAndLoss(startDate, endDate);
-    res.json({ success: true, data, note: 'P/L statement from QuickBooks (live)' });
+    const year = new Date().getFullYear();
+    const data = await fetchQBProfitAndLoss(req.query.start_date || `${year}-01-01`, req.query.end_date || `${year}-12-31`);
+    res.json({ success: true, data, note: 'P/L statement from QuickBooks' });
   } catch (err) {
-    console.error('QB P&L fetch error:', err.message);
-    if (err.code === 'QB_NOT_CONNECTED') {
-      // Try to serve from cache even if not connected
-      const cached = qbCache.loadCache('pl-30d');
-      if (cached) {
-        return res.json({
-          success: true,
-          data: cached.data,
-          source: 'QuickBooks (offline cache)',
-          cachedAt: cached.cachedAt,
-          note: 'Using cached data — QB not currently connected',
-        });
-      }
-      return res.json({ error: err.message, connected: false, data: [] });
-    }
+    if (err.code === 'QB_NOT_CONNECTED') return res.json({ error: err.message, connected: false, data: [] });
     res.status(500).json({ error: 'QuickBooks API error', message: err.response?.data?.fault?.detail?.[0]?.message || err.message });
   }
 });
 
-// Get Account Balances from QuickBooks (serves from persistent cache first)
+// Get Account Balances from QuickBooks
 app.get('/api/quickbooks/accounts', async (req, res) => {
   try {
-    // Try persistent disk cache first
-    const cached = qbCache.loadCache('accounts');
-    if (cached) {
-      return res.json({
-        success: true,
-        data: cached.data,
-        source: 'QuickBooks (persistent cache)',
-        cachedAt: cached.cachedAt,
-      });
-    }
-
-    // Fall back to live API fetch
-    const data = await qbCache.fetchAccounts();
-    res.json({ success: true, data, note: 'Account balances from QuickBooks (live)' });
+    const tokens = await getValidQBAccessToken();
+    const response = await axios.get(`${getQBBaseUrl()}/v3/company/${tokens.realmId}/query`, {
+      params: { query: 'SELECT * FROM Account' },
+      headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+    });
+    res.json({ success: true, data: response.data.QueryResponse.Account || [], note: 'Account balances from QuickBooks' });
   } catch (err) {
-    if (err.code === 'QB_NOT_CONNECTED') {
-      // Try to serve from cache even if not connected
-      const cached = qbCache.loadCache('accounts');
-      if (cached) {
-        return res.json({
-          success: true,
-          data: cached.data,
-          source: 'QuickBooks (offline cache)',
-          cachedAt: cached.cachedAt,
-          note: 'Using cached data — QB not currently connected',
-        });
-      }
-      return res.json({ error: err.message, connected: false, data: [] });
-    }
+    if (err.code === 'QB_NOT_CONNECTED') return res.json({ error: err.message, connected: false, data: [] });
     res.status(500).json({ error: 'QuickBooks API error', message: err.response?.data?.fault?.detail?.[0]?.message || err.message });
   }
 });
 
-// Get Expenses from QuickBooks (filtered by category, serves from persistent cache first)
+// Get Expenses from QuickBooks (filtered by category)
 app.get('/api/quickbooks/expenses', async (req, res) => {
   try {
-    // Try persistent disk cache first
-    const cached = qbCache.loadCache('expenses');
-    if (cached) {
-      return res.json({
-        success: true,
-        data: cached.data,
-        source: 'QuickBooks (persistent cache)',
-        cachedAt: cached.cachedAt,
-      });
-    }
-
-    // Fall back to live API fetch
-    const data = await qbCache.fetchExpenses();
-    res.json({ success: true, data, note: 'Expense accounts from QuickBooks (live)' });
+    const tokens = await getValidQBAccessToken();
+    const response = await axios.get(`${getQBBaseUrl()}/v3/company/${tokens.realmId}/query`, {
+      params: { query: "SELECT * FROM Account WHERE AccountType='Expense'" },
+      headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+    });
+    res.json({ success: true, data: response.data.QueryResponse.Account || [], note: 'Expense accounts from QuickBooks' });
   } catch (err) {
-    if (err.code === 'QB_NOT_CONNECTED') {
-      // Try to serve from cache even if not connected
-      const cached = qbCache.loadCache('expenses');
-      if (cached) {
-        return res.json({
-          success: true,
-          data: cached.data,
-          source: 'QuickBooks (offline cache)',
-          cachedAt: cached.cachedAt,
-          note: 'Using cached data — QB not currently connected',
-        });
-      }
-      return res.json({ error: err.message, connected: false, data: [] });
-    }
+    if (err.code === 'QB_NOT_CONNECTED') return res.json({ error: err.message, connected: false, data: [] });
     res.status(500).json({ error: 'QuickBooks API error', message: err.response?.data?.fault?.detail?.[0]?.message || err.message });
   }
 });
@@ -1747,38 +940,8 @@ app.get('/api/dashboard', async (req, res) => {
       source: 'Multi-month P/L Statements'
     } : { source: 'No financial data uploaded yet' };
 
-    // 2-week period data comes from real per-week QuickBooks ledger totals summed in pairs, never
-    // averaged or estimated - only available once QuickBooks has been connected. Periods instead
-    // of raw weeks because labor/payroll posts roughly biweekly, so a single-week view is
-    // dominated by whichever week payroll happened to land in. Completed weeks are served from a
-    // disk-persisted snapshot (data/qb-weekly-pl-snapshot.json) instead of re-fetched every time -
-    // only the most recent 2 weeks are ever pulled live.
-    let periodData = [];
-    let periodSource = 'QuickBooks not connected';
-    try {
-      const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 16, 52);
-      const offsetWeeks = parseInt(req.query.offset, 10) || 0;
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const currentWeekStart = getWeekStart(todayStr, 0);
-      const weekEndForOffset = addDays(currentWeekStart, -7 * offsetWeeks);
-      const rangeStart = addDays(weekEndForOffset, -7 * weeksBack);
-      const weeklyRows = await getQBWeeklyRows(rangeStart, weekEndForOffset);
-
-      const pairedData = pairIntoBiweekly(weeklyRows);
-      periodData = pairedData;
-
-      periodSource = 'QuickBooks (cached + live, every 2 weeks)';
-    } catch (err) {
-      if (err.code !== 'QB_NOT_CONNECTED') {
-        console.error('Weekly QuickBooks P&L fetch failed:', err.response?.data?.fault?.detail?.[0]?.message || err.message);
-        periodSource = 'QuickBooks fetch failed';
-      }
-    }
-
     res.json({
       monthlyData,
-      periodData,
-      periodSource,
       summary,
       recipes: { count: recipes.length },
       ingredients: { count: ingredients.length },
@@ -1788,22 +951,32 @@ app.get('/api/dashboard', async (req, res) => {
   }
 });
 
-// GET /api/pl-by-channel
-// Combined channel + market + revenue-allocation P&L, built from the three sheets uploaded via
-// /api/upload/pl-channel/*. Nothing here is computed/derived - every number is exactly what was in
-// the uploaded sheet. A tab loads whichever of the three pieces has been uploaded so far.
+// P&L by Channel
 app.get('/api/pl-by-channel', (req, res) => {
-  const data = loadPLChannelData();
-  res.json({
-    channels: data.channels || [],
-    markets: data.markets || [],
-    revenueAllocation: data.revenueAllocation || null,
-    updatedAt: {
-      channels: data.channelsUpdatedAt || null,
-      markets: data.marketsUpdatedAt || null,
-      revenueAllocation: data.revenueAllocationUpdatedAt || null,
-    },
-  });
+  try {
+    const PL_CHANNEL_FILE = path.join(DATA_DIR, 'pl-by-channel.json');
+    const plData = loadData(PL_CHANNEL_FILE);
+
+    if (!plData || plData.length === 0) {
+      return res.json({
+        channels: [
+          { name: 'ARC', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+          { name: 'LSK', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+          { name: 'State St', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+          { name: 'Catering', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+          { name: 'Delivery 506', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
+        ],
+        message: 'No P&L data provided yet. Upload bakery allocation data to populate this view.',
+      });
+    }
+
+    res.json({
+      channels: plData,
+      lastUpdated: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============= WASTE DASHBOARD =============
@@ -1812,30 +985,12 @@ app.get('/api/pl-by-channel', (req, res) => {
 // (line_items[].name / .quantity), not the catalog, since that's the name Square actually sold
 // under that day - no catalog lookup or ID mapping required.
 
-// Square's closed_at is UTC. Every one of these locations is in California, so a sale any time
-// after ~5pm Pacific has a UTC instant that falls on the *next* calendar day - naively slicing the
-// UTC string groups evening sales under the wrong business day, and for a market that runs into the
-// evening (as opposed to a bakery that closes mid-afternoon) that can misattribute most of a day's
-// sales. Convert to the location's actual local calendar date instead.
-const squareDateInPacific = (isoString) =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(isoString));
-
-// Fetch every COMPLETED order at a location closed within [startDate, endDateExclusive) (Pacific
-// calendar dates), and aggregate quantity sold per (day, lowercased item name), plus a per-item
-// average unit price (gross sales / quantity, across the whole range) - there's no separate
-// price/cost tracking anywhere in this app, so this is the only $ figure available, and it's used
-// as a stand-in price for produced/wasted units too (which were never actually sold, so have no
-// real transaction price of their own).
+// Fetch every COMPLETED order at a location closed within [startDate, endDateExclusive), and
+// aggregate quantity sold per (day, lowercased item name).
 const fetchSoldQuantities = async (locationId, startDate, endDateExclusive) => {
   const sold = {}; // sold[date][itemNameLower] = quantity
-  const priceTotals = {}; // priceTotals[itemNameLower] = { revenue, quantity }
   let cursor;
   let page = 0;
-  // Pacific midnight doesn't line up with UTC midnight (up to ~8h offset depending on DST), so query
-  // a UTC window padded a day on each side to guarantee full coverage, then filter back down to the
-  // intended Pacific range after bucketing each order by its actual local date.
-  const queryStart = addDays(startDate, -1);
-  const queryEnd = addDays(endDateExclusive, 1);
   do {
     const response = await axios.post(
       `${SQUARE_API_BASE}/orders/search`,
@@ -1843,7 +998,7 @@ const fetchSoldQuantities = async (locationId, startDate, endDateExclusive) => {
         location_ids: [locationId],
         query: {
           filter: {
-            date_time_filter: { closed_at: { start_at: `${queryStart}T00:00:00Z`, end_at: `${queryEnd}T00:00:00Z` } },
+            date_time_filter: { closed_at: { start_at: `${startDate}T00:00:00Z`, end_at: `${endDateExclusive}T00:00:00Z` } },
             state_filter: { states: ['COMPLETED'] },
           },
           sort: { sort_field: 'CLOSED_AT' },
@@ -1854,33 +1009,20 @@ const fetchSoldQuantities = async (locationId, startDate, endDateExclusive) => {
       { headers: squareHeaders() }
     );
     (response.data.orders || []).forEach((order) => {
-      if (!order.closed_at) return;
-      const date = squareDateInPacific(order.closed_at);
-      if (date < startDate || date >= endDateExclusive) return;
+      const date = (order.closed_at || '').slice(0, 10);
+      if (!date) return;
       (order.line_items || []).forEach((li) => {
         const name = (li.name || '').trim().toLowerCase();
         const qty = parseFloat(li.quantity);
         if (!name || !Number.isFinite(qty)) return;
         sold[date] = sold[date] || {};
         sold[date][name] = (sold[date][name] || 0) + qty;
-
-        const revenue = (li.gross_sales_money?.amount || 0) / 100;
-        const acc = priceTotals[name] || { revenue: 0, quantity: 0 };
-        acc.revenue += revenue;
-        acc.quantity += qty;
-        priceTotals[name] = acc;
       });
     });
     cursor = response.data.cursor;
     page += 1;
   } while (cursor && page < 50);
-
-  const avgPrice = {};
-  Object.entries(priceTotals).forEach(([name, { revenue, quantity }]) => {
-    if (quantity > 0) avgPrice[name] = revenue / quantity;
-  });
-
-  return { sold, avgPrice };
+  return sold;
 };
 
 // Location names for the Waste tab's location/market toggle, split the same way as WASTE_LOCATIONS.
@@ -1889,148 +1031,6 @@ app.get('/api/waste/locations', (req, res) => {
     stores: WASTE_STORE_LOCATIONS.map((l) => l.name),
     markets: WASTE_MARKET_LOCATIONS.map((l) => l.name),
   });
-});
-
-// ============= MARKET PERFORMANCE DASHBOARD =============
-
-// Fetch gross sales revenue for one location, bucketed by workweek. Same pagination/date-window
-// pattern as fetchSoldQuantities, but summing whole-order revenue instead of per-item quantity.
-const fetchWeeklyRevenueForLocation = async (locationId, startDate, endDateExclusive, startDow) => {
-  const revenueByWeek = {};
-  let cursor;
-  let page = 0;
-  const queryStart = addDays(startDate, -1);
-  const queryEnd = addDays(endDateExclusive, 1);
-  do {
-    const response = await axios.post(
-      `${SQUARE_API_BASE}/orders/search`,
-      {
-        location_ids: [locationId],
-        query: {
-          filter: {
-            date_time_filter: { closed_at: { start_at: `${queryStart}T00:00:00Z`, end_at: `${queryEnd}T00:00:00Z` } },
-            state_filter: { states: ['COMPLETED'] },
-          },
-          sort: { sort_field: 'CLOSED_AT' },
-        },
-        limit: 500,
-        cursor,
-      },
-      { headers: squareHeaders() }
-    );
-    (response.data.orders || []).forEach((order) => {
-      if (!order.closed_at) return;
-      const date = squareDateInPacific(order.closed_at);
-      if (date < startDate || date >= endDateExclusive) return;
-      const weekStart = getWeekStart(date, startDow);
-      const orderRevenue = (order.line_items || []).reduce((sum, li) => sum + (li.gross_sales_money?.amount || 0), 0) / 100;
-      revenueByWeek[weekStart] = (revenueByWeek[weekStart] || 0) + orderRevenue;
-    });
-    cursor = response.data.cursor;
-    page += 1;
-  } while (cursor && page < 50);
-  return revenueByWeek;
-};
-
-// Run async tasks with bounded concurrency, so a ~50-location fetch doesn't fire 50 simultaneous
-// requests at Square at once.
-const mapWithConcurrency = async (items, limit, fn) => {
-  const results = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i], i);
-    }
-  });
-  await Promise.all(workers);
-  return results;
-};
-
-// Persists weekly revenue per market to disk (data/market-performance-snapshot.json), so a
-// completed week is only ever fetched from Square once instead of re-fetched across all ~50
-// locations on every request. Only the most recent 2 weeks are ever pulled live (mirrors the
-// QuickBooks weekly snapshot pattern above), which covers both the still-accumulating current
-// week and any orders that settle a few days late.
-const MARKET_PERF_SNAPSHOT_FILE = path.join(DATA_DIR, 'market-performance-snapshot.json');
-const loadMarketPerfSnapshot = () => {
-  const data = loadData(MARKET_PERF_SNAPSHOT_FILE);
-  return data && data.revenueByMarket && typeof data.revenueByMarket === 'object' && !Array.isArray(data)
-    ? data
-    : { revenueByMarket: {}, backfilledFrom: null };
-};
-const saveMarketPerfSnapshot = (snapshot) => saveData(MARKET_PERF_SNAPSHOT_FILE, snapshot);
-
-// Get real per-week revenue for every market location across [rangeStart, rangeEndInclusive]
-// (both week-start dates), backfilling from Square into the on-disk snapshot only as far back as
-// hasn't already been fetched, and always refreshing the most recent 2 weeks live.
-const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow) => {
-  const snapshot = loadMarketPerfSnapshot();
-  const rangeEndExclusive = addDays(rangeEndInclusive, 7);
-
-  if (!snapshot.backfilledFrom || rangeStart < snapshot.backfilledFrom) {
-    const backfillEnd = snapshot.backfilledFrom && snapshot.backfilledFrom > rangeStart ? snapshot.backfilledFrom : rangeEndExclusive;
-    const backfillResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => ({
-      name: loc.name,
-      revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, rangeStart, backfillEnd, startDow),
-    }));
-    backfillResults.forEach(({ name, revenueByWeek }) => {
-      snapshot.revenueByMarket[name] = { ...(snapshot.revenueByMarket[name] || {}), ...revenueByWeek };
-    });
-    snapshot.backfilledFrom = rangeStart;
-  }
-
-  const liveStart = addDays(rangeEndInclusive, -7);
-  const liveResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => ({
-    name: loc.name,
-    revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, liveStart, rangeEndExclusive, startDow),
-  }));
-  liveResults.forEach(({ name, revenueByWeek }) => {
-    snapshot.revenueByMarket[name] = { ...(snapshot.revenueByMarket[name] || {}), ...revenueByWeek };
-  });
-
-  saveMarketPerfSnapshot(snapshot);
-  return snapshot.revenueByMarket;
-};
-
-// GET /api/market-performance?weeks=156
-// Weekly gross sales revenue per farmers-market/pop-up location, straight from Square orders -
-// real per-week totals, not estimated or averaged. Range goes back up to 3 years (156 weeks).
-// Completed weeks come from the on-disk snapshot; only the most recent 2 weeks are ever
-// re-fetched live. A short in-memory cache on top smooths out rapid repeat page loads.
-app.get('/api/market-performance', async (req, res) => {
-  const token = process.env.SQUARE_ACCESS_TOKEN;
-  if (!token || token === 'your_square_token_here') {
-    return res.status(400).json({ error: 'Square API credentials not configured', weekStarts: [], markets: [] });
-  }
-
-  const weekCount = Math.min(Math.max(parseInt(req.query.weeks, 10) || 52, 1), 260);
-  const cacheKey = `market_perf_${weekCount}`;
-  const cached = cacheManager.get(cacheKey);
-  if (cached) return res.json({ ...cached, cached: true });
-
-  try {
-    const startDow = await fetchWorkweekStartDow();
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const currentWeekStart = getWeekStart(todayStr, startDow);
-    const rangeStart = addDays(currentWeekStart, -7 * (weekCount - 1));
-
-    const weekStarts = [];
-    for (let d = rangeStart; d <= currentWeekStart; d = addDays(d, 7)) weekStarts.push(d);
-
-    const revenueByMarket = await getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow);
-
-    const markets = WASTE_MARKET_LOCATIONS
-      .map((loc) => ({ name: loc.name, revenue: weekStarts.map((ws) => round2((revenueByMarket[loc.name] || {})[ws] || 0)) }))
-      .filter((m) => m.revenue.some((v) => v > 0))
-      .sort((a, b) => b.revenue.reduce((s, v) => s + v, 0) - a.revenue.reduce((s, v) => s + v, 0));
-
-    const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: currentWeekStart };
-    cacheManager.set(cacheKey, response, 4 * 60 * 60 * 1000); // Cache for 4 hours
-    res.json(response);
-  } catch (err) {
-    res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, weekStarts: [], markets: [] });
-  }
 });
 
 // Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
@@ -2069,28 +1069,19 @@ app.get('/api/waste', async (req, res) => {
   if (cached) return res.json({ ...cached, cached: true });
 
   try {
-    const { sold, avgPrice } = await fetchSoldQuantities(locationConfig.squareLocationId, start, addDays(end, 1));
+    const sold = await fetchSoldQuantities(locationConfig.squareLocationId, start, addDays(end, 1));
 
     const rows = production
       .filter((r) => r.date >= start && r.date <= end)
       .map((r) => {
         const quantitySold = (sold[r.date] && sold[r.date][r.item.toLowerCase()]) || 0;
-        const ordered = Number.isFinite(r.ordered) ? r.ordered : null;
-        const waste = Math.max(r.quantityProduced - quantitySold, 0);
-        const price = avgPrice[r.item.toLowerCase()] ?? null;
         return {
           date: r.date,
           item: r.item,
-          ordered: ordered !== null ? round2(ordered) : null,
           quantityProduced: round2(r.quantityProduced),
           quantitySold: round2(quantitySold),
-          waste: round2(waste),
+          waste: round2(Math.max(r.quantityProduced - quantitySold, 0)),
           oversold: quantitySold > r.quantityProduced,
-          fulfillmentPct: ordered && ordered > 0 ? round2((r.quantityProduced / ordered) * 100) : null,
-          price: price !== null ? round2(price) : null,
-          producedValue: price !== null ? round2(r.quantityProduced * price) : null,
-          soldValue: price !== null ? round2(quantitySold * price) : null,
-          wasteValue: price !== null ? round2(waste * price) : null,
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date) || a.item.localeCompare(b.item));
@@ -2117,11 +1108,8 @@ app.get('/api/waste', async (req, res) => {
         quantityProduced: acc.quantityProduced + r.quantityProduced,
         quantitySold: acc.quantitySold + r.quantitySold,
         waste: acc.waste + r.waste,
-        producedValue: acc.producedValue + (r.producedValue || 0),
-        soldValue: acc.soldValue + (r.soldValue || 0),
-        wasteValue: acc.wasteValue + (r.wasteValue || 0),
       }),
-      { quantityProduced: 0, quantitySold: 0, waste: 0, producedValue: 0, soldValue: 0, wasteValue: 0 }
+      { quantityProduced: 0, quantitySold: 0, waste: 0 }
     );
 
     const response = {
@@ -2134,9 +1122,6 @@ app.get('/api/waste', async (req, res) => {
         quantitySold: round2(totals.quantitySold),
         waste: round2(totals.waste),
         wastePct: totals.quantityProduced > 0 ? round2((totals.waste / totals.quantityProduced) * 100) : 0,
-        producedValue: round2(totals.producedValue),
-        soldValue: round2(totals.soldValue),
-        wasteValue: round2(totals.wasteValue),
       },
       unmatchedSoldItems,
       status: 'ready',
@@ -2156,10 +1141,8 @@ app.get('/api/waste', async (req, res) => {
 
 // View all cached items and their expiry times
 app.get('/api/cache/status', (req, res) => {
-  const composioCacheStatus = composioCache.getCacheStatus();
   res.json({
     status: 'ok',
-    composio: composioCacheStatus,
     cacheEntries: cacheManager.status(),
     totalCached: cacheManager.status().length,
     timestamp: new Date().toISOString(),
@@ -2171,68 +1154,7 @@ app.post('/api/cache/clear', (req, res) => {
   cacheManager.cache.clear();
   cacheManager.timers.forEach(timer => clearTimeout(timer));
   cacheManager.timers.clear();
-  composioCache.clearCache();
-
-  // Clear Square sales cache
-  try {
-    if (fs.existsSync(SQUARE_SALES_CACHE_FILE)) {
-      fs.unlinkSync(SQUARE_SALES_CACHE_FILE);
-      console.log('Cleared Square sales cache');
-    }
-  } catch (e) {
-    console.warn('Failed to clear Square sales cache:', e.message);
-  }
-
-  res.json({ success: true, message: 'All caches cleared', timestamp: new Date().toISOString() });
-});
-
-// Refresh Composio cache
-app.post('/api/cache/refresh', async (req, res) => {
-  try {
-    const result = await composioCache.refreshAllData();
-    res.json({ success: true, ...result, timestamp: new Date().toISOString() });
-  } catch (err) {
-    res.status(500).json({ error: 'Cache refresh failed', message: err.message });
-  }
-});
-
-// Rebuild product margins on demand
-app.post('/api/rebuild-margins', async (req, res) => {
-  try {
-    console.log('🔄 Manual margin rebuild triggered...');
-    const { main } = require('./pipeline/build-margins');
-    const result = await main({ weeks: 12 });
-    console.log(`✅ Margin rebuild complete: ${result.coverage.costed.length} recipes costed`);
-    res.json({
-      success: true,
-      costed: result.coverage.costed.length,
-      needsAttention: result.coverage.needsAttention.length,
-      excluded: result.coverage.excluded.length,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error('❌ Margin rebuild failed:', err.message);
-    res.status(500).json({
-      error: 'Margin rebuild failed',
-      message: err.message,
-      code: err.code,
-    });
-  }
-});
-
-// Debug: Get recipe details
-app.get('/api/debug/recipe/:name', async (req, res) => {
-  try {
-    const { pullRecipes } = require('./pipeline/recipes');
-    const recipeData = await pullRecipes('Recipe LSB', {});
-    const recipe = recipeData.recipes.find(r => r.recipe.toLowerCase() === req.params.name.toLowerCase());
-    if (!recipe) {
-      return res.status(404).json({ error: `Recipe "${req.params.name}" not found` });
-    }
-    res.json(recipe);
-  } catch (err) {
-    res.status(500).json({ error: err.message, code: err.code });
-  }
+  res.json({ success: true, message: 'Cache cleared', timestamp: new Date().toISOString() });
 });
 
 // ============= HEALTH CHECK =============
@@ -2243,12 +1165,12 @@ app.get('/api/health', (req, res) => {
 
 // Serve dashboard
 app.get('/', (req, res) => {
-  res.sendFile('index.html', { root: __dirname });
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Serve overtime report
 app.get('/overtime', (req, res) => {
-  res.sendFile('overtime.html', { root: __dirname });
+  res.sendFile(path.join(__dirname, 'overtime.html'));
 });
 
 // ============= LEGAL PAGES (required by Intuit's app settings) =============
@@ -2264,7 +1186,7 @@ app.get('/privacy', (req, res) => {
 
 // Intuit sends users here when they disconnect the app from within QuickBooks
 app.get('/disconnected', (req, res) => {
-  qbClient.disconnect();
+  if (fs.existsSync(QB_TOKENS_FILE)) fs.unlinkSync(QB_TOKENS_FILE);
   res.type('html').send(`<!DOCTYPE html><html><head><title>Disconnected</title></head><body style="font-family: sans-serif; max-width: 700px; margin: 40px auto; line-height: 1.6;">
 <h1>QuickBooks disconnected</h1>
 <p>This dashboard no longer has access to your QuickBooks data. <a href="/api/quickbooks/connect">Reconnect</a> at any time.</p>
@@ -2279,1498 +1201,9 @@ app.get('/eula', (req, res) => {
 </body></html>`);
 });
 
-// ============= SQUARE MARKET PERFORMANCE CACHE WARMER =============
-// Pre-warms market performance cache on startup and daily at 1 AM UTC, so deployments don't stall.
-
-const refreshSquareMarketCache = async () => {
-  try {
-    const token = process.env.SQUARE_ACCESS_TOKEN;
-    if (!token || token === 'your_square_token_here') {
-      console.log(`⏸️  Square market cache refresh skipped: Square API not configured`);
-      return;
-    }
-
-    const startDow = await fetchWorkweekStartDow();
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const currentWeekStart = getWeekStart(todayStr, startDow);
-    const oneYearAgo = addDays(currentWeekStart, -52 * 7);
-
-    await getMarketWeeklyRevenue(oneYearAgo, currentWeekStart, startDow);
-    console.log(`✅ Square market performance cache warmed (${oneYearAgo} to ${currentWeekStart})`);
-  } catch (err) {
-    console.error(`❌ Square cache refresh failed:`, err.message);
-  }
-};
-
-// ============= QUICKBOOKS AUTO-REFRESH SCHEDULER =============
-// Refreshes all QB data weekly (every Sunday at 12:05 AM UTC), so all users see cached data
-// without needing to sign in individually. Runs once on startup with a brief delay, then on schedule.
-
-const refreshQBWeeklyData = async () => {
-  try {
-    // Refresh persistent QB cache (P&L, accounts, expenses)
-    await qbCache.refreshAllQBData();
-
-    // Also refresh the weekly P&L snapshot
-    const today = new Date().toISOString().slice(0, 10);
-    const currentWeekStart = getWeekStart(today, 0); // Sunday-based weeks
-    const twoWeeksAgo = addDays(currentWeekStart, -14);
-    await getQBWeeklyRows(twoWeeksAgo, currentWeekStart);
-
-    console.log(`✅ QB cache + weekly snapshot refreshed (${twoWeeksAgo} to ${currentWeekStart})`);
-  } catch (err) {
-    if (err.code === 'QB_NOT_CONNECTED') {
-      console.log(`⏸️  QB cache refresh skipped: QuickBooks not connected. Click "Connect QuickBooks" in the dashboard to authorize.`);
-    } else {
-      console.error(`❌ QB cache refresh failed:`, err.message);
-    }
-  }
-};
-
-// Run on startup (after a brief delay so DB is ready) - non-blocking
-setTimeout(() => {
-  try {
-    qbCache.warmupCacheOnStartup?.();
-  } catch (e) {
-    console.log('QB cache startup skipped:', e.message);
-  }
-}, 500);
-
-setTimeout(() => {
-  try {
-    refreshQBWeeklyData?.();
-  } catch (e) {
-    console.log('QB refresh skipped:', e.message);
-  }
-}, 1000);
-
-setTimeout(() => {
-  try {
-    refreshSquareMarketCache?.();
-  } catch (e) {
-    console.log('Square cache skipped:', e.message);
-  }
-}, 1500);
-
-setTimeout(() => initMargins?.().catch(e => console.log('Margins init: ' + e.message)), 2000);
-
-// Schedule: Square cache refresh daily at 1 AM UTC
-cron.schedule('0 1 * * *', refreshSquareMarketCache, {
-  runOnInit: false,
-  timezone: 'UTC',
-});
-console.log(`📅 Square market cache warmed daily at 01:00 UTC`);
-
-// Schedule: every Sunday at 12:05 AM UTC to refresh all QB data + weekly snapshot
-// '5 0 * * 0' = 00:05 every Sunday
-cron.schedule('5 0 * * 0', refreshQBWeeklyData, {
-  runOnInit: false, // Already runs on startup above
-  timezone: 'UTC',
-});
-console.log(`📅 QB data auto-refresh scheduled: Sundays at 00:05 UTC (weekly - P&L, accounts, expenses)`);
-
-
-// ============= INTEGRATIONS STATUS (Google + QuickBooks health) =============
-
-app.get('/api/integrations/status', (req, res) => {
-  const composioStatus = composioConnectors.getConnectionStatus();
-  const googleConnected = googleSheets.isConnected();
-
-  // Check for legacy QB tokens (for backward compatibility)
-  const qbTokens = qbClient.loadTokens();
-
-  res.json({
-    composio: process.env.COMPOSIO_API_KEY ? 'configured' : 'not_configured',
-    connections: {
-      square: composioStatus.square || false,
-      quickbooks: composioStatus.quickbooks || (qbTokens && qbTokens.refresh_token),
-    },
-    google: googleConnected ? 'ok' : 'disconnected',
-    legacy: {
-      quickbooks: (qbTokens && qbTokens.refresh_token) ? 'connected' : 'disconnected',
-    },
-  });
-});
-
-// ============= PRODUCT MARGINS ENDPOINTS =============
-
-const matcher = require('./pipeline/matcher');
-
-// On-disk cache for Square sales data (persists across server restarts)
-const SQUARE_SALES_CACHE_FILE = path.join(DATA_DIR, 'pipeline', 'square-sales-cache.json');
-
-const loadSquareSalesCache = () => {
-  try {
-    return JSON.parse(fs.readFileSync(SQUARE_SALES_CACHE_FILE, 'utf-8'));
-  } catch {
-    return null;
-  }
-};
-
-const saveSquareSalesCache = (data) => {
-  const dir = path.dirname(SQUARE_SALES_CACHE_FILE);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(SQUARE_SALES_CACHE_FILE, JSON.stringify(data, null, 2));
-};
-
-// Fetch Square order data once for 1 year, cache on disk with timestamp, slice into 5 windows on each request
-const fetchSquareSalesData = async () => {
-  const cached = loadSquareSalesCache();
-  const MAX_CACHE_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-  if (cached && cached.fetchedAt && Date.now() - new Date(cached.fetchedAt).getTime() < MAX_CACHE_AGE_MS) {
-    return cached;
-  }
-
-  console.log('Fetching 30-day Square sales data...');
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
-  const allOrders = [];
-
-  // Fetch all locations in parallel (not sequentially)
-  const locationFetches = WASTE_LOCATIONS.map(async (location) => {
-    let cursor = null;
-    let page = 0;
-    const MAX_PAGES = 5; // Further reduced to ensure fast completion
-    const locationOrders = [];
-
-    try {
-      while (page < MAX_PAGES) {
-        const req = {
-          location_ids: [location.squareLocationId],
-          limit: 250,
-          sort_order: 'DESC',
-          query: {
-            filter: {
-              state_filter: {
-                states: ['COMPLETED'],
-              },
-              date_time_filter: {
-                closed_at: {
-                  start_at: new Date(`${thirtyDaysAgo}T00:00:00Z`).toISOString(),
-                  end_at: new Date().toISOString(),
-                },
-              },
-            },
-          },
-        };
-        if (cursor) req.query.cursor = cursor;
-
-        let res;
-        try {
-          res = await axios.post(`https://connect.squareup.com/v2/orders/search`, req, {
-            headers: {
-              Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 10000, // 10s timeout per request
-          });
-        } catch (apiErr) {
-          console.error(`Square API error for location ${location.name}:`, {
-            status: apiErr.response?.status,
-            errors: apiErr.response?.data?.errors,
-            message: apiErr.message,
-          });
-          return locationOrders; // Return partial data for this location
-        }
-
-        for (const order of (res.data.orders || [])) {
-          if (order.state !== 'COMPLETED') continue;
-          for (const lineItem of (order.line_items || [])) {
-            locationOrders.push({
-              orderId: order.id,
-              closedAt: order.closed_at,
-              locationId: order.location_id,
-              itemName: lineItem.name,
-              qty: lineItem.quantity,
-              totalMoney: lineItem.gross_sales_money?.amount || 0,
-            });
-          }
-        }
-
-        cursor = res.data.cursor;
-        if (!cursor) break;
-        page += 1;
-      }
-    } catch (e) {
-      console.error(`Failed to fetch orders for location ${location.name}:`, e.message);
-    }
-
-    return locationOrders;
-  });
-
-  // Wait for all location fetches to complete (max 30 seconds)
-  try {
-    const allLocationOrders = await Promise.race([
-      Promise.all(locationFetches),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Square data fetch timeout')), 30000)),
-    ]);
-    for (const orders of allLocationOrders) {
-      allOrders.push(...orders);
-    }
-  } catch (e) {
-    console.error('Error fetching all locations:', e.message);
-    // Continue with partial data rather than failing completely
-  }
-
-  const cached_data = {
-    fetchedAt: new Date().toISOString(),
-    orders: allOrders,
-  };
-  saveSquareSalesCache(cached_data);
-  return cached_data;
-};
-
-// Bucket orders by item name and date window, compute revenue and qty
-const bucketOrdersByItem = (orders, windowDays) => {
-  const cutoffDate = new Date(Date.now() - windowDays * 86400_000);
-  const byItem = {};
-
-  for (const order of orders) {
-    const orderDate = new Date(order.closedAt);
-    if (orderDate < cutoffDate) continue;
-
-    const item = order.itemName;
-    if (!byItem[item]) byItem[item] = { revenue: 0, qty: 0, avgPrice: 0 };
-    byItem[item].revenue += order.totalMoney / 100; // cents to dollars
-    byItem[item].qty += parseFloat(order.qty) || 0;
-  }
-
-  for (const item of Object.values(byItem)) {
-    item.avgPrice = item.qty > 0 ? item.revenue / item.qty : 0;
-  }
-
-  return byItem;
-};
-
-// Top 20 sellers by revenue
-const rankProductsByRevenue = (sales, n = 20) => {
-  return Object.entries(sales)
-    .sort((a, b) => b[1].revenue - a[1].revenue)
-    .slice(0, n)
-    .map(([name, data]) => ({ name, ...data }));
-};
-
-// Match recipe to Square item name
-// Normalize quote characters for consistent matching (handles curly, straight, and other variants)
-const normalizeQuotes = (str) => {
-  return str
-    .replace(/[“”]/g, '"')    // Curly double quotes → straight
-    .replace(/[‘’]/g, "'")   // Curly single quotes → straight
-    .replace(/[«»]/g, '"')   // Guillemets → straight
-    .replace(/[‟]/g, '"');        // Double high-reversed → straight
-};
-
-const matchRecipeToSquareItem = (recipeName, squareItemName) => {
-  const recipeToks = matcher.tokenize(recipeName);
-  const squareToks = matcher.tokenize(squareItemName);
-
-  if (!recipeToks.length || !squareToks.length) return false;
-  const overlap = recipeToks.filter((t) => squareToks.includes(t));
-  // Lowered to 50% to allow fuzzy matches like "Country Round" -> "Country dough"
-  return overlap.length / recipeToks.length >= 0.5;
-};
-
-// Simple recipe costs endpoint (raw data)
-app.get('/api/recipe-costs', (req, res) => {
-  try {
-    const recipeCostsFile = path.join(DATA_DIR, 'pipeline', 'recipe-costs.json');
-    if (!fs.existsSync(recipeCostsFile)) {
-      return res.status(503).json({ error: 'Recipe costs not available. Run: npm run margins' });
-    }
-    const data = JSON.parse(fs.readFileSync(recipeCostsFile, 'utf-8'));
-    res.json(data);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Debug endpoint to check ingredient overrides are loaded
-app.get('/api/debug/overrides', (req, res) => {
-  try {
-    const overridesFile = path.join(DATA_DIR, 'pipeline', 'ingredient-overrides.json');
-    if (!fs.existsSync(overridesFile)) {
-      return res.json({ error: 'File not found', path: overridesFile });
-    }
-    const data = JSON.parse(fs.readFileSync(overridesFile, 'utf-8'));
-
-    // Build overrides object like the main endpoint does (with lowercase keys)
-    const overrides = {};
-    for (const mapping of data.mappings || []) {
-      const key = normalizeQuotes(mapping.squareItem).toLowerCase();
-      overrides[key] = mapping.recipe;
-    }
-
-    res.json({
-      count: data.mappings.length,
-      rawMappings: data.mappings.slice(0, 3),
-      overrideKeys: Object.keys(overrides),
-      sampleLookup: {
-        "country round": overrides["country round"],
-        "breakfast bar": overrides["breakfast bar"]
-      }
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Main product margins endpoint - uses LIVE data from QB, Google Sheets, and Square
-app.get('/api/product-margins', async (req, res) => {
-  try {
-    // Clear any caching - force fresh calculation every time
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
-
-    console.log('📊 Calculating LIVE product margins from QB + Google Sheets + Square...');
-    const startTime = Date.now();
-
-    // Step 1: Fetch live Square orders for all time windows, no caching
-    console.log('  Step 1: Fetching LIVE Square orders for each time window...');
-    const windows = [
-      { name: '1 week', days: 7 },
-      { name: '2 weeks', days: 14 },
-      { name: '2 months', days: 60 },
-      { name: '6 months', days: 180 },
-      { name: '1 year', days: 365 },
-      { name: '3 years', days: 1095 },
-      { name: '5 years', days: 1825 },
-    ];
-
-    let windowsData = {};
-    let squareFetchedAt = null;
-
-    try {
-      if (!process.env.SQUARE_ACCESS_TOKEN) {
-        throw new Error('SQUARE_ACCESS_TOKEN not configured');
-      }
-
-      for (const window of windows) {
-        const beginTime = new Date(Date.now() - window.days * 24 * 60 * 60 * 1000).toISOString();
-        const endTime = new Date().toISOString();
-        const windowOrders = [];
-
-        // Fetch from all locations for this time window
-        for (const location of WASTE_LOCATIONS) {
-          let cursor = null;
-          let page = 0;
-          const MAX_PAGES = 100;
-
-          try {
-            while (page < MAX_PAGES) {
-              const req = {
-                location_ids: [location.squareLocationId],
-                limit: 250,
-                sort_order: 'DESC',
-                query: {
-                  filter: {
-                    state_filter: { states: ['COMPLETED'] },
-                    date_time_filter: {
-                      closed_at: {
-                        start_at: beginTime,
-                        end_at: endTime,
-                      },
-                    },
-                  },
-                },
-              };
-              if (cursor) req.query.cursor = cursor;
-
-              const res = await axios.post(`https://connect.squareup.com/v2/orders/search`, req, {
-                headers: {
-                  Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
-                  'Content-Type': 'application/json',
-                },
-                timeout: 10000,
-              });
-
-              const orders = res.data.orders || [];
-              for (const order of orders) {
-                for (const line of order.line_items || []) {
-                  windowOrders.push({
-                    itemName: line.name || 'Unknown',
-                    quantity: line.quantity ? parseInt(line.quantity) : 1,
-                    grossSales: Math.round((line.gross_sales_money?.amount || 0) / 100 * 100) / 100,
-                  });
-                }
-              }
-
-              cursor = res.data.cursor;
-              page++;
-              if (!cursor) break;
-            }
-          } catch (e) {
-            if (e.response?.status !== 429) {
-              console.warn(`    ⚠️  Location ${location.name}: ${e.message}`);
-            }
-          }
-        }
-
-        // Aggregate this window's data by item name
-        const itemMap = {};
-        for (const order of windowOrders) {
-          if (!itemMap[order.itemName]) {
-            itemMap[order.itemName] = { quantity: 0, revenue: 0 };
-          }
-          itemMap[order.itemName].quantity += order.quantity;
-          itemMap[order.itemName].revenue += order.grossSales;
-        }
-
-        windowsData[window.name] = itemMap;
-        console.log(`    ✓ ${window.name}: ${windowOrders.length} line items, ${Object.keys(itemMap).length} unique items`);
-      }
-
-      squareFetchedAt = new Date().toISOString();
-    } catch (e) {
-      console.error('❌ Square fetch error:', e.message);
-      return res.status(500).json({ error: 'Failed to fetch Square data', details: e.message });
-    }
-
-    // Step 2: Calculate costs using live QB + Google Sheets pipeline (for latest data only)
-    console.log('  Step 2: Calculating costs from QB bills + Google Sheets recipes...');
-    let productCostMap = {};
-
-    try {
-      const { main: calculateMargins } = require('./pipeline/calculate-margins');
-      // Pass current 1-year data to calculate margins
-      const currentYearData = Object.entries(windowsData['1 year'] || {}).map(([name, data]) => ({
-        product: name,
-        units: data.quantity,
-        price: data.quantity > 0 ? data.revenue / data.quantity : 0,
-      }));
-
-      const result = await calculateMargins({ squareSalesData: currentYearData });
-      const marginProducts = result.products || [];
-
-      for (const p of marginProducts) {
-        const productKey = (p.product || p.recipe || '').toLowerCase();
-        productCostMap[productKey] = p.cost_per_unit || p.costPerUnit || 0;
-      }
-
-      console.log(`    ✓ Calculated costs for ${marginProducts.length} products`);
-    } catch (e) {
-      console.warn(`    ⚠️  Cost calculation failed: ${e.message}`);
-    }
-
-    // Step 3: Transform results into time-window format for UI
-    console.log('  Step 3: Formatting results by time window...');
-
-    const result = {};
-
-    for (const windowName in windowsData) {
-      const windowItems = windowsData[windowName];
-
-      // Convert item sales to product list with margins
-      const productList = Object.entries(windowItems).map(([name, data]) => {
-        const cost = productCostMap[(name || '').toLowerCase()] || 0;
-        const revenue = data.revenue;
-        const marginPerUnit = cost;
-
-        return {
-          name: name,
-          revenue: Math.round(revenue * 100) / 100,
-          quantity: Math.round(data.quantity * 100) / 100,
-          avgPrice: data.quantity > 0 ? Math.round((revenue / data.quantity) * 100) / 100 : 0,
-          cogs: Math.round(cost * 100) / 100,
-          margin$: Math.round(marginPerUnit * 100) / 100,
-          marginPct: revenue > 0 ? Math.round(((revenue - (data.quantity * cost)) / revenue * 100) * 10) / 10 : 0,
-          status: (revenue - (data.quantity * cost)) < 0 ? 'error-negative-margin' : (cost > 0 ? 'costed' : 'needs-cost'),
-        };
-      });
-
-      // Rank by revenue and get top 20
-      const ranked = productList
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 20);
-
-      result[windowName] = {
-        fetchedAt: squareFetchedAt,
-        top20: ranked,
-      };
-    }
-
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`✅ Margin calculation complete in ${elapsed}s`);
-
-    res.json({
-      generatedAt: new Date().toISOString(),
-      dataSource: 'LIVE (QB + Google Sheets + Square)',
-      squareFetchedAt: squareFetchedAt,
-      calculationMs: Date.now() - startTime,
-      windows: result,
-      coverage: marginCoverage,
-      summary: marginSummary,
-    });
-  } catch (e) {
-    console.error('❌ Product margins error:', e.message, e.stack);
-    res.status(500).json({ error: e.message, dataSource: 'LIVE' });
-  }
-});
-
-// Rebuild product margins from Google Sheets + QB invoices
-// GET /api/rebuild-margins (returns immediately, build runs in background)
-// GET /api/rebuild-margins/status (check build status)
-const REBUILD_STATUS_FILE = path.join(DATA_DIR, 'rebuild-margins-status.json');
-const saveRebuildStatus = (status) => {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(REBUILD_STATUS_FILE, JSON.stringify(status, null, 2));
-};
-const getRebuildStatus = () => {
-  try {
-    if (fs.existsSync(REBUILD_STATUS_FILE)) {
-      return JSON.parse(fs.readFileSync(REBUILD_STATUS_FILE, 'utf-8'));
-    }
-  } catch {}
-  return { status: 'idle' };
-};
-
-// Bakery margin analysis endpoint - LIVE data from Square Orders, NO SCALING
-app.get('/api/bakery-margins', async (req, res) => {
-  try {
-    const period = req.query.period || '1_year';
-    const periodDays = {
-      '1_week': 7,
-      '2_weeks': 14,
-      '2_months': 60,
-      '6_months': 180,
-      '1_year': 365,
-      '3_years': 1095,
-      '5_years': 1825,
-    };
-
-    const days = periodDays[period] || 365;
-    const beginTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    const endTime = new Date().toISOString();
-
-    if (!process.env.SQUARE_ACCESS_TOKEN) {
-      return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
-    }
-
-    // Fetch LIVE orders from Square in parallel (NO scaling)
-    const allOrders = [];
-    // Smart page limit: scales with time period to fetch complete data while staying performant
-    // ~2 pages per day for consistency (covers 250-500 orders/day per location)
-    const MAX_PAGES = Math.min(5000, Math.max(50, Math.ceil(days * 2)));
-
-    const locationFetches = WASTE_LOCATIONS.map(async (location) => {
-      let cursor = null;
-      let page = 0;
-      const locationOrders = [];
-
-      try {
-        while (page < MAX_PAGES) {
-          const req_body = {
-            location_ids: [location.squareLocationId],
-            limit: 250,
-            sort_order: 'DESC',
-            query: {
-              filter: {
-                state_filter: { states: ['COMPLETED'] },
-                date_time_filter: {
-                  closed_at: {
-                    start_at: beginTime,
-                    end_at: endTime,
-                  },
-                },
-              },
-            },
-          };
-          if (cursor) req_body.query.cursor = cursor;
-
-          const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, req_body, {
-            headers: {
-              Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 8000,
-          });
-
-          const orders = response.data.orders || [];
-          for (const order of orders) {
-            for (const line of order.line_items || []) {
-              locationOrders.push({
-                itemName: line.name || 'Unknown',
-                quantity: line.quantity ? parseInt(line.quantity) : 1,
-                grossSales: Math.round((line.gross_sales_money?.amount || 0) / 100 * 100) / 100,
-              });
-            }
-          }
-
-          cursor = response.data.cursor;
-          page++;
-          if (!cursor) break;
-        }
-      } catch (e) {
-        console.warn(`⚠️ Location ${location.name}: ${e.message}`);
-      }
-      return locationOrders;
-    });
-
-    try {
-      const results = await Promise.allSettled(locationFetches);
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          allOrders.push(...result.value);
-        } else {
-          console.warn(`⚠️ Location fetch failed: ${result.reason}`);
-        }
-      }
-    } catch (e) {
-      console.warn(`⚠️ Order fetch error: ${e.message}`);
-    }
-
-    // Aggregate by item name
-    const itemMap = {};
-    for (const order of allOrders) {
-      if (!itemMap[order.itemName]) {
-        itemMap[order.itemName] = { quantity: 0, revenue: 0 };
-      }
-      itemMap[order.itemName].quantity += order.quantity;
-      itemMap[order.itemName].revenue += order.grossSales;
-    }
-
-    // Load costs from analysis.json for margin calculation
-    const bakeryAnalysisPath = path.join(__dirname, 'analysis.json');
-    let costMap = {};
-    if (fs.existsSync(bakeryAnalysisPath)) {
-      const analysis = JSON.parse(fs.readFileSync(bakeryAnalysisPath, 'utf-8'));
-      for (const p of analysis.products) {
-        costMap[p.product?.toLowerCase()] = p.cost_per_unit || (p.sale_price - (p.profit / p.units));
-      }
-    }
-
-    // Format products with actual Square data
-    const formattedProducts = Object.entries(itemMap).map(([name, data]) => {
-      const cost = costMap[name?.toLowerCase()] || 0;
-      const revenue = data.revenue;
-      const totalCogs = data.quantity * cost;
-      const profit = revenue - totalCogs;
-      const marginPct = revenue > 0 ? (profit / revenue * 100) : 0;
-
-      return {
-        name: name,
-        revenue: Math.round(revenue * 100) / 100,
-        quantity: data.quantity,
-        price: data.quantity > 0 ? Math.round((revenue / data.quantity) * 100) / 100 : 0,
-        cogs: Math.round(cost * 100) / 100,
-        margin$: Math.round(cost * 100) / 100,
-        marginPct: Math.round(marginPct * 10) / 10,
-        status: profit < 0 ? 'error-negative-margin' : (cost > 0 ? 'costed' : 'needs-cost'),
-      };
-    }).sort((a, b) => b.revenue - a.revenue);
-
-    const totalRevenue = formattedProducts.reduce((sum, p) => sum + p.revenue, 0);
-    const totalUnits = formattedProducts.reduce((sum, p) => sum + p.quantity, 0);
-    const totalCogs = formattedProducts.reduce((sum, p) => sum + (p.quantity * parseFloat(p.cogs)), 0);
-
-    res.json({
-      period: period,
-      days: days,
-      dataRange: `${beginTime} to ${endTime}`,
-      fetchedAt: new Date().toISOString(),
-      ordersProcessed: allOrders.length,
-      itemsReturned: formattedProducts.length,
-      summary: {
-        total_units: totalUnits,
-        total_revenue: Math.round(totalRevenue * 100) / 100,
-        total_cogs: Math.round(totalCogs * 100) / 100,
-        total_profit: Math.round((totalRevenue - totalCogs) * 100) / 100,
-        blended_margin_pct: totalRevenue > 0 ? Math.round(((totalRevenue - totalCogs) / totalRevenue * 100) * 10) / 10 : 0,
-      },
-      top20: formattedProducts.slice(0, 20),
-      note: 'LIVE data from Square orders API - NO SCALING or multipliers',
-    });
-  } catch (e) {
-    console.error('Bakery margins error:', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-
-app.get('/api/rebuild-margins', async (req, res) => {
-  try {
-    const sheetsOAuth = require('./pipeline/sheets-oauth');
-    const qbClient = require('./pipeline/qb-client');
-
-    // Check if Google is connected
-    if (!sheetsOAuth.isConnected()) {
-      return res.status(400).json({
-        error: 'Google not authenticated',
-        message: 'Visit /api/google/connect to authorize access to recipe sheets',
-        status: 'google_not_connected',
-      });
-    }
-
-    // Check if QB is connected
-    let qbConnected = false;
-    try {
-      const tokens = qbClient.loadTokens();
-      qbConnected = !!(tokens && tokens.refresh_token);
-    } catch {}
-
-    if (!qbConnected) {
-      return res.status(400).json({
-        error: 'QuickBooks not authenticated',
-        message: 'Visit /api/quickbooks/connect to authorize access to vendor invoices',
-        status: 'qb_not_connected',
-      });
-    }
-
-    // Check if already building
-    const currentStatus = getRebuildStatus();
-    if (currentStatus.status === 'building') {
-      return res.json({
-        status: 'already_building',
-        message: 'Build already in progress',
-        startedAt: currentStatus.startedAt,
-      });
-    }
-
-    // Start build in background
-    saveRebuildStatus({ status: 'building', startedAt: new Date().toISOString() });
-    res.json({
-      status: 'building_started',
-      message: 'Product margins rebuild started. Check /api/rebuild-margins/status for progress.',
-      checkUrl: '/api/rebuild-margins/status',
-    });
-
-    // Run build in background (don't await)
-    (async () => {
-      try {
-        const buildMargins = require('./pipeline/build-margins');
-        console.log('🔄 Rebuilding product margins from Google Sheets + QB…');
-        const result = await buildMargins.main({ weeks: 12 });
-        saveRebuildStatus({
-          status: 'complete',
-          completedAt: new Date().toISOString(),
-          recipeCount: result.recipeCosts.recipeCount,
-          costed: result.coverage.costed.length,
-          needsAttention: result.coverage.needsAttention.length,
-        });
-        console.log('✅ Product margins rebuild complete');
-      } catch (err) {
-        console.error('Rebuild margins error:', err.message);
-        saveRebuildStatus({
-          status: 'error',
-          error: err.message,
-          code: err.code,
-          failedAt: new Date().toISOString(),
-        });
-      }
-    })();
-  } catch (err) {
-    console.error('Rebuild margins startup error:', err.message);
-    res.status(500).json({
-      error: 'Rebuild startup failed',
-      message: err.message,
-    });
-  }
-});
-
-app.get('/api/rebuild-margins/status', (req, res) => {
-  const status = getRebuildStatus();
-  res.json(status);
-});
-
-// Calculate margins from Google Sheets ingredient costs + recipes
-app.get('/api/calculate-margins', async (req, res) => {
-  try {
-    const sheetsOAuth = require('./pipeline/sheets-oauth');
-    const calculateMargins = require('./pipeline/calculate-margins');
-
-    // Check if Google is connected
-    if (!sheetsOAuth.isConnected()) {
-      return res.status(400).json({
-        error: 'Google not authenticated',
-        message: 'Visit /api/google/connect to authorize access to Recipe LSB folder',
-        status: 'google_not_connected',
-      });
-    }
-
-    // Load Square sales data from analysis.json
-    const analysisPath = path.join(__dirname, 'analysis.json');
-    let squareSalesData = [];
-    if (fs.existsSync(analysisPath)) {
-      try {
-        const analysis = JSON.parse(fs.readFileSync(analysisPath, 'utf-8'));
-        squareSalesData = (analysis.products || []).map(p => ({
-          product: p.product,
-          units: p.units,
-          price: p.sale_price,
-        }));
-      } catch (e) {
-        console.warn('Failed to load sales data from analysis.json:', e.message);
-      }
-    }
-
-    if (squareSalesData.length === 0) {
-      return res.status(400).json({
-        error: 'No sales data available',
-        message: 'Analysis.json not found or empty. Cannot calculate margins without Square sales data.',
-        status: 'no_sales_data',
-      });
-    }
-
-    // Calculate margins in background, return immediately
-    res.json({
-      status: 'calculating',
-      message: 'Margin calculation started. Check /api/calculate-margins/status for progress.',
-      productsCount: squareSalesData.length,
-    });
-
-    // Run calculation in background
-    (async () => {
-      try {
-        console.log(`🔄 Starting margin calculation with ${squareSalesData.length} products…`);
-        const result = await calculateMargins.main({ squareSalesData });
-
-        // Save result to analysis.json for dashboard consumption
-        fs.writeFileSync(analysisPath, JSON.stringify(result, null, 2));
-        console.log('✅ Margins calculation and analysis.json update complete');
-      } catch (err) {
-        console.error('Margin calculation error:', err.message);
-        if (err.code === 'GOOGLE_NOT_CONNECTED') {
-          console.error('  → Google OAuth failed. Visit /api/google/connect to re-authorize');
-        }
-      }
-    })();
-  } catch (err) {
-    console.error('Calculate margins startup error:', err.message);
-    res.status(500).json({
-      error: 'Calculation startup failed',
-      message: err.message,
-    });
-  }
-});
-
-// Margin scheduler status
-app.get('/api/margin-scheduler/status', (req, res) => {
-  if (!marginScheduler) {
-    return res.status(503).json({
-      error: 'Scheduler not initialized',
-      message: 'Margin scheduler is still starting up',
-    });
-  }
-  const status = marginScheduler.getStatus();
-  res.json({
-    scheduler: 'margin-calculator',
-    schedule: 'Daily at 6 AM UTC, plus immediate run on startup',
-    status,
-  });
-});
-
-// Extract and display ingredient costs from QB bills
-app.get('/api/ingredient-costs', (req, res) => {
-  try {
-    const cacheFile = path.join(__dirname, 'ingredient-costs-cache.json');
-
-    if (!fs.existsSync(cacheFile)) {
-      return res.status(202).json({
-        status: 'extracting',
-        message: 'Ingredient costs are being extracted in the background. Check /api/ingredient-costs/status for progress.',
-        cacheFile,
-      });
-    }
-
-    // Read cached result instantly (no processing needed)
-    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf-8'));
-
-    res.json({
-      status: 'success',
-      generatedAt: cached.generatedAt,
-      billsProcessed: cached.billsProcessed,
-      ingredientsExtracted: cached.ingredientsExtracted,
-      ingredients: cached.ingredients,
-      note: 'Sorted alphabetically. Shows most recent purchase price per ingredient. From QB bill PDFs.',
-      source: 'cached (updated on startup and when manually triggered)',
-    });
-  } catch (err) {
-    console.error('Ingredient cost cache read error:', err.message);
-    res.status(500).json({
-      error: 'Failed to read ingredient costs cache',
-      message: err.message,
-      code: err.code,
-    });
-  }
-});
-
-// Ingredient extraction status - check background job progress
-// Debug endpoint: show raw extracted PDF text from a real bill
-app.get('/api/debug/raw-pdf-text/:billId', async (req, res) => {
-  try {
-    const billId = req.params.billId;
-    const startLine = parseInt(req.query.start || '0', 10);
-    const count = parseInt(req.query.count || '50', 10);
-
-    // Download and extract from the actual PDF
-    const pdfBuffer = await qbClient.downloadInvoicePdf(billId);
-    if (!pdfBuffer) {
-      return res.json({ error: 'No PDF found for this bill', billId });
-    }
-
-    const text = await qbClient.extractPdfText(pdfBuffer);
-
-    // Split into lines
-    const lines = text.split('\n');
-    const sample = lines.slice(startLine, startLine + count);
-
-    res.json({
-      billId,
-      pdfSize: pdfBuffer.length,
-      totalLines: lines.length,
-      totalChars: text.length,
-      requestedRange: { start: startLine, count, returned: sample.length },
-      linesRaw: sample.map((line, i) => ({
-        lineNum: startLine + i + 1,
-        content: line,
-        length: line.length,
-      })),
-    });
-  } catch (err) {
-    res.status(500).json({
-      error: 'Failed to extract PDF text',
-      message: err.message,
-    });
-  }
-});
-
-// Debug endpoint: show cache file structure
-app.get('/api/debug/cache-structure', (req, res) => {
-  try {
-    const cacheFile = path.join(__dirname, 'ingredient-costs-cache.json');
-    if (!fs.existsSync(cacheFile)) {
-      return res.json({ error: 'Cache file not found' });
-    }
-    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf-8'));
-    res.json({
-      topLevelKeys: Object.keys(cached),
-      billsProcessed: cached.billsProcessed,
-      ingredientsExtracted: cached.ingredientsExtracted,
-      hasRawBills: !!cached.rawBills,
-      rawBillsCount: cached.rawBills?.length || 0,
-      rawBillsSample: cached.rawBills?.slice(0, 3).map(b => ({
-        docNumber: b.docNumber,
-        vendorName: b.vendorName,
-        extractionSource: b.extractionSource,
-        lineItems: b.lineItems?.length || 0,
-      })),
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/ingredient-costs/status', (req, res) => {
-  const status = ingredientScheduler.getStatus();
-  res.json({
-    status: status.isRunning ? 'extracting' : 'idle',
-    isRunning: status.isRunning,
-    lastRun: status.lastRun || null,
-  });
-});
-
-// Manually trigger ingredient extraction (runs in background)
-app.post('/api/ingredient-costs/trigger', async (req, res) => {
-  const weeks = parseInt(req.query.weeks || '52');
-  const triggered = await ingredientScheduler.triggerNow(weeks);
-
-  if (triggered) {
-    res.json({
-      status: 'started',
-      message: `Ingredient extraction started for last ${weeks} weeks`,
-    });
-  } else {
-    res.json({
-      status: 'already_running',
-      message: 'Extraction already in progress',
-    });
-  }
-});
-
-// DEBUG: Serve raw extracted PDF text for a bill (for parser development)
-app.get('/api/debug/pdf-text/:billId', (req, res) => {
-  try {
-    const billId = req.params.billId;
-    const debugFile = path.join(__dirname, `debug-pdf-${billId}.txt`);
-
-    if (!fs.existsSync(debugFile)) {
-      return res.status(404).json({
-        error: 'Debug file not found',
-        message: `No debug file for bill ${billId}. File path would be: debug-pdf-${billId}.txt`,
-        path: debugFile,
-      });
-    }
-
-    const text = fs.readFileSync(debugFile, 'utf-8');
-    res.type('text/plain').send(text);
-  } catch (err) {
-    console.error('Debug PDF text read error:', err.message);
-    res.status(500).json({
-      error: 'Failed to read debug file',
-      message: err.message,
-    });
-  }
-});
-
-// Debug endpoint: list all attachments for a bill
-app.get('/api/debug/attachments/:billId', async (req, res) => {
-  try {
-    const billId = req.params.billId;
-    const attachments = (await qbClient.query(`SELECT * FROM Attachable WHERE AttachableRef.EntityRef.Value = '${billId}'`)).Attachable || [];
-
-    res.json({
-      billId,
-      totalAttachments: attachments.length,
-      attachments: attachments.map(att => ({
-        id: att.Id,
-        fileName: att.FileName,
-        contentType: att.ContentType,
-        size: att.Size,
-        hasDownloadUri: !!att.TempDownloadUri,
-      })),
-    });
-  } catch (err) {
-    console.error('Error listing attachments:', err.message);
-    res.status(500).json({
-      error: 'Failed to list attachments',
-      message: err.message,
-    });
-  }
-});
-
-// Debug endpoint: search for document URLs/IDs in a bill
-app.get('/api/debug/bill-sources/:billDocNumber', async (req, res) => {
-  try {
-    const docNumber = req.params.billDocNumber;
-
-    // Find the bill by DocNumber
-    const billQuery = `SELECT * FROM Bill WHERE DocNumber = '${docNumber}' ORDER BY TxnDate DESC MAXRESULTS 1`;
-    const billResponse = await qbClient.query(billQuery);
-    const bill = (billResponse.Bill || [])[0];
-
-    if (!bill) {
-      return res.status(404).json({ error: 'Bill not found', docNumber });
-    }
-
-    // Search for document-related fields
-    const allFields = Object.keys(bill);
-    const docFields = allFields.filter(f =>
-      f.toLowerCase().includes('doc') ||
-      f.toLowerCase().includes('source') ||
-      f.toLowerCase().includes('url') ||
-      f.toLowerCase().includes('link') ||
-      f.toLowerCase().includes('reference')
-    );
-
-    res.json({
-      billId: bill.Id,
-      docNumber: bill.DocNumber,
-      vendor: bill.VendorRef?.name,
-      totalFields: allFields.length,
-      documentRelatedFields: docFields,
-      fieldValues: docFields.reduce((acc, f) => {
-        const val = bill[f];
-        acc[f] = typeof val === 'object' ? JSON.stringify(val).substring(0, 200) : val;
-        return acc;
-      }, {}),
-    });
-  } catch (err) {
-    console.error('Error fetching bill sources:', err.message);
-    res.status(500).json({
-      error: 'Failed to fetch bill sources',
-      message: err.message,
-    });
-  }
-});
-
-// Debug endpoint: try to access financialdocument.platform.intuit.com with different auth methods
-app.get('/api/debug/source-document/:billId', async (req, res) => {
-  try {
-    const billId = req.params.billId;
-    const tokens = await qbClient.getValidTokens();
-
-    // Try different ID formats and auth methods
-    const attempts = [
-      { id: billId, authType: 'QB-Bearer', getHeaders: () => ({ Authorization: `Bearer ${tokens.access_token}` }) },
-      { id: billId, authType: 'none', getHeaders: () => ({}) },
-      { id: billId, authType: 'realm-header', getHeaders: () => ({ 'X-QB-Realm-Id': tokens.realmId, Authorization: `Bearer ${tokens.access_token}` }) },
-    ];
-
-    const results = [];
-
-    for (const attempt of attempts) {
-      const url = `https://financialdocument.platform.intuit.com/v2/no-user-cred/documents/${attempt.id}`;
-      try {
-        const resp = await axios.get(url, {
-          headers: attempt.getHeaders(),
-          timeout: 5000,
-        });
-        results.push({
-          ...attempt,
-          status: resp.status,
-          success: true,
-          contentType: resp.headers['content-type'],
-          contentLength: resp.data?.length || 'unknown',
-        });
-      } catch (e) {
-        results.push({
-          ...attempt,
-          status: e.response?.status || 'no-response',
-          success: false,
-          error: e.message?.substring(0, 80),
-          errorStatus: e.response?.statusText,
-        });
-      }
-    }
-
-    res.json({
-      billId,
-      attempts: results,
-      note: '403 Forbidden means endpoint exists but auth is wrong. 404 means wrong ID format.',
-    });
-  } catch (err) {
-    console.error('Error testing source document access:', err.message);
-    res.status(500).json({
-      error: 'Failed to test source document',
-      message: err.message,
-    });
-  }
-});
-
-// Cash balance trend - fetches Statement of Cash Flows from QB
-app.get('/api/cash-balance', async (req, res) => {
-  try {
-    const qbClient = require('./pipeline/qb-client');
-    const tokens = await qbClient.getValidTokens();
-
-    // Helper to extract "Cash at End of Period" from cash flow statement
-    const findCashAtEnd = (rows, debug = false) => {
-      if (!rows) return null;
-      for (const row of rows) {
-        // Try multiple locations for the label (different report structures)
-        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || row.Summary?.ColData?.[0]?.value || '';
-        if (debug && label) console.log(`    Row label: "${label}"`);
-        if (label.toUpperCase().includes('CASH AT END')) {
-          const val = row.Summary?.ColData?.[1]?.value || row.ColData?.[1]?.value;
-          if (debug) console.log(`      Found CASH AT END, value: ${val}`);
-          if (val !== undefined && val !== null) return parseFloat(val);
-        }
-        // Recurse into nested rows
-        if (row.Rows?.Row) {
-          const found = findCashAtEnd(row.Rows.Row, debug);
-          if (found !== null) return found;
-        }
-      }
-      return null;
-    };
-
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-
-    // Generate 60 months (5 years) of monthly data going back from today
-    const months = [];
-    for (let i = 59; i >= 0; i--) {
-      const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const year = date.getFullYear();
-      const month = date.getMonth(); // 0-11
-      const monthName = MONTH_NAMES[month];
-      const monthShort = MONTH_SHORTS[month];
-
-      months.push({
-        year,
-        month: monthShort,
-        name: monthName,
-      });
-    }
-
-    console.log(`Generating 5-year cash balance data (60 months)...`);
-    if (months.length > 0) {
-      console.log(`Range: ${months[0].name} ${months[0].year} to ${months[months.length - 1].name} ${months[months.length - 1].year}`);
-    }
-
-    // Query QB Statement of Cash Flows for each month
-    const balances = [];
-    let currentCash = 0;
-
-    console.log('Querying QB Statement of Cash Flows for each month...');
-    for (let i = 0; i < months.length; i++) {
-      const monthData = months[i];
-      const monthIndex = MONTH_NAMES.indexOf(monthData.name);
-      const firstDay = new Date(monthData.year, monthIndex, 1);
-      const lastDay = new Date(monthData.year, monthIndex + 1, 0);
-
-      const startDateStr = firstDay.toISOString().split('T')[0];
-      const endDateStr = lastDay.toISOString().split('T')[0];
-
-      try {
-        const cfRes = await axios.get(
-          `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
-          {
-            params: { start_date: startDateStr, end_date: endDateStr },
-            headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
-          }
-        );
-
-        const cash = findCashAtEnd(cfRes.data.Rows?.Row) || 0;
-        currentCash = cash;
-        balances.push({
-          date: endDateStr,
-          balance: round2(cash),
-        });
-        console.log(`  ✅ ${endDateStr}: $${round2(cash)}`);
-      } catch (err) {
-        console.warn(`Failed to fetch CashFlow for ${monthData.name} ${monthData.year}: ${err.message}`);
-      }
-    }
-
-    console.log(`✅ Fetched ${balances.length} month-end cash balances from QB`);
-
-    res.json({
-      success: true,
-      currentCash: round2(currentCash),
-      balances,
-      generatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error('Cash balance fetch error:', err.message);
-    res.status(500).json({
-      error: 'Failed to fetch cash balance data',
-      message: err.message,
-    });
-  }
-});
-
-// Debug endpoint to check QB cash balance for a specific date
-app.get('/api/debug/qb-cash-balance', async (req, res) => {
-  try {
-    const qbClient = require('./pipeline/qb-client');
-    const tokens = await qbClient.getValidTokens();
-
-    const dateStr = req.query.date || '2025-02-28';
-
-    // Helper to extract cash total from balance sheet
-    const findCashTotal = (rows) => {
-      if (!rows) return null;
-      for (const row of rows) {
-        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        if (label.toUpperCase().includes('CASH') || label.toUpperCase().includes('BANK')) {
-          const val = row.Summary?.ColData?.[1]?.value || row.ColData?.[1]?.value;
-          if (val) return parseFloat(val);
-        }
-        if (row.Rows?.Row) {
-          const found = findCashTotal(row.Rows.Row);
-          if (found !== null) return found;
-        }
-      }
-      return null;
-    };
-
-    console.log(`Fetching QB Balance Sheet as of ${dateStr}...`);
-    const bsRes = await axios.get(
-      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/BalanceSheet`,
-      {
-        params: { as_of_date: dateStr },
-        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
-      }
-    );
-
-    const cash = findCashTotal(bsRes.data.Rows?.Row) || 0;
-    res.json({
-      date: dateStr,
-      cash: round2(cash),
-    });
-  } catch (err) {
-    console.error('QB balance check error:', err.message);
-    res.status(500).json({
-      error: 'Failed to fetch QB balance',
-      message: err.message,
-    });
-  }
-});
-
-// Debug endpoint to see CashFlow report structure
-app.get('/api/debug/qb-cashflow', async (req, res) => {
-  try {
-    const qbClient = require('./pipeline/qb-client');
-    const tokens = await qbClient.getValidTokens();
-
-    const dateStr = req.query.date || '2025-02-28';
-    const startDate = req.query.start_date || null;
-    const endDate = req.query.end_date || dateStr;
-
-    const params = startDate ? { start_date: startDate, end_date: endDate } : { end_date: endDate };
-    console.log(`Fetching QB CashFlow report with params:`, params);
-
-    const cfRes = await axios.get(
-      `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
-      {
-        params,
-        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
-      }
-    );
-
-    res.json(cfRes.data);
-  } catch (err) {
-    console.error('QB cashflow check error:', err.message);
-    res.status(500).json({
-      error: 'Failed to fetch QB CashFlow report',
-      message: err.message,
-    });
-  }
-});
-
-// ============= PUBLIC DASHBOARD API ENDPOINTS =============
-
-// Square data endpoint
-app.get('/api/public/square/overview', async (req, res) => {
-  try {
-    if (!process.env.SQUARE_ACCESS_TOKEN) {
-      return res.status(400).json({ error: 'Square not configured' });
-    }
-
-    const today = new Date().toISOString();
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-
-    const [locations, orders] = await Promise.all([
-      claudeMCP.getSquareLocations(),
-      claudeMCP.getSquareOrders(process.env.SQUARE_LOCATION_ID, sevenDaysAgo, today),
-    ]);
-
-    res.json({
-      success: true,
-      locations,
-      orders,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error('Square overview error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// QuickBooks data endpoint
-app.get('/api/public/quickbooks/overview', async (req, res) => {
-  try {
-    const tokens = qbClient.loadTokens();
-    if (!tokens || !tokens.refresh_token) {
-      return res.status(400).json({
-        success: false,
-        error: 'QuickBooks not connected',
-        reconnectUrl: '/api/quickbooks/connect',
-      });
-    }
-
-    // Check for token errors from previous refresh attempts
-    const tokenError = qbCache.getTokenError();
-    if (tokenError) {
-      return res.status(400).json({
-        success: false,
-        error: tokenError.message,
-        errorType: tokenError.type,
-        reconnectUrl: '/api/quickbooks/connect',
-      });
-    }
-
-    const cached = qbCache.loadCache('pl-30d');
-    if (cached) {
-      return res.json({
-        success: true,
-        report: cached.data,
-        cachedAt: cached.cachedAt,
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    console.log('Cache miss - fetching fresh QB data');
-    const today = new Date().toISOString().split('T')[0];
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    console.log(`QB P&L query: ${thirtyDaysAgo} to ${today}`);
-    const report = await qbCache.fetchReport('ProfitAndLoss', {
-      start_date: thirtyDaysAgo,
-      end_date: today,
-    });
-
-    res.json({
-      success: true,
-      report,
-      cachedAt: new Date().toISOString(),
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error('QB overview error:', err.message);
-    res.status(500).json({
-      success: false,
-      error: err.message,
-      errorType: err.code,
-      reconnectUrl: '/api/quickbooks/connect',
-    });
-  }
-});
-
-// Public dashboard page
-app.get('/dashboard', (req, res) => {
-  res.sendFile('public/dashboard.html', { root: __dirname });
-});
-
 // Start server
 const PORT = process.env.PORT || 3001;
-const server = app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log(`🍞 Bakery Dashboard API running on http://localhost:${PORT}`);
-  console.log(`📊 Public dashboard: http://localhost:${PORT}/dashboard`);
-
-  if (process.env.SQUARE_ACCESS_TOKEN) {
-    console.log('✅ Square configured');
-  } else {
-    console.log('⚠️  Square not configured');
-  }
-
-  // Check for QB tokens from file (persistent) or env vars
-  const fileTokens = qbClient.loadTokens();
-  const envTokens = process.env.QUICKBOOKS_REFRESH_TOKEN && (process.env.QUICKBOOKS_REALM_ID || process.env.QB_REALM_ID);
-  const qbConfigured = !!fileTokens || envTokens;
-
-  if (qbConfigured) {
-    console.log('✅ QuickBooks configured');
-    if (fileTokens) {
-      console.log('   📁 Tokens loaded from file (persistent storage)');
-      if (fileTokens.expires_at) {
-        const minutesUntilExpiry = Math.floor((fileTokens.expires_at - Date.now()) / 1000 / 60);
-        console.log(`   ⏰ Access token expires in ${minutesUntilExpiry} minutes`);
-      }
-    }
-    if (envTokens) {
-      console.log('   🔧 Environment variables set');
-    }
-    setTimeout(() => qbCache.warmupCacheOnStartup(), 500);
-  } else {
-    console.log('⚠️  QuickBooks not configured');
-  }
-
-  if (qbConfigured) {
-    startQBRefreshJobs();
-  }
-
-  // Initialize automated margin calculation scheduler
-  // Runs daily at 6 AM UTC, with immediate run on startup
-  marginScheduler = marginSchedulerModule.start();
-
-  // Initialize ingredient cost extraction scheduler
-  // Runs on startup to populate cache (takes time, runs in background)
-  ingredientScheduler = ingredientSchedulerModule.start();
-
-  // Auto-rebuild product margins weekly (Sundays at 3am)
-  // Fetches vendor prices from QB + recipes from Google Drive
-  cron.schedule('0 3 * * 0', async () => {
-    console.log('🔄 Starting weekly margin rebuild...');
-    try {
-      const marginBuilder = require('./pipeline/build-margins');
-      const result = await marginBuilder.main({ weeks: 12 });
-      console.log(`✅ Margin rebuild complete: ${result.coverage.costed.length} recipes costed`);
-    } catch (err) {
-      console.error('❌ Margin rebuild failed:', err.message);
-      if (err.code === 'QB_NOT_CONNECTED') {
-        console.error('   → QuickBooks not connected, skipping margin rebuild');
-      } else if (err.code === 'GOOGLE_NOT_CONNECTED') {
-        console.error('   → Google Drive not connected, skipping margin rebuild');
-      }
-    }
-  });
+  console.log(`📋 Next: Add Square & QuickBooks API credentials to .env`);
 });

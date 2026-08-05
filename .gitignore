@@ -1,10 +1,8 @@
-__pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-dist/
-build/
+node_modules/
 .env
-.venv
-venv/
+.env.local
+uploads/
 .DS_Store
+data/*
+!data/monthly-financial.json
+.env.local.json
