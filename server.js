@@ -2822,8 +2822,23 @@ const getRebuildStatus = () => {
   return { status: 'idle' };
 };
 
-// Bakery margin analysis endpoint - LIVE data from Square Orders, NO SCALING
+// Bakery margins caching: keep results in memory per period
+const marginsCacheByPeriod = {};
+const MARGINS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+// Bakery margin analysis endpoint - with aggressive caching
 app.get('/api/bakery-margins', async (req, res) => {
+  const period = req.query.period || '2_weeks';
+
+  // Check cache first - return immediately if fresh
+  if (marginsCacheByPeriod[period] && (Date.now() - marginsCacheByPeriod[period].timestamp) < MARGINS_CACHE_TTL) {
+    console.log(`✅ Returning cached bakery-margins for period: ${period} (age: ${Math.round((Date.now() - marginsCacheByPeriod[period].timestamp) / 1000)}s)`);
+    const cached = marginsCacheByPeriod[period].data;
+    return res.json({ ...cached, cached: true, cacheAge: Date.now() - marginsCacheByPeriod[period].timestamp });
+  }
+
+  console.log(`🔄 Cache miss for period ${period} - fetching fresh data from Square...`);
+
   // Hard timeout: fail fast if taking >30 seconds
   const timeoutHandle = setTimeout(() => {
     if (!res.headersSent) {
@@ -2832,7 +2847,6 @@ app.get('/api/bakery-margins', async (req, res) => {
   }, 30000);
 
   try {
-    const period = req.query.period || '2_weeks';
     const periodDays = {
       '1_week': 7,
       '2_weeks': 14,
@@ -3019,7 +3033,8 @@ app.get('/api/bakery-margins', async (req, res) => {
     const totalCogs = allProducts.reduce((sum, p) => sum + (p.quantity * (costMap[p.name?.toLowerCase()] || 0)), 0);
 
     clearTimeout(timeoutHandle);
-    res.json({
+
+    const responseData = {
       period: period,
       days: days,
       dataRange: `${beginTime} to ${endTime}`,
@@ -3035,11 +3050,55 @@ app.get('/api/bakery-margins', async (req, res) => {
       },
       top20: formattedProducts,
       note: 'LIVE data from Square orders API - NO SCALING or multipliers',
-    });
+    };
+
+    // Cache this result for 1 hour so period changes are instant
+    marginsCacheByPeriod[period] = {
+      data: responseData,
+      timestamp: Date.now(),
+    };
+    console.log(`💾 Cached bakery-margins for period: ${period}`);
+
+    res.json(responseData);
   } catch (e) {
     clearTimeout(timeoutHandle);
     console.error('Bakery margins error:', e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Cache status endpoint - see what's cached and how old it is
+app.get('/api/bakery-margins-cache-status', (req, res) => {
+  const status = {};
+  const now = Date.now();
+  for (const [period, cache] of Object.entries(marginsCacheByPeriod)) {
+    const age = now - cache.timestamp;
+    const expired = age > MARGINS_CACHE_TTL;
+    status[period] = {
+      cached: true,
+      age_seconds: Math.round(age / 1000),
+      age_minutes: Math.round(age / 60000),
+      expired: expired,
+      expires_in_seconds: Math.round((MARGINS_CACHE_TTL - age) / 1000),
+      fetched_at: new Date(cache.timestamp).toISOString(),
+      revenue: cache.data.summary.total_revenue,
+      units: cache.data.summary.total_units,
+    };
+  }
+  res.json({ cache_status: status, ttl_minutes: Math.round(MARGINS_CACHE_TTL / 60000) });
+});
+
+// Clear cache endpoint - manually refresh data
+app.post('/api/bakery-margins-cache-clear', (req, res) => {
+  const period = req.query.period;
+  if (period) {
+    delete marginsCacheByPeriod[period];
+    console.log(`🗑️ Cleared cache for period: ${period}`);
+    res.json({ cleared: period });
+  } else {
+    Object.keys(marginsCacheByPeriod).forEach(k => delete marginsCacheByPeriod[k]);
+    console.log(`🗑️ Cleared all bakery-margins cache`);
+    res.json({ cleared: 'all' });
   }
 });
 
