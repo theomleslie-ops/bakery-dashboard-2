@@ -2966,25 +2966,23 @@ app.get('/api/bakery-margins', async (req, res) => {
     const itemMap = {};
     let filteredOutCount = 0;
     for (const order of allOrders) {
-      // This shouldn't happen if Square filtering works, but we validate anyway
+      // CRITICAL: Check server-side date filter - Square API should filter, but we validate anyway
       if (!order.closedAt) {
-        // If no closedAt, still include it (Square should have filtered)
+        console.warn(`⚠️ Order missing closedAt - this shouldn't happen, skipping to be safe`);
+        continue; // Skip orders with no timestamp
+      }
+
+      const orderTime = new Date(order.closedAt).getTime();
+      if (orderTime >= beginTimeMs && orderTime <= endTimeMs) {
+        // Order is within date range - include it
         if (!itemMap[order.itemName]) {
           itemMap[order.itemName] = { quantity: 0, revenue: 0 };
         }
         itemMap[order.itemName].quantity += order.quantity;
         itemMap[order.itemName].revenue += order.revenue;
       } else {
-        const orderTime = new Date(order.closedAt).getTime();
-        if (orderTime >= beginTimeMs && orderTime <= endTimeMs) {
-          if (!itemMap[order.itemName]) {
-            itemMap[order.itemName] = { quantity: 0, revenue: 0 };
-          }
-          itemMap[order.itemName].quantity += order.quantity;
-          itemMap[order.itemName].revenue += order.revenue;
-        } else {
-          filteredOutCount++;
-        }
+        // Order is outside date range - filter it out
+        filteredOutCount++;
       }
     }
     if (filteredOutCount > 0) {
@@ -3034,6 +3032,14 @@ app.get('/api/bakery-margins', async (req, res) => {
     const totalUnits = allProducts.reduce((sum, p) => sum + p.quantity, 0);
     const totalCogs = allProducts.reduce((sum, p) => sum + (p.quantity * (costMap[p.name?.toLowerCase()] || 0)), 0);
 
+    // Log final totals for verification
+    console.log(`\n💰 FINAL TOTALS:`);
+    console.log(`   Total Line Items from Square: ${allOrders.length}`);
+    console.log(`   Total Items After Aggregation: ${allProducts.length}`);
+    console.log(`   Total Revenue: $${Math.round(totalRevenue * 100) / 100}`);
+    console.log(`   Expected (from Square): $163,958.60`);
+    console.log(`   Ratio: ${(totalRevenue / 163958.60).toFixed(2)}x\n`);
+
     clearTimeout(timeoutHandle);
 
     const responseData = {
@@ -3042,6 +3048,7 @@ app.get('/api/bakery-margins', async (req, res) => {
       dataRange: `${beginTime} to ${endTime}`,
       fetchedAt: new Date().toISOString(),
       ordersProcessed: allOrders.length,
+      filteredOutCount: filteredOutCount,
       itemsReturned: formattedProducts.length,
       summary: {
         total_units: totalUnits,
@@ -3052,6 +3059,15 @@ app.get('/api/bakery-margins', async (req, res) => {
       },
       top20: formattedProducts,
       note: 'LIVE data from Square orders API - NO SCALING or multipliers',
+      DEBUG: {
+        beginTime: beginTime,
+        endTime: endTime,
+        periodDays: days,
+        maxPagesPerLocation: MAX_PAGES,
+        locationsQueried: WASTE_LOCATIONS.length,
+        totalLineItems: allOrders.length,
+        filteredOutDueToDateRange: filteredOutCount,
+      },
     };
 
     // Cache this result for 1 hour so period changes are instant
@@ -3065,6 +3081,94 @@ app.get('/api/bakery-margins', async (req, res) => {
   } catch (e) {
     clearTimeout(timeoutHandle);
     console.error('Bakery margins error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DEBUG: Single location breakdown - shows what ARC location returns for 1_week
+app.get('/api/bakery-margins-debug-arc', async (req, res) => {
+  try {
+    const period = req.query.period || '1_week';
+    const periodDays = { '1_week': 7, '2_weeks': 14 };
+    const days = periodDays[period] || 7;
+    const beginTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const endTime = new Date().toISOString();
+
+    const arcLocation = WASTE_LOCATIONS.find(l => l.name === 'ARC');
+    if (!arcLocation) {
+      return res.status(400).json({ error: 'ARC location not found' });
+    }
+
+    let totalRevenue = 0;
+    let totalLineItems = 0;
+    let pageCount = 0;
+    let cursor = null;
+
+    console.log(`\n🔍 DEBUG: Fetching ARC location for period ${period} (${days} days)`);
+    console.log(`   From: ${beginTime}`);
+    console.log(`   To:   ${endTime}\n`);
+
+    while (pageCount < 5) {
+      const req_body = {
+        location_ids: [arcLocation.squareLocationId],
+        limit: 250,
+        sort_order: 'DESC',
+        query: {
+          filter: {
+            state_filter: { states: ['COMPLETED'] },
+            date_time_filter: {
+              closed_at: {
+                start_at: beginTime,
+                end_at: endTime,
+              },
+            },
+          },
+        },
+      };
+      if (cursor) req_body.query.cursor = cursor;
+
+      const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, req_body, {
+        headers: {
+          Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 5000,
+      });
+
+      const orders = response.data.orders || [];
+      let pageRevenue = 0;
+
+      for (const order of orders) {
+        for (const line of order.line_items || []) {
+          const revenue = (line.total_money?.amount || 0) / 100;
+          totalRevenue += revenue;
+          pageRevenue += revenue;
+          totalLineItems++;
+        }
+      }
+
+      console.log(`   Page ${pageCount + 1}: ${orders.length} orders, ${orders.flatMap(o => o.line_items || []).length} line items, $${pageRevenue.toFixed(2)}`);
+
+      cursor = response.data.cursor;
+      pageCount++;
+      if (!cursor) break;
+    }
+
+    console.log(`\n   TOTAL for ARC: ${totalLineItems} line items, $${totalRevenue.toFixed(2)}\n`);
+
+    res.json({
+      location: 'ARC',
+      period: period,
+      days: days,
+      dateRange: `${beginTime} to ${endTime}`,
+      pagesQueried: pageCount,
+      totalLineItems: totalLineItems,
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      expectedTotal: 163958.60,
+      ratio: (totalRevenue / 163958.60).toFixed(2),
+      note: 'This is ARC location only - multiply by ~50+ to get total if this ratio is wrong',
+    });
+  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
