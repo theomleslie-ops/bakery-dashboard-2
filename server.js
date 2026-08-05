@@ -2825,7 +2825,7 @@ const getRebuildStatus = () => {
 // Bakery margin analysis endpoint - LIVE data from Square Orders, NO SCALING
 app.get('/api/bakery-margins', async (req, res) => {
   try {
-    const period = req.query.period || '1_year';
+    const period = req.query.period || '2_weeks';
     const periodDays = {
       '1_week': 7,
       '2_weeks': 14,
@@ -2836,7 +2836,7 @@ app.get('/api/bakery-margins', async (req, res) => {
       '5_years': 1825,
     };
 
-    const days = periodDays[period] || 365;
+    const days = periodDays[period] || 14;
     const beginTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     const endTime = new Date().toISOString();
 
@@ -2846,8 +2846,8 @@ app.get('/api/bakery-margins', async (req, res) => {
 
     // Fetch LIVE orders from Square with concurrency limiting
     const allOrders = [];
-    // Aggressive limit to stay responsive: max 50 pages per location, typically much less
-    const MAX_PAGES = Math.min(50, Math.max(10, Math.ceil(days * 2)));
+    // Strict page limit: max 20 pages per location (5k orders/location = 300k total for 60 locations)
+    const MAX_PAGES = Math.min(20, Math.max(5, Math.ceil(days / 2)));
     const MAX_CONCURRENT = 5; // Limit concurrent location fetches to avoid overwhelming Square API
 
     // Fetch one location's orders
