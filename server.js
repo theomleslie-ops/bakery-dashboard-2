@@ -2950,31 +2950,38 @@ app.get('/api/bakery-margins', async (req, res) => {
       }
     }
 
-    // Format products with actual Square data
-    const formattedProducts = Object.entries(itemMap).map(([name, data]) => {
+    // First pass: get top 20 by revenue (before expensive margin calcs)
+    const allProducts = Object.entries(itemMap)
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const top20Products = allProducts.slice(0, 20);
+
+    // Second pass: calculate margins only for top 20
+    const formattedProducts = top20Products.map(({ name, quantity, revenue }) => {
       const cost = costMap[name?.toLowerCase()] || 0;
-      const revenue = data.revenue;
-      const totalCogs = data.quantity * cost;
+      const totalCogs = quantity * cost;
       const profit = revenue - totalCogs;
       const marginPct = revenue > 0 ? (profit / revenue * 100) : 0;
-
-      const pricePerUnit = data.quantity > 0 ? revenue / data.quantity : 0;
+      const pricePerUnit = quantity > 0 ? revenue / quantity : 0;
       const marginPerUnit = pricePerUnit - cost;
+
       return {
         name: name,
         revenue: Math.round(revenue * 100) / 100,
-        quantity: data.quantity,
+        quantity: quantity,
         price: Math.round(pricePerUnit * 100) / 100,
         cogs: Math.round(cost * 100) / 100,
         margin$: Math.round(marginPerUnit * 100) / 100,
         marginPct: Math.round(marginPct * 10) / 10,
         status: profit < 0 ? 'error-negative-margin' : (cost > 0 ? 'costed' : 'needs-cost'),
       };
-    }).sort((a, b) => b.revenue - a.revenue);
+    });
 
-    const totalRevenue = formattedProducts.reduce((sum, p) => sum + p.revenue, 0);
-    const totalUnits = formattedProducts.reduce((sum, p) => sum + p.quantity, 0);
-    const totalCogs = formattedProducts.reduce((sum, p) => sum + (p.quantity * parseFloat(p.cogs)), 0);
+    // Calculate summary across ALL products (not just top 20)
+    const totalRevenue = allProducts.reduce((sum, p) => sum + p.revenue, 0);
+    const totalUnits = allProducts.reduce((sum, p) => sum + p.quantity, 0);
+    const totalCogs = allProducts.reduce((sum, p) => sum + (p.quantity * (costMap[p.name?.toLowerCase()] || 0)), 0);
 
     clearTimeout(timeoutHandle);
     res.json({
@@ -2991,7 +2998,7 @@ app.get('/api/bakery-margins', async (req, res) => {
         total_profit: Math.round((totalRevenue - totalCogs) * 100) / 100,
         blended_margin_pct: totalRevenue > 0 ? Math.round(((totalRevenue - totalCogs) / totalRevenue * 100) * 10) / 10 : 0,
       },
-      top20: formattedProducts.slice(0, 20),
+      top20: formattedProducts,
       note: 'LIVE data from Square orders API - NO SCALING or multipliers',
     });
   } catch (e) {
