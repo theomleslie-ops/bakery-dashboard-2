@@ -2824,6 +2824,13 @@ const getRebuildStatus = () => {
 
 // Bakery margin analysis endpoint - LIVE data from Square Orders, NO SCALING
 app.get('/api/bakery-margins', async (req, res) => {
+  // Hard timeout: fail fast if taking >30 seconds
+  const timeoutHandle = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({ error: 'Request timeout - Square API taking too long', timeout: '30s' });
+    }
+  }, 30000);
+
   try {
     const period = req.query.period || '2_weeks';
     const periodDays = {
@@ -2841,6 +2848,7 @@ app.get('/api/bakery-margins', async (req, res) => {
     const endTime = new Date().toISOString();
 
     if (!process.env.SQUARE_ACCESS_TOKEN) {
+      clearTimeout(timeoutHandle);
       return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
     }
 
@@ -2966,6 +2974,7 @@ app.get('/api/bakery-margins', async (req, res) => {
     const totalUnits = formattedProducts.reduce((sum, p) => sum + p.quantity, 0);
     const totalCogs = formattedProducts.reduce((sum, p) => sum + (p.quantity * parseFloat(p.cogs)), 0);
 
+    clearTimeout(timeoutHandle);
     res.json({
       period: period,
       days: days,
@@ -2984,6 +2993,7 @@ app.get('/api/bakery-margins', async (req, res) => {
       note: 'LIVE data from Square orders API - NO SCALING or multipliers',
     });
   } catch (e) {
+    clearTimeout(timeoutHandle);
     console.error('Bakery margins error:', e.message);
     res.status(500).json({ error: e.message });
   }
