@@ -275,19 +275,15 @@ app.get('/api/google/callback', async (req, res) => {
   try {
     const code = req.query.code;
     if (!code) {
-      return res.status(400).json({ error: 'No authorization code provided' });
+      return res.redirect('/?error=no_code');
     }
 
     const ingestor = new SheetsIngestor();
     const tokens = await ingestor.exchangeCodeForToken(code);
 
-    res.json({
-      success: true,
-      message: 'Authentication successful! Token saved. You can now run /api/sheets/sync',
-      tokens: { access_token: tokens.access_token ? '***' : undefined }
-    });
+    res.redirect('/?auth=success');
   } catch (err) {
-    res.status(500).json({ error: 'Failed to authenticate', message: err.message });
+    res.redirect(`/?error=${encodeURIComponent(err.message)}`);
   }
 });
 
