@@ -1029,6 +1029,91 @@ app.get('/api/waste/locations', (req, res) => {
   });
 });
 
+// GET /api/market-performance?weeks=52
+// Weekly gross sales revenue per farmers-market/pop-up location, straight from Square orders.
+app.get('/api/market-performance', async (req, res) => {
+  const token = process.env.SQUARE_ACCESS_TOKEN;
+  if (!token || token === 'your_square_token_here') {
+    return res.status(400).json({ error: 'Square API credentials not configured', weekStarts: [], markets: [] });
+  }
+
+  const weekCount = Math.min(Math.max(parseInt(req.query.weeks, 10) || 52, 1), 260);
+  const cacheKey = `market_perf_${weekCount}`;
+  const cached = cacheManager.get(cacheKey);
+  if (cached) return res.json({ ...cached, cached: true });
+
+  try {
+    const startDow = await fetchWorkweekStartDow();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentWeekStart = getWeekStart(todayStr, startDow);
+    const rangeEndExclusive = addDays(currentWeekStart, 7);
+    const rangeStart = addDays(currentWeekStart, -7 * (weekCount - 1));
+
+    const weekStarts = [];
+    for (let d = rangeStart; d < rangeEndExclusive; d = addDays(d, 7)) weekStarts.push(d);
+
+    const marketResults = await Promise.all(WASTE_MARKET_LOCATIONS.map(async (loc) => {
+      try {
+        const sold = {};
+        let cursor;
+        let page = 0;
+        do {
+          const response = await axios.post(
+            `${SQUARE_API_BASE}/orders/search`,
+            {
+              location_ids: [loc.squareLocationId],
+              query: {
+                filter: {
+                  date_time_filter: { closed_at: { start_at: `${rangeStart}T00:00:00Z`, end_at: `${rangeEndExclusive}T00:00:00Z` } },
+                  state_filter: { states: ['COMPLETED'] },
+                },
+                sort: { sort_field: 'CLOSED_AT' },
+              },
+              limit: 500,
+              cursor,
+            },
+            { headers: squareHeaders() }
+          );
+          (response.data.orders || []).forEach((order) => {
+            const date = (order.closed_at || '').slice(0, 10);
+            if (!date) return;
+            (order.line_items || []).forEach((li) => {
+              const price = (li.gross_sales_money?.amount || 0) / 100;
+              if (Number.isFinite(price)) {
+                sold[date] = (sold[date] || 0) + price;
+              }
+            });
+          });
+          cursor = response.data.cursor;
+          page += 1;
+        } while (cursor && page < 50);
+
+        const revenue = weekStarts.map((ws) => {
+          let total = 0;
+          for (let i = 0; i < 7; i++) {
+            total += sold[addDays(ws, i)] || 0;
+          }
+          return round2(total);
+        });
+        return { name: loc.name, revenue };
+      } catch (e) {
+        console.error(`Failed to fetch market ${loc.name}:`, e.message);
+        return { name: loc.name, revenue: weekStarts.map(() => 0) };
+      }
+    }));
+
+    const markets = marketResults
+      .filter((m) => m.revenue.some((v) => v > 0))
+      .sort((a, b) => b.revenue.reduce((s, v) => s + v, 0) - a.revenue.reduce((s, v) => s + v, 0));
+
+    const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: addDays(rangeEndExclusive, -1) };
+    cacheManager.set(cacheKey, response, 24 * 60 * 60 * 1000);
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, weekStarts: [], markets: [] });
+  }
+});
+
 // Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
 app.get('/api/production', (req, res) => {
   const production = loadProduction();
