@@ -953,7 +953,7 @@ app.get('/api/pl-by-channel', (req, res) => {
     const PL_CHANNEL_FILE = path.join(DATA_DIR, 'pl-by-channel.json');
     const plData = loadData(PL_CHANNEL_FILE);
 
-    if (!plData || plData.length === 0) {
+    if (!plData || (Array.isArray(plData) && plData.length === 0) || (!Array.isArray(plData) && !plData.revenueAllocation)) {
       return res.json({
         channels: [
           { name: 'ARC', revenue: 0, variableCosts: 0, bakeryAllocation: 0 },
@@ -966,8 +966,11 @@ app.get('/api/pl-by-channel', (req, res) => {
       });
     }
 
+    // Extract channels from nested structure if it exists
+    const channels = Array.isArray(plData) ? plData : (plData.revenueAllocation?.byChannel || []);
+
     res.json({
-      channels: plData,
+      channels,
       lastUpdated: new Date().toISOString(),
     });
   } catch (err) {
