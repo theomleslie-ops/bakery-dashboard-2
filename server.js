@@ -2958,14 +2958,15 @@ app.get('/api/bakery-margins', async (req, res) => {
       const profit = revenue - totalCogs;
       const marginPct = revenue > 0 ? (profit / revenue * 100) : 0;
 
+      const pricePerUnit = data.quantity > 0 ? revenue / data.quantity : 0;
+      const marginPerUnit = pricePerUnit - cost;
       return {
         name: name,
         revenue: Math.round(revenue * 100) / 100,
         quantity: data.quantity,
-        price: data.quantity > 0 ? Math.round((revenue / data.quantity) * 100) / 100 : 0,
-        costPerUnit: Math.round(cost * 100) / 100,
-        totalCogs: Math.round(totalCogs * 100) / 100,
-        margin$: Math.round(profit * 100) / 100,
+        price: Math.round(pricePerUnit * 100) / 100,
+        cogs: Math.round(cost * 100) / 100,
+        margin$: Math.round(marginPerUnit * 100) / 100,
         marginPct: Math.round(marginPct * 10) / 10,
         status: profit < 0 ? 'error-negative-margin' : (cost > 0 ? 'costed' : 'needs-cost'),
       };
