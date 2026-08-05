@@ -911,8 +911,8 @@
         }
       };
 
-      const channels = plData.channels || [];
-      const markets = [...(plData.markets || [])].sort((a, b) => (b.avgWeeklyRevenue || 0) - (a.avgWeeklyRevenue || 0));
+      const channels = Array.isArray(plData.channels) ? plData.channels : [];
+      const markets = Array.isArray(plData.markets) ? [...plData.markets].sort((a, b) => (b.avgWeeklyRevenue || 0) - (a.avgWeeklyRevenue || 0)) : [];
       const revenueAllocation = plData.revenueAllocation;
 
       const locationOptions = ['All Locations', ...channels.map((c) => c.name)];
