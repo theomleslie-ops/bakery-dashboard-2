@@ -2908,6 +2908,7 @@ app.get('/api/bakery-margins', async (req, res) => {
                 itemName: line.name || 'Unknown',
                 quantity: line.quantity ? parseInt(line.quantity) : 1,
                 grossSales: Math.round((line.gross_sales_money?.amount || 0) / 100 * 100) / 100,
+                closedAt: order.closed_at, // Add timestamp for server-side filtering validation
               });
             }
           }
@@ -2940,14 +2941,38 @@ app.get('/api/bakery-margins', async (req, res) => {
       console.warn(`⚠️ Order fetch error: ${e.message}`);
     }
 
-    // Aggregate by item name
+    // Server-side date filtering as safety net (in case Square API filter has bugs)
+    const beginTimeMs = new Date(beginTime).getTime();
+    const endTimeMs = new Date(endTime).getTime();
+    console.log(`   Date range in ms: ${beginTimeMs} to ${endTimeMs}`);
+
+    // Aggregate by item name (with server-side date validation)
     const itemMap = {};
+    let filteredOutCount = 0;
     for (const order of allOrders) {
-      if (!itemMap[order.itemName]) {
-        itemMap[order.itemName] = { quantity: 0, revenue: 0 };
+      // This shouldn't happen if Square filtering works, but we validate anyway
+      if (!order.closedAt) {
+        // If no closedAt, still include it (Square should have filtered)
+        if (!itemMap[order.itemName]) {
+          itemMap[order.itemName] = { quantity: 0, revenue: 0 };
+        }
+        itemMap[order.itemName].quantity += order.quantity;
+        itemMap[order.itemName].revenue += order.grossSales;
+      } else {
+        const orderTime = new Date(order.closedAt).getTime();
+        if (orderTime >= beginTimeMs && orderTime <= endTimeMs) {
+          if (!itemMap[order.itemName]) {
+            itemMap[order.itemName] = { quantity: 0, revenue: 0 };
+          }
+          itemMap[order.itemName].quantity += order.quantity;
+          itemMap[order.itemName].revenue += order.grossSales;
+        } else {
+          filteredOutCount++;
+        }
       }
-      itemMap[order.itemName].quantity += order.quantity;
-      itemMap[order.itemName].revenue += order.grossSales;
+    }
+    if (filteredOutCount > 0) {
+      console.log(`   ⚠️ Filtered out ${filteredOutCount} orders outside date range (Square API filter bug?)`);
     }
 
     // Load costs from analysis.json for margin calculation
