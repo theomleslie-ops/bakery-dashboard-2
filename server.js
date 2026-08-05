@@ -258,6 +258,39 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
 
 // ============= GOOGLE SHEETS SYNC =============
 
+app.get('/api/sheets/auth', async (req, res) => {
+  try {
+    const ingestor = new SheetsIngestor();
+    const authUrl = ingestor.getAuthUrl();
+    res.json({
+      message: 'Open this URL in your browser to authenticate',
+      authUrl
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/google/callback', async (req, res) => {
+  try {
+    const code = req.query.code;
+    if (!code) {
+      return res.status(400).json({ error: 'No authorization code provided' });
+    }
+
+    const ingestor = new SheetsIngestor();
+    const tokens = await ingestor.exchangeCodeForToken(code);
+
+    res.json({
+      success: true,
+      message: 'Authentication successful! Token saved. You can now run /api/sheets/sync',
+      tokens: { access_token: tokens.access_token ? '***' : undefined }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to authenticate', message: err.message });
+  }
+});
+
 app.post('/api/sheets/sync', async (req, res) => {
   try {
     const ingestor = new SheetsIngestor();

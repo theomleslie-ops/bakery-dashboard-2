@@ -26,7 +26,7 @@ class SheetsIngestor {
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUrl = process.env.GOOGLE_REDIRECT_URL || 'urn:ietf:wg:oauth:2.0:oob';
+    const redirectUrl = process.env.GOOGLE_REDIRECT_URL;
 
     if (!clientId || !clientSecret) {
       throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in .env');
@@ -50,40 +50,36 @@ class SheetsIngestor {
         fs.writeFileSync(TOKEN_PATH, JSON.stringify(credentials, null, 2));
       }
     } else {
-      // Need to do interactive login
-      const authUrl = oauth2Client.generateAuthUrl({
-        access_type: 'offline',
-        scope: SCOPES,
-      });
-      console.log('Authorize this app by visiting this url:', authUrl);
-
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-
-      return new Promise((resolve, reject) => {
-        rl.question('Enter the code from that page here: ', async (code) => {
-          rl.close();
-          try {
-            const { tokens } = await oauth2Client.getToken(code);
-            oauth2Client.setCredentials(tokens);
-            fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
-            this.auth = oauth2Client;
-            this.sheets = google.sheets({ version: 'v4', auth: oauth2Client });
-            this.drive = google.drive({ version: 'v3', auth: oauth2Client });
-            resolve(oauth2Client);
-          } catch (err) {
-            reject(err);
-          }
-        });
-      });
+      throw new Error('Not authenticated. Call /api/sheets/auth to get the OAuth URL.');
     }
 
     this.auth = oauth2Client;
     this.sheets = google.sheets({ version: 'v4', auth: oauth2Client });
     this.drive = google.drive({ version: 'v3', auth: oauth2Client });
     return oauth2Client;
+  }
+
+  getAuthUrl() {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectUrl = process.env.GOOGLE_REDIRECT_URL;
+
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUrl);
+    return oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: SCOPES,
+    });
+  }
+
+  async exchangeCodeForToken(code) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectUrl = process.env.GOOGLE_REDIRECT_URL;
+
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUrl);
+    const { tokens } = await oauth2Client.getToken(code);
+    fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
+    return tokens;
   }
 
   async findTotalProductionSheets() {
@@ -100,111 +96,66 @@ class SheetsIngestor {
     return response.data.files || [];
   }
 
-  async fetchSheetData(spreadsheetId, sheetTitle) {
-    const range = `'${sheetTitle}'`;
-    const response = await this.sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range,
-    });
-
-    return response.data.values || [];
-  }
 
   parseProductionSheet(values, sheetTitle) {
     const rows = [];
-    if (!values || values.length === 0) return rows;
+    if (!values || values.length < 3) return rows; // Need at least date, headers, and one product row
 
-    let currentDate = null;
-    let headerRowIndex = -1;
-    let locationHeaders = [];
+    // Row 0 has the date and location names
+    const dateRow = values[0];
+    if (!dateRow || dateRow.length === 0) return rows;
 
-    // Scan for headers and dates
-    for (let i = 0; i < values.length; i++) {
+    const dateStr = (dateRow[0] || '').toString().trim();
+    const date = this.parseDate(dateStr);
+    if (!date) return rows; // Can't parse the date
+
+    // Row 1 has the column headers (ORDER, SENT, ST, #LO, SOLD, OVERAGE repeated)
+    const headerRow = values[1];
+    const locationHeaders = this.parseHorizontalLocationHeaders(dateRow, headerRow);
+
+    // Rows 2+ have product data
+    for (let i = 2; i < values.length; i++) {
       const row = values[i];
       if (!row || row.length === 0) continue;
 
-      const firstCell = (row[0] || '').toString().trim();
+      const productName = (row[0] || '').toString().trim();
+      if (!productName) continue; // Skip empty product rows
 
-      // Check if this looks like a date header (e.g., "Monday 7/27/2026")
-      if (this.looksLikeDate(firstCell)) {
-        const parsed = this.parseDate(firstCell);
-        if (parsed) currentDate = parsed;
-      }
-
-      // Check for header row (contains location names)
-      if (this.isHeaderRow(row)) {
-        headerRowIndex = i;
-        locationHeaders = this.parseLocationHeaders(row);
-      }
-
-      // If we have a header row and current date, process product rows
-      if (currentDate && headerRowIndex !== -1 && i > headerRowIndex) {
-        const productName = firstCell;
-        if (productName && !this.looksLikeDate(productName) && !this.isHeaderRow(row)) {
-          rows.push(...this.parseProductRow(productName, currentDate, row, locationHeaders));
-        }
-      }
+      rows.push(...this.parseHorizontalProductRow(productName, date, row, locationHeaders));
     }
 
     return rows;
   }
 
-  looksLikeDate(str) {
-    const datePattern = /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+\d{1,2}\/\d{1,2}\/\d{4}$/i;
-    return datePattern.test(str);
-  }
-
-  parseDate(dateStr) {
-    const match = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (match) {
-      const [, month, day, year] = match;
-      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-    }
-    return null;
-  }
-
-  isHeaderRow(row) {
-    if (!row || row.length < 2) return false;
-    const headerIndicators = ['ORDER', 'SENT', 'SOLD', 'OVERAGE'];
-    return row.some((cell) => headerIndicators.some((ind) => cell && cell.toString().toUpperCase().includes(ind)));
-  }
-
-  parseLocationHeaders(row) {
+  parseHorizontalLocationHeaders(dateRow, headerRow) {
+    // Build a map of column indices to locations and which sub-column (ORDER, SENT, etc.)
     const headers = [];
-    let currentLocation = null;
-    let orderIndex = -1;
+    let currentLocationName = '';
+    let currentLocationStart = -1;
 
-    for (let i = 0; i < row.length; i++) {
-      const cell = (row[i] || '').toString().trim().toUpperCase();
+    for (let col = 1; col < dateRow.length; col++) {
+      const locationName = (dateRow[col] || '').toString().trim();
+      const subHeader = (headerRow[col] || '').toString().trim().toUpperCase();
 
-      // Check if this is a location name
-      if (this.isLocationName(row[i])) {
-        currentLocation = this.normalizeLocationName(row[i]);
+      // Track when we hit a new location (when location name changes from empty to non-empty)
+      if (locationName && locationName !== currentLocationName) {
+        currentLocationName = locationName;
+        currentLocationStart = col;
       }
 
-      // Track ORDER column index for this location
-      if (cell === 'ORDER' && currentLocation) {
-        orderIndex = i;
-        headers.push({ location: currentLocation, orderIndex });
-        currentLocation = null; // Reset for next location
+      // Track the ORDER column for this location
+      if (subHeader === 'ORDER' && currentLocationName) {
+        const mappedLocation = LOCATION_MAPPINGS[currentLocationName];
+        if (mappedLocation) {
+          headers.push({ location: currentLocationName, orderIndex: col });
+        }
       }
     }
 
     return headers;
   }
 
-  isLocationName(str) {
-    if (!str) return false;
-    const normalized = this.normalizeLocationName(str);
-    return Object.keys(LOCATION_MAPPINGS).includes(normalized);
-  }
-
-  normalizeLocationName(str) {
-    if (!str) return '';
-    return str.toString().trim().replace(/\s*\([^)]*\)\s*/g, '').trim();
-  }
-
-  parseProductRow(productName, date, row, locationHeaders) {
+  parseHorizontalProductRow(productName, date, row, locationHeaders) {
     const results = [];
 
     for (const { location, orderIndex } of locationHeaders) {
@@ -225,6 +176,15 @@ class SheetsIngestor {
     }
 
     return results;
+  }
+
+  parseDate(dateStr) {
+    const match = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (match) {
+      const [, month, day, year] = match;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    return null;
   }
 
   parseQuantity(str) {
@@ -254,24 +214,22 @@ class SheetsIngestor {
   async ingestProductionData() {
     await this.authorize();
 
-    const sheets = await this.findTotalProductionSheets();
-    if (sheets.length === 0) {
+    const spreadsheetFiles = await this.findTotalProductionSheets();
+    if (spreadsheetFiles.length === 0) {
       throw new Error('No "Total Production" sheets found in Google Drive');
     }
 
-    console.log(`Found ${sheets.length} Total Production sheet(s)`);
+    console.log(`Found ${spreadsheetFiles.length} Total Production spreadsheet(s)`);
 
     const allRows = [];
 
-    for (const sheet of sheets) {
-      console.log(`Fetching data from: ${sheet.name}`);
+    for (const file of spreadsheetFiles) {
       try {
-        const values = await this.fetchSheetData(sheet.id, sheet.name);
-        const parsedRows = this.parseProductionSheet(values, sheet.name);
+        const values = await this.fetchAllDataFromSpreadsheet(file.id);
+        const parsedRows = this.parseProductionSheet(values, file.name);
         allRows.push(...parsedRows);
-        console.log(`  Parsed ${parsedRows.length} rows`);
       } catch (err) {
-        console.error(`  Error fetching sheet ${sheet.name}:`, err.message);
+        console.error(`  Error fetching spreadsheet ${file.name}:`, err.message);
       }
     }
 
@@ -289,6 +247,32 @@ class SheetsIngestor {
     }
 
     return production;
+  }
+
+  async fetchAllDataFromSpreadsheet(spreadsheetId) {
+    try {
+      // Get metadata to find the first sheet
+      const metadata = await this.sheets.spreadsheets.get({
+        spreadsheetId,
+        fields: 'sheets(properties(title))',
+      });
+
+      if (!metadata.data.sheets || metadata.data.sheets.length === 0) {
+        throw new Error('No sheets found in spreadsheet');
+      }
+
+      const firstSheetName = metadata.data.sheets[0].properties.title;
+
+      // Fetch all data from the first sheet using its name
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `'${firstSheetName}'!A:Z`,
+      });
+
+      return response.data.values || [];
+    } catch (err) {
+      throw err;
+    }
   }
 }
 
