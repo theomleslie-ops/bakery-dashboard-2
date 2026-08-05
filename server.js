@@ -7,6 +7,8 @@ const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
 
+const SheetsIngestor = require('./sheets-ingest');
+
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
@@ -252,6 +254,58 @@ app.post('/api/upload/production', upload.single('file'), (req, res) => {
       fs.unlinkSync(req.file.path);
       res.status(400).json({ error: err.message });
     });
+});
+
+// ============= GOOGLE SHEETS SYNC =============
+
+app.post('/api/sheets/sync', async (req, res) => {
+  try {
+    const ingestor = new SheetsIngestor();
+    console.log('Starting Google Sheets sync...');
+    const production = await ingestor.ingestProductionData();
+
+    // Flatten the data structure for storage (location -> [{ date, item, quantityProduced }])
+    const flatProduction = {};
+    for (const [location, rows] of Object.entries(production)) {
+      flatProduction[location] = rows;
+    }
+
+    saveData(PRODUCTION_FILE, flatProduction);
+
+    // Invalidate waste cache for all locations
+    WASTE_LOCATIONS.forEach((loc) => {
+      cacheManager.invalidate(`waste_${loc.name}`);
+    });
+
+    const totalRows = Object.values(flatProduction).reduce((sum, rows) => sum + rows.length, 0);
+    console.log(`Sync complete: ${totalRows} total rows across ${Object.keys(flatProduction).length} locations`);
+
+    res.json({
+      success: true,
+      message: 'Production data synced from Google Sheets',
+      totalRows,
+      locations: Object.keys(flatProduction).length
+    });
+  } catch (err) {
+    console.error('Sheets sync error:', err);
+    res.status(500).json({
+      error: 'Failed to sync from Google Sheets',
+      message: err.message
+    });
+  }
+});
+
+app.get('/api/sheets/auth-status', async (req, res) => {
+  try {
+    const tokenPath = path.join(__dirname, '.env.local.json');
+    const hasToken = fs.existsSync(tokenPath);
+    res.json({
+      authenticated: hasToken,
+      message: hasToken ? 'Authenticated with Google' : 'Not authenticated. Run /api/sheets/sync to authenticate.'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============= DATA ENDPOINTS =============
