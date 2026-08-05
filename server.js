@@ -3008,6 +3008,86 @@ app.get('/api/bakery-margins', async (req, res) => {
   }
 });
 
+// Debug endpoint to see raw Square data vs QB
+app.get('/api/bakery-margins-debug', async (req, res) => {
+  try {
+    if (!process.env.SQUARE_ACCESS_TOKEN) {
+      return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
+    }
+
+    // Fetch just 1 location, 1 week, limited to 3 pages to see actual data structure
+    const location = WASTE_LOCATIONS[0]; // ARC store
+    const beginTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const endTime = new Date().toISOString();
+
+    let cursor = null;
+    let page = 0;
+    const allLines = [];
+    const MAX_PAGES = 3;
+
+    while (page < MAX_PAGES) {
+      const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, {
+        location_ids: [location.squareLocationId],
+        limit: 100,
+        sort_order: 'DESC',
+        query: {
+          filter: {
+            state_filter: { states: ['COMPLETED'] },
+            date_time_filter: {
+              closed_at: { start_at: beginTime, end_at: endTime },
+            },
+          },
+        },
+        ...(cursor && { query: { cursor } }),
+      }, {
+        headers: {
+          Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 5000,
+      });
+
+      const orders = response.data.orders || [];
+      for (const order of orders) {
+        for (const line of order.line_items || []) {
+          allLines.push({
+            itemName: line.name,
+            qty: line.quantity,
+            gross_sales_money: line.gross_sales_money?.amount || 0,
+            total_money: line.total_money?.amount || 0,
+            net_sales_money: line.net_sales_money?.amount || 0,
+            total_discount_money: line.total_discount_money?.amount || 0,
+            total_tax_money: line.total_tax_money?.amount || 0,
+            return_quantity: line.return_quantity || 0,
+          });
+        }
+      }
+
+      cursor = response.data.cursor;
+      page++;
+      if (!cursor) break;
+    }
+
+    const grossSum = allLines.reduce((sum, l) => sum + l.gross_sales_money, 0) / 100;
+    const totalSum = allLines.reduce((sum, l) => sum + l.total_money, 0) / 100;
+    const netSum = allLines.reduce((sum, l) => sum + l.net_sales_money, 0) / 100;
+
+    res.json({
+      location: location.name,
+      period: 'Last 7 days',
+      ordersProcessed: allLines.length,
+      sums: {
+        using_gross_sales_money: Math.round(grossSum * 100) / 100,
+        using_total_money: Math.round(totalSum * 100) / 100,
+        using_net_sales_money: Math.round(netSum * 100) / 100,
+      },
+      samples: allLines.slice(0, 5),
+      note: 'Compare these sums to your Square dashboard for 1 week at ' + location.name,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message, stack: e.stack });
+  }
+});
 
 app.get('/api/rebuild-margins', async (req, res) => {
   try {
