@@ -2844,13 +2844,14 @@ app.get('/api/bakery-margins', async (req, res) => {
       return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
     }
 
-    // Fetch LIVE orders from Square in parallel (NO scaling)
+    // Fetch LIVE orders from Square with concurrency limiting
     const allOrders = [];
-    // Smart page limit: scales with time period to fetch complete data while staying performant
-    // ~2 pages per day for consistency (covers 250-500 orders/day per location)
-    const MAX_PAGES = Math.min(5000, Math.max(50, Math.ceil(days * 2)));
+    // Aggressive limit to stay responsive: max 50 pages per location, typically much less
+    const MAX_PAGES = Math.min(50, Math.max(10, Math.ceil(days * 2)));
+    const MAX_CONCURRENT = 5; // Limit concurrent location fetches to avoid overwhelming Square API
 
-    const locationFetches = WASTE_LOCATIONS.map(async (location) => {
+    // Fetch one location's orders
+    const fetchLocationOrders = async (location) => {
       let cursor = null;
       let page = 0;
       const locationOrders = [];
@@ -2902,15 +2903,19 @@ app.get('/api/bakery-margins', async (req, res) => {
         console.warn(`⚠️ Location ${location.name}: ${e.message}`);
       }
       return locationOrders;
-    });
+    };
 
+    // Process locations with concurrency limit (5 at a time instead of 60+)
     try {
-      const results = await Promise.allSettled(locationFetches);
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          allOrders.push(...result.value);
-        } else {
-          console.warn(`⚠️ Location fetch failed: ${result.reason}`);
+      for (let i = 0; i < WASTE_LOCATIONS.length; i += MAX_CONCURRENT) {
+        const batch = WASTE_LOCATIONS.slice(i, i + MAX_CONCURRENT);
+        const results = await Promise.allSettled(batch.map(fetchLocationOrders));
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            allOrders.push(...result.value);
+          } else {
+            console.warn(`⚠️ Location fetch failed: ${result.reason}`);
+          }
         }
       }
     } catch (e) {
