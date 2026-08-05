@@ -1788,7 +1788,7 @@
           const baseUrl = window.location.origin;
           const response = await fetch(`${baseUrl}/api/dashboard?weeks=${weeksRange}&offset=${offset}`);
           const result = await response.json();
-          let periodData = result.periodData || [];
+          let periodData = result.monthlyData || [];
           if (periodData.length > 1) {
             const lastRevenue = periodData[periodData.length - 1].revenue || 0;
             const avgRevenue = periodData.slice(0, -1).reduce((sum, p) => sum + (p.revenue || 0), 0) / (periodData.length - 1);
@@ -1796,7 +1796,7 @@
               periodData = periodData.slice(0, -1);
             }
           }
-          setData(periodData.map(w => ({ month: w.startDate || w.label, revenue: w.revenue || 0, cogs: w.cogs || 0 })));
+          setData(periodData.map(w => ({ month: w.month || w.startDate || w.label, revenue: w.revenue || 0, cogs: w.cogs || 0 })));
         } catch (err) {
           setError('Failed to load QB data: ' + err.message);
         }
