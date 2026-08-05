@@ -2846,9 +2846,9 @@ app.get('/api/bakery-margins', async (req, res) => {
 
     // Fetch LIVE orders from Square in parallel (NO scaling)
     const allOrders = [];
-    // Dynamic page limit based on time period to ensure complete data retrieval
-    // Assumes ~5 orders per day per location on average
-    const MAX_PAGES = Math.min(100, Math.max(5, Math.ceil(days / 5)));
+    // Smart page limit: scales with time period to fetch complete data while staying performant
+    // ~2 pages per day for consistency (covers 250-500 orders/day per location)
+    const MAX_PAGES = Math.min(5000, Math.max(50, Math.ceil(days * 2)));
 
     const locationFetches = WASTE_LOCATIONS.map(async (location) => {
       let cursor = null;
