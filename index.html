@@ -255,6 +255,7 @@
     ];
     const MARKET_MAX_WEEKS = 260;
     const SQUARE_DATA_MAX_WEEKS = 260;
+    const FOCUS_MARKETS = ['506 Retail', 'LA State St', 'Saint Michaels (SMA)', 'Los Astos farmers market', 'Daly City', 'Mountain View', 'Alum Rock', 'Inner Sunset', 'Divisadero', 'Fort Mason'];
 
     function DashboardContent() {
       const [data, setData] = useState([]);
@@ -1553,6 +1554,7 @@
                     {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </label>
+                <button onClick={() => { setTopN(8); setBottomN(null); setSelected(new Set(FOCUS_MARKETS.filter(f => markets.some(m => m.name === f)))); }}>Focus Markets</button>
               </div>
               {markets.map(m => (
                 <label key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer', fontSize: '13px' }}>
