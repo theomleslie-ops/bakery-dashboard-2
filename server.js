@@ -12,13 +12,37 @@ require('dotenv').config();
 const qbClient = require('./pipeline/qb-client');
 const qbCache = require('./pipeline/qb-cache');
 const claudeMCP = require('./pipeline/claude-mcp');
-const composioConnectors = require('./pipeline/composio-connectors');
 const marginSchedulerModule = require('./pipeline/margin-scheduler');
 const ingredientSchedulerModule = require('./pipeline/ingredient-scheduler');
 const { fetchProductionData } = require('./pipeline/google-drive-production');
 
 let marginScheduler = null;
 let ingredientScheduler = null;
+let composioConnectors = null;
+
+// Lazy-load composio (ES Module compatibility)
+const loadComposio = async () => {
+  if (!composioConnectors) {
+    try {
+      const mod = await import('./pipeline/composio-connectors.js');
+      composioConnectors = mod.default || mod;
+    } catch (e) {
+      console.warn('⚠️ Composio unavailable:', e.message);
+      composioConnectors = {
+        getConnectionStatus: () => null,
+        initComposio: async () => null,
+        getSquareConnection: async () => null,
+        getQuickBooksConnection: async () => null,
+        disconnectSquare: async () => null,
+        disconnectQuickBooks: async () => null,
+      };
+    }
+  }
+  return composioConnectors;
+};
+
+// Initialize composio on startup
+loadComposio().catch(e => console.warn('Failed to load composio:', e.message));
 
 // Safe lazy-load of initMargins
 const initMargins = async () => {
