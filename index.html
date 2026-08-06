@@ -1443,7 +1443,7 @@
       const xPos = (i) => plotLeft + ((plotRight - plotLeft) * i) / Math.max(n - 1, 1);
       const maxVal = Math.max(1, ...series.flatMap(s => s.revenue));
       const niceMax = (v) => { const magnitude = Math.pow(10, Math.floor(Math.log10(v))); const residual = v / magnitude; let niceResidual; if (residual <= 1) niceResidual = 1; else if (residual <= 2) niceResidual = 2; else if (residual <= 5) niceResidual = 5; else niceResidual = 10; return niceResidual * magnitude; };
-      const chartMax = Math.min(niceMax(maxVal * 1.1), 25000);
+      const chartMax = Math.max(niceMax(maxVal * 1.1), 25000);
       const getY = (val) => plotBottom - (val / chartMax) * (plotBottom - plotTop);
       const labelStride = Math.max(1, Math.ceil(n / 16));
 
