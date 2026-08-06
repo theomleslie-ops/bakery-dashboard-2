@@ -1676,7 +1676,15 @@
       const [loading, setLoading] = useState(true);
       const [data, setData] = useState(null);
       const [error, setError] = useState(null);
-      const [period, setPeriod] = useState('lifetime');
+      const [period, setPeriod] = useState('1_week');
+
+      const PERIOD_OPTIONS = [
+        { value: '1_week', label: '1 Week' },
+        { value: '2_weeks', label: '2 Weeks' },
+        { value: '2_months', label: '2 Months' },
+        { value: '6_months', label: '6 Months' },
+        { value: '1_year', label: '1 Year' },
+      ];
 
       useEffect(() => {
         const fetchData = async () => {
@@ -1695,6 +1703,17 @@
         fetchData();
       }, [period]);
 
+      // Format the actual date range from API response
+      const getDateRangeDisplay = () => {
+        if (!data || !data.dataRange) return 'Loading dates…';
+        // dataRange is like "2026-07-29T14:30:00.000Z to 2026-08-05T14:30:00.000Z"
+        const parts = data.dataRange.split(' to ');
+        if (parts.length !== 2) return data.dataRange;
+        const startDate = new Date(parts[0]);
+        const endDate = new Date(parts[1]);
+        return `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      };
+
       if (loading) return <div style={{ padding: '20px' }}>Loading bakery margins…</div>;
       if (error) return <div style={{ padding: '20px', color: 'red' }}>Error: {error}</div>;
       if (!data || !data.top20) return <div style={{ padding: '20px' }}>No data available.</div>;
@@ -1703,27 +1722,22 @@
 
       return (
         <div className="container" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h2 style={{ margin: 0 }}>🥐 Bakery Margins</h2>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <label style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>Period:</label>
-              <select value={period} onChange={(e) => setPeriod(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd', fontSize: '14px', cursor: 'pointer' }}>
-                <option value="1_week">1 Week</option>
-                <option value="2_weeks">2 Weeks</option>
-                <option value="2_months">2 Months</option>
-                <option value="6_months">6 Months</option>
-                <option value="1_year">1 Year</option>
-                <option value="3_years">3 Years</option>
-                <option value="5_years">5 Years</option>
-              </select>
+          <div style={{ marginBottom: '30px' }}>
+            <h2 style={{ margin: '0 0 20px 0' }}>🥐 Bakery Margins</h2>
+
+            <div className="controls" style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="view-toggle">
+                {PERIOD_OPTIONS.map(opt => (
+                  <button key={opt.value} className={period === opt.value ? 'active' : ''} onClick={() => setPeriod(opt.value)}>{opt.label}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginTop: '20px', padding: '15px', background: '#f5f1ed', borderRadius: '6px', fontSize: '14px', color: '#6b4423', fontWeight: '500' }}>
+              📅 {getDateRangeDisplay()}
+              {data && data.cached && <span style={{ marginLeft: '10px', opacity: 0.7 }}>💾 (cached)</span>}
             </div>
           </div>
-
-          {data.generatedAt && (
-            <div style={{ marginBottom: '20px', padding: '15px', background: '#f9f9f9', borderRadius: '4px', fontSize: '14px', color: '#666' }}>
-              Data as of: {new Date(data.generatedAt).toLocaleString()} | Period: <strong>{period.replace(/_/g, ' ').toUpperCase()}</strong>
-            </div>
-          )}
 
           {summary && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '30px' }}>
@@ -2136,9 +2150,7 @@
                 <button className={`tab-button ${activeTab === 'overtime' ? 'active' : ''}`} onClick={() => setActiveTab('overtime')}>Overtime Report</button>
                 <button className={`tab-button ${activeTab === 'prime-cost' ? 'active' : ''}`} onClick={() => setActiveTab('prime-cost')}>Prime Cost</button>
                 <button className={`tab-button ${activeTab === 'pl-channel' ? 'active' : ''}`} onClick={() => setActiveTab('pl-channel')}>P&L by Channel</button>
-                <button className={`tab-button ${activeTab === 'waste' ? 'active' : ''}`} onClick={() => setActiveTab('waste')}>Waste</button>
                 <button className={`tab-button ${activeTab === 'market-performance' ? 'active' : ''}`} onClick={() => setActiveTab('market-performance')}>Performance by Market</button>
-                <button className={`tab-button ${activeTab === 'bakery-margins' ? 'active' : ''}`} onClick={() => setActiveTab('bakery-margins')}>Bakery Margins</button>
                 <button className={`tab-button ${activeTab === 'cash-balance' ? 'active' : ''}`} onClick={() => setActiveTab('cash-balance')}>Cash Balance</button>
               </div>
             </div>
@@ -2148,9 +2160,7 @@
           <div className={`tab-content ${activeTab === 'overtime' ? 'active' : ''}`}><OvertimeContent /></div>
           <div className={`tab-content ${activeTab === 'prime-cost' ? 'active' : ''}`}><PrimeCostDashboard /></div>
           <div className={`tab-content ${activeTab === 'pl-channel' ? 'active' : ''}`}><PLByChannelDashboard /></div>
-          <div className={`tab-content ${activeTab === 'waste' ? 'active' : ''}`}><WasteDashboard /></div>
           <div className={`tab-content ${activeTab === 'market-performance' ? 'active' : ''}`}><MarketPerformanceDashboard /></div>
-          <div className={`tab-content ${activeTab === 'bakery-margins' ? 'active' : ''}`}><BakeryMarginsDashboard /></div>
           <div className={`tab-content ${activeTab === 'cash-balance' ? 'active' : ''}`}><CashBalanceDashboard /></div>
         </div>
       );
