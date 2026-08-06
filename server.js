@@ -2086,6 +2086,11 @@ app.get('/api/store-locations-performance', async (req, res) => {
   if (cached) return res.json({ ...cached, cached: true });
 
   try {
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), 45000)
+    );
+
     const startDow = await fetchWorkweekStartDow();
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
@@ -2094,7 +2099,10 @@ app.get('/api/store-locations-performance', async (req, res) => {
     const weekStarts = [];
     for (let d = rangeStart; d <= currentWeekStart; d = addDays(d, 7)) weekStarts.push(d);
 
-    const revenueByMarket = await getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow);
+    const revenueByMarket = await Promise.race([
+      getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow),
+      timeoutPromise
+    ]);
 
     const storeLocations = [
       { name: '506 Retail', squareLocationId: 'L91Q2PN8KATAB' },
@@ -2109,7 +2117,7 @@ app.get('/api/store-locations-performance', async (req, res) => {
     cacheManager.set(cacheKey, response, 4 * 60 * 60 * 1000); // Cache for 4 hours
     res.json(response);
   } catch (err) {
-    res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, weekStarts: [], markets: [] });
+    res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message || 'Request timeout', weekStarts: [], markets: [] });
   }
 });
 
