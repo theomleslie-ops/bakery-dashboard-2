@@ -2073,6 +2073,46 @@ app.get('/api/market-performance', async (req, res) => {
   }
 });
 
+// GET /api/store-locations-performance - Just 506 Retail and State St with all data
+app.get('/api/store-locations-performance', async (req, res) => {
+  const token = process.env.SQUARE_ACCESS_TOKEN;
+  if (!token || token === 'your_square_token_here') {
+    return res.status(400).json({ error: 'Square API credentials not configured', weekStarts: [], markets: [] });
+  }
+
+  const weekCount = Math.min(Math.max(parseInt(req.query.weeks, 10) || 52, 1), 260);
+  const cacheKey = `store_perf_${weekCount}`;
+  const cached = cacheManager.get(cacheKey);
+  if (cached) return res.json({ ...cached, cached: true });
+
+  try {
+    const startDow = await fetchWorkweekStartDow();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentWeekStart = getWeekStart(todayStr, startDow);
+    const rangeStart = addDays(currentWeekStart, -7 * (weekCount - 1));
+
+    const weekStarts = [];
+    for (let d = rangeStart; d <= currentWeekStart; d = addDays(d, 7)) weekStarts.push(d);
+
+    const revenueByMarket = await getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow);
+
+    const storeLocations = [
+      { name: '506 Retail', squareLocationId: 'L91Q2PN8KATAB' },
+      { name: 'State St', squareLocationId: 'L5J0D4FWK7FFY' }
+    ];
+
+    const markets = storeLocations
+      .map((loc) => ({ name: loc.name, revenue: weekStarts.map((ws) => round2((revenueByMarket[loc.name] || {})[ws] || 0)) }))
+      .sort((a, b) => b.revenue.reduce((s, v) => s + v, 0) - a.revenue.reduce((s, v) => s + v, 0));
+
+    const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: currentWeekStart };
+    cacheManager.set(cacheKey, response, 4 * 60 * 60 * 1000); // Cache for 4 hours
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, weekStarts: [], markets: [] });
+  }
+});
+
 // Force backfill of market-performance data for all locations
 app.get('/api/admin/backfill-market-performance', async (req, res) => {
   try {

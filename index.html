@@ -1672,6 +1672,97 @@
       );
     }
 
+    function StoreLocationsPerformanceDashboard() {
+      const [allWeekStarts, setAllWeekStarts] = useState([]);
+      const [allMarkets, setAllMarkets] = useState([]);
+      const [selected, setSelected] = useState(new Set(['506 Retail', 'State St']));
+      const [status, setStatus] = useState('loading');
+      const [error, setError] = useState('');
+      const [windowWeeks, setWindowWeeks] = useState(26);
+      const [offsetWeeks, setOffsetWeeks] = useState(0);
+
+      useEffect(() => { fetchData(); }, []);
+      const fetchData = async () => {
+        try {
+          setStatus('loading');
+          const baseUrl = window.location.origin;
+          const response = await fetch(`${baseUrl}/api/store-locations-performance?weeks=260`);
+          const result = await response.json();
+          if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
+          let weekStarts = result.weekStarts || [];
+          let markets = result.markets || [];
+          if (weekStarts.length > 1 && markets.length > 0) {
+            const lastWeekIdx = weekStarts.length - 1;
+            const lastWeekTotal = markets.reduce((sum, m) => sum + (m.revenue[lastWeekIdx] || 0), 0);
+            const prevWeekIdx = lastWeekIdx - 1;
+            const prevWeekTotal = markets.reduce((sum, m) => sum + (m.revenue[prevWeekIdx] || 0), 0);
+            if (prevWeekTotal > 0 && lastWeekTotal < prevWeekTotal * 0.6) {
+              weekStarts = weekStarts.slice(0, -1);
+              markets = markets.map(m => ({ ...m, revenue: m.revenue.slice(0, -1) }));
+            }
+          }
+          setAllWeekStarts(weekStarts);
+          setAllMarkets(markets);
+          setSelected(new Set(markets.map(m => m.name)));
+          setStatus(markets.length > 0 ? 'ready' : 'empty');
+        } catch (err) {
+          setError('Failed to load data: ' + err.message);
+          setStatus('error');
+        }
+      };
+
+      const total = allWeekStarts.length;
+      const maxOffset = Math.max(0, total - windowWeeks);
+      const clampedOffset = Math.min(offsetWeeks, maxOffset);
+      const end = total - clampedOffset;
+      const start = Math.max(0, end - windowWeeks);
+      const weekStarts = allWeekStarts.slice(start, end);
+      const markets = allMarkets.map(m => ({ name: m.name, revenue: m.revenue.slice(start, end) }));
+
+      const step = windowWeeks;
+      const goOlder = () => setOffsetWeeks(o => Math.min(maxOffset, o + step));
+      const goNewer = () => setOffsetWeeks(o => Math.max(0, o - step));
+      const changeTimeframe = (weeks) => { setWindowWeeks(weeks); setOffsetWeeks(0); };
+
+      const colorOf = (name) => {
+        const idx = markets.findIndex(m => m.name === name);
+        return marketColor(idx >= 0 ? idx : 0);
+      };
+      const totalRevenue = (m) => m.revenue.reduce((s, v) => s + v, 0);
+      const visibleSeries = markets.filter(m => selected.has(m.name));
+      const rangeLabel = weekStarts.length ? `${fmtWeekLabelFull(weekStarts[0])} – ${fmtWeekLabelFull(weekStarts[weekStarts.length - 1])}` : '';
+
+      return (
+        <div className="container">
+          <header>
+            <h1>🏬 506 Retail & State St Performance</h1>
+            <p className="subtitle">Weekly revenue for store locations{rangeLabel ? ` · ${rangeLabel}` : ''}</p>
+          </header>
+          <div className="controls">
+            <div className="timeframe-controls">
+              <button onClick={goOlder} disabled={status !== 'ready' || clampedOffset >= maxOffset} title="Earlier">◀</button>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--chart-ink)' }}>
+                Show
+                <select value={windowWeeks} onChange={(e) => changeTimeframe(parseInt(e.target.value, 10))}>
+                  {MARKET_TIMEFRAME_OPTIONS.map(opt => <option key={opt.weeks} value={opt.weeks}>{opt.label}</option>)}
+                </select>
+              </label>
+              <button onClick={goNewer} disabled={status !== 'ready' || clampedOffset <= 0} title="Later">▶</button>
+            </div>
+          </div>
+          {status === 'loading' && <div className="loading">Loading store sales data from Square…</div>}
+          {status === 'error' && <div className="error">{error}</div>}
+          {status === 'empty' && <div className="empty">No store sales data available.</div>}
+          {status === 'ready' && (
+            <div className="chart-container">
+              <div className="chart-title">Weekly Revenue ({selected.size} of {markets.length} selected)</div>
+              <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={colorOf} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function BakeryMarginsDashboard() {
       const [loading, setLoading] = useState(true);
       const [data, setData] = useState(null);
@@ -2150,6 +2241,7 @@
                 <button className={`tab-button ${activeTab === 'overtime' ? 'active' : ''}`} onClick={() => setActiveTab('overtime')}>Overtime Report</button>
                 <button className={`tab-button ${activeTab === 'prime-cost' ? 'active' : ''}`} onClick={() => setActiveTab('prime-cost')}>Prime Cost</button>
                 <button className={`tab-button ${activeTab === 'market-performance' ? 'active' : ''}`} onClick={() => setActiveTab('market-performance')}>Performance by Location</button>
+                <button className={`tab-button ${activeTab === 'store-locations' ? 'active' : ''}`} onClick={() => setActiveTab('store-locations')}>Store Locations</button>
                 <button className={`tab-button ${activeTab === 'cash-balance' ? 'active' : ''}`} onClick={() => setActiveTab('cash-balance')}>Cash Balance</button>
               </div>
             </div>
@@ -2159,6 +2251,7 @@
           <div className={`tab-content ${activeTab === 'overtime' ? 'active' : ''}`}><OvertimeContent /></div>
           <div className={`tab-content ${activeTab === 'prime-cost' ? 'active' : ''}`}><PrimeCostDashboard /></div>
           <div className={`tab-content ${activeTab === 'market-performance' ? 'active' : ''}`}><MarketPerformanceDashboard /></div>
+          <div className={`tab-content ${activeTab === 'store-locations' ? 'active' : ''}`}><StoreLocationsPerformanceDashboard /></div>
           <div className={`tab-content ${activeTab === 'cash-balance' ? 'active' : ''}`}><CashBalanceDashboard /></div>
         </div>
       );
