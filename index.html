@@ -1432,7 +1432,7 @@
       return `hsl(${hue.toFixed(1)}, ${sat}%, ${light}%)`;
     };
 
-    function MarketLineChart({ weekStarts, series, colorOf }) {
+    function MarketLineChart({ weekStarts, series, colorOf, focusMarketsActive, allWeekStarts }) {
       const [hoverIndex, setHoverIndex] = useState(null);
       const chartHeight = 400;
       const plotLeft = 60, plotRight = 960, plotTop = 20, plotBottom = chartHeight + 20;
@@ -1442,6 +1442,10 @@
       const chartMax = maxVal * 1.1;
       const getY = (val) => plotBottom - (val / chartMax) * (plotBottom - plotTop);
       const labelStride = Math.max(1, Math.ceil(n / 16));
+
+      // Find August 5th in the visible weekStarts
+      const aug5Index = focusMarketsActive ? weekStarts.findIndex(ws => ws === '2026-08-05' || ws.startsWith('2026-08-05')) : -1;
+      const showAug5Line = focusMarketsActive && aug5Index >= 0;
 
       const handleMove = (e) => {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -1465,6 +1469,9 @@
               </g>
             );
           })}
+          {showAug5Line && (
+            <line x1={xPos(aug5Index)} y1={plotTop} x2={xPos(aug5Index)} y2={plotBottom} stroke="black" strokeWidth="2" />
+          )}
           {weekStarts.map((ws, i) => (i % labelStride === 0) && (
             <text key={`xlabel${i}`} x={xPos(i)} y={plotBottom + 20} textAnchor="middle" fontSize="11" fill="var(--chart-ink)" fontWeight="600">{fmtWeekLabel(ws)}</text>
           ))}
@@ -1508,7 +1515,7 @@
 
     const MARKET_TOP_N_OPTIONS = [5, 8, 10, 15, 20, 25];
 
-    function MarketSelectMenu({ markets, selected, setSelected, colorOf, totalRevenue, open, setOpen }) {
+    function MarketSelectMenu({ markets, selected, setSelected, colorOf, totalRevenue, open, setOpen, onFocusMarketsClick, setFocusMarketsActive }) {
       const [topN, setTopN] = useState(8);
       const [bottomN, setBottomN] = useState(null);
       const menuRef = useRef(null);
@@ -1535,22 +1542,22 @@
           {open && (
             <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', maxHeight: '60vh', overflowY: 'auto', background: 'var(--chart-surface)', border: '1px solid var(--chart-grid)', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 1000, padding: '10px', width: '380px', maxWidth: '90vw' }}>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--chart-grid)' }}>
-                <button onClick={() => setSelected(new Set(markets.map(m => m.name)))}>Select All</button>
-                <button onClick={() => setSelected(new Set())}>Select None</button>
+                <button onClick={() => { setSelected(new Set(markets.map(m => m.name))); setFocusMarketsActive(false); }}>Select All</button>
+                <button onClick={() => { setSelected(new Set()); setFocusMarketsActive(false); }}>Select None</button>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: 'var(--chart-ink)' }}>
                   Top
-                  <select value={topN} onChange={(e) => { const n = parseInt(e.target.value, 10); setTopN(n); setBottomN(null); setSelected(new Set(markets.slice(0, n).map(m => m.name))); }}>
+                  <select value={topN} onChange={(e) => { const n = parseInt(e.target.value, 10); setTopN(n); setBottomN(null); setSelected(new Set(markets.slice(0, n).map(m => m.name))); setFocusMarketsActive(false); }}>
                     {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: 'var(--chart-ink)' }}>
                   Bottom
-                  <select value={bottomN || ''} onChange={(e) => { const n = e.target.value ? parseInt(e.target.value, 10) : null; setBottomN(n); setTopN(8); if (n) setSelected(new Set(markets.slice(-n).map(m => m.name))); }}>
+                  <select value={bottomN || ''} onChange={(e) => { const n = e.target.value ? parseInt(e.target.value, 10) : null; setBottomN(n); setTopN(8); if (n) setSelected(new Set(markets.slice(-n).map(m => m.name))); setFocusMarketsActive(false); }}>
                     <option value="">None</option>
                     {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </label>
-                <button onClick={() => { setTopN(8); setBottomN(null); setSelected(new Set(FOCUS_MARKETS.filter(f => markets.some(m => m.name === f)))); }}>Focus Markets</button>
+                <button onClick={() => { setTopN(8); setBottomN(null); setSelected(new Set(FOCUS_MARKETS.filter(f => markets.some(m => m.name === f)))); if (onFocusMarketsClick) onFocusMarketsClick(); }}>Focus Markets</button>
               </div>
               {markets.map(m => (
                 <label key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer', fontSize: '13px' }}>
@@ -1577,6 +1584,7 @@
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
       const [menuOpen, setMenuOpen] = useState(false);
+      const [focusMarketsActive, setFocusMarketsActive] = useState(false);
       // windowWeeks = how many weeks are shown on screen. offsetWeeks = how far back from the most
       // recent week the right edge sits (0 = showing through the current week).
       const [windowWeeks, setWindowWeeks] = useState(26);
@@ -1655,7 +1663,7 @@
               <button onClick={goNewer} disabled={status !== 'ready' || clampedOffset <= 0} title="Later">▶</button>
             </div>
             {status === 'ready' && (
-              <MarketSelectMenu markets={markets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} open={menuOpen} setOpen={setMenuOpen} />
+              <MarketSelectMenu markets={markets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} open={menuOpen} setOpen={setMenuOpen} onFocusMarketsClick={() => setFocusMarketsActive(true)} setFocusMarketsActive={setFocusMarketsActive} />
             )}
           </div>
           {status === 'loading' && <div className="loading">Loading market sales data from Square… the first load can take several minutes (up to 5 years of history across ~50 locations); results are cached after that.</div>}
@@ -1664,7 +1672,7 @@
           {status === 'ready' && (
             <div className="chart-container" style={{ marginRight: menuOpen ? '360px' : '0px', transition: 'margin-right 0.2s ease' }}>
               <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
-              <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={colorOf} />
+              <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={colorOf} focusMarketsActive={focusMarketsActive} allWeekStarts={allWeekStarts} />
             </div>
           )}
         </div>
