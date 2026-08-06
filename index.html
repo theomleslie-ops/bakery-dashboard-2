@@ -1439,7 +1439,7 @@
       const n = weekStarts.length || 1;
       const xPos = (i) => plotLeft + ((plotRight - plotLeft) * i) / Math.max(n - 1, 1);
       const maxVal = Math.max(1, ...series.flatMap(s => s.revenue));
-      const chartMax = Math.max(maxVal * 1.15, 25000);
+      const chartMax = maxVal * 1.1;
       const getY = (val) => plotBottom - (val / chartMax) * (plotBottom - plotTop);
       const labelStride = Math.max(1, Math.ceil(n / 16));
 
