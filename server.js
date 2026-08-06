@@ -2159,12 +2159,19 @@ app.get('/api/admin/backfill-store-locations', async (req, res) => {
       const rangeStart = addDays(currentWeekStart, -7 * 1040); // 20 years back
 
       console.log(`📅 Fetching store location data from ${rangeStart} to ${currentWeekStart}`);
-      await getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow);
+      const result = await getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow);
 
-      cacheManager.invalidatePrefix('market_perf_');
-      cacheManager.invalidatePrefix('store_perf_');
+      console.log(`📊 Fetched data for locations. Clearing all caches...`);
+      // Clear ALL cache to ensure fresh data
+      cacheManager.invalidatePrefix('');
 
-      console.log('✅ Store locations backfill complete!');
+      // Extra verification - check the snapshot was saved
+      if (fs.existsSync(MARKET_PERF_SNAPSHOT_FILE)) {
+        const snapshot = JSON.parse(fs.readFileSync(MARKET_PERF_SNAPSHOT_FILE, 'utf8'));
+        const retail506 = Object.keys(snapshot.revenueByMarket['506 Retail'] || {}).length;
+        const stateSt = Object.keys(snapshot.revenueByMarket['State St'] || {}).length;
+        console.log(`✅ Backfill complete! 506 Retail: ${retail506} weeks, State St: ${stateSt} weeks`);
+      }
     } catch (err) {
       console.error('❌ Store backfill error:', err.message);
     }
