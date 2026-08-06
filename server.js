@@ -2062,7 +2062,7 @@ app.get('/api/market-performance', async (req, res) => {
 
     const markets = WASTE_MARKET_LOCATIONS
       .map((loc) => ({ name: loc.name, revenue: weekStarts.map((ws) => round2((revenueByMarket[loc.name] || {})[ws] || 0)) }))
-      .filter((m) => m.revenue.some((v) => v > 0))
+      .filter((m) => m.revenue.some((v) => v > 0) || ['506 Retail', 'State St'].includes(m.name))
       .sort((a, b) => b.revenue.reduce((s, v) => s + v, 0) - a.revenue.reduce((s, v) => s + v, 0));
 
     const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: currentWeekStart };
