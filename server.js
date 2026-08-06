@@ -742,7 +742,7 @@ const fetchTimecardsWindow = async (startDate, endDateExclusive) => {
       console.warn(`Timecard fetch failed on page ${page}:`, err.message);
       break;
     }
-  } while (cursor && page < 50);
+  } while (cursor && page < 500);
   return timecards;
 };
 
@@ -807,7 +807,7 @@ const fetchTeamMemberNames = async () => {
       console.warn(`Team member fetch failed on page ${page}:`, err.message);
       break;
     }
-  } while (cursor && page < 50);
+  } while (cursor && page < 500);
   return names;
 };
 
@@ -1899,7 +1899,7 @@ const fetchSoldQuantities = async (locationId, startDate, endDateExclusive) => {
     });
     cursor = response.data.cursor;
     page += 1;
-  } while (cursor && page < 50);
+  } while (cursor && page < 500);
 
   const avgPrice = {};
   Object.entries(priceTotals).forEach(([name, { revenue, quantity }]) => {
@@ -1954,7 +1954,7 @@ const fetchWeeklyRevenueForLocation = async (locationId, startDate, endDateExclu
     });
     cursor = response.data.cursor;
     page += 1;
-  } while (cursor && page < 50);
+  } while (cursor && page < 500);
   return revenueByWeek;
 };
 
