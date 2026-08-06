@@ -2088,13 +2088,15 @@ app.get('/api/store-locations-performance', async (req, res) => {
   try {
     // Add timeout to prevent hanging
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Request timeout')), 45000)
+      setTimeout(() => reject(new Error('Request timeout')), 15000)
     );
 
     const startDow = await fetchWorkweekStartDow();
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
-    const rangeStart = addDays(currentWeekStart, -7 * (weekCount - 1));
+    // Limit to recent data to avoid server overload
+    const effectiveWeekCount = Math.min(weekCount, 52);
+    const rangeStart = addDays(currentWeekStart, -7 * (effectiveWeekCount - 1));
 
     const weekStarts = [];
     for (let d = rangeStart; d <= currentWeekStart; d = addDays(d, 7)) weekStarts.push(d);
@@ -2147,43 +2149,9 @@ app.get('/api/admin/backfill-market-performance', async (req, res) => {
   }
 });
 
-// Fast backfill just for 506 Retail and State St (runs async in background)
+// Backfill disabled due to server overload - just fetch recent data
 app.get('/api/admin/backfill-store-locations', async (req, res) => {
-  res.json({ message: 'Backfill started in background for store locations...' });
-
-  // Run backfill in background (don't wait for it)
-  (async () => {
-    try {
-      console.log('⚡ Fast store locations backfill started...');
-
-      // Clear snapshot
-      if (fs.existsSync(MARKET_PERF_SNAPSHOT_FILE)) {
-        fs.unlinkSync(MARKET_PERF_SNAPSHOT_FILE);
-      }
-
-      const startDow = await fetchWorkweekStartDow();
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const currentWeekStart = getWeekStart(todayStr, startDow);
-      const rangeStart = addDays(currentWeekStart, -7 * 1040); // 20 years back
-
-      console.log(`📅 Fetching store location data from ${rangeStart} to ${currentWeekStart}`);
-      const result = await getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow);
-
-      console.log(`📊 Fetched data for locations. Clearing all caches...`);
-      // Clear ALL cache to ensure fresh data
-      cacheManager.invalidatePrefix('');
-
-      // Extra verification - check the snapshot was saved
-      if (fs.existsSync(MARKET_PERF_SNAPSHOT_FILE)) {
-        const snapshot = JSON.parse(fs.readFileSync(MARKET_PERF_SNAPSHOT_FILE, 'utf8'));
-        const retail506 = Object.keys(snapshot.revenueByMarket['506 Retail'] || {}).length;
-        const stateSt = Object.keys(snapshot.revenueByMarket['State St'] || {}).length;
-        console.log(`✅ Backfill complete! 506 Retail: ${retail506} weeks, State St: ${stateSt} weeks`);
-      }
-    } catch (err) {
-      console.error('❌ Store backfill error:', err.message);
-    }
-  })();
+  res.json({ message: 'Backfill disabled. Dashboards now show recent data only.' });
 });
 
 // Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
