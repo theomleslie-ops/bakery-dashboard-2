@@ -1972,10 +1972,17 @@ const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow) =
 
   if (!snapshot.backfilledFrom || rangeStart < snapshot.backfilledFrom) {
     const backfillEnd = snapshot.backfilledFrom && snapshot.backfilledFrom > rangeStart ? snapshot.backfilledFrom : rangeEndExclusive;
-    const backfillResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => ({
-      name: loc.name,
-      revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, rangeStart, backfillEnd, startDow),
-    }));
+    const backfillResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => {
+      try {
+        return {
+          name: loc.name,
+          revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, rangeStart, backfillEnd, startDow),
+        };
+      } catch (err) {
+        console.warn(`⚠️ Failed to backfill data for ${loc.name}:`, err.message);
+        return { name: loc.name, revenueByWeek: {} };
+      }
+    });
     backfillResults.forEach(({ name, revenueByWeek }) => {
       snapshot.revenueByMarket[name] = { ...(snapshot.revenueByMarket[name] || {}), ...revenueByWeek };
     });
@@ -1983,10 +1990,17 @@ const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow) =
   }
 
   const liveStart = addDays(rangeEndInclusive, -7);
-  const liveResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => ({
-    name: loc.name,
-    revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, liveStart, rangeEndExclusive, startDow),
-  }));
+  const liveResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => {
+    try {
+      return {
+        name: loc.name,
+        revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, liveStart, rangeEndExclusive, startDow),
+      };
+    } catch (err) {
+      console.warn(`⚠️ Failed to fetch live data for ${loc.name}:`, err.message);
+      return { name: loc.name, revenueByWeek: {} };
+    }
+  });
   liveResults.forEach(({ name, revenueByWeek }) => {
     snapshot.revenueByMarket[name] = { ...(snapshot.revenueByMarket[name] || {}), ...revenueByWeek };
   });
