@@ -2150,9 +2150,7 @@
                 <button className={`tab-button ${activeTab === 'overtime' ? 'active' : ''}`} onClick={() => setActiveTab('overtime')}>Overtime Report</button>
                 <button className={`tab-button ${activeTab === 'prime-cost' ? 'active' : ''}`} onClick={() => setActiveTab('prime-cost')}>Prime Cost</button>
                 <button className={`tab-button ${activeTab === 'pl-channel' ? 'active' : ''}`} onClick={() => setActiveTab('pl-channel')}>P&L by Channel</button>
-                <button className={`tab-button ${activeTab === 'waste' ? 'active' : ''}`} onClick={() => setActiveTab('waste')}>Waste</button>
                 <button className={`tab-button ${activeTab === 'market-performance' ? 'active' : ''}`} onClick={() => setActiveTab('market-performance')}>Performance by Market</button>
-                <button className={`tab-button ${activeTab === 'bakery-margins' ? 'active' : ''}`} onClick={() => setActiveTab('bakery-margins')}>Bakery Margins</button>
                 <button className={`tab-button ${activeTab === 'cash-balance' ? 'active' : ''}`} onClick={() => setActiveTab('cash-balance')}>Cash Balance</button>
               </div>
             </div>
@@ -2162,9 +2160,7 @@
           <div className={`tab-content ${activeTab === 'overtime' ? 'active' : ''}`}><OvertimeContent /></div>
           <div className={`tab-content ${activeTab === 'prime-cost' ? 'active' : ''}`}><PrimeCostDashboard /></div>
           <div className={`tab-content ${activeTab === 'pl-channel' ? 'active' : ''}`}><PLByChannelDashboard /></div>
-          <div className={`tab-content ${activeTab === 'waste' ? 'active' : ''}`}><WasteDashboard /></div>
           <div className={`tab-content ${activeTab === 'market-performance' ? 'active' : ''}`}><MarketPerformanceDashboard /></div>
-          <div className={`tab-content ${activeTab === 'bakery-margins' ? 'active' : ''}`}><BakeryMarginsDashboard /></div>
           <div className={`tab-content ${activeTab === 'cash-balance' ? 'active' : ''}`}><CashBalanceDashboard /></div>
         </div>
       );
