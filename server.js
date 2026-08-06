@@ -2117,15 +2117,23 @@ app.get('/api/store-locations-performance', async (req, res) => {
 app.get('/api/admin/backfill-market-performance', async (req, res) => {
   try {
     console.log('🔄 Forcing market-performance backfill for all locations...');
+    // Clear the snapshot file to force complete rebuild
+    if (fs.existsSync(MARKET_PERF_SNAPSHOT_FILE)) {
+      fs.unlinkSync(MARKET_PERF_SNAPSHOT_FILE);
+      console.log('📁 Cleared snapshot file');
+    }
+
     const startDow = await fetchWorkweekStartDow();
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
-    const rangeStart = addDays(currentWeekStart, -7 * 259); // 3+ years back
+    const rangeStart = addDays(currentWeekStart, -7 * 1040); // 20 years back to capture all historical data
 
+    console.log(`📅 Backfilling from ${rangeStart} to ${currentWeekStart}`);
     await getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow);
     cacheManager.invalidatePrefix('market_perf_');
+    cacheManager.invalidatePrefix('store_perf_');
 
-    res.json({ success: true, message: 'Backfill complete. Cache cleared.' });
+    res.json({ success: true, message: 'Backfill complete (20 years back). Cache cleared.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
