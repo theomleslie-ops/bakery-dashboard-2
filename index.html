@@ -1601,7 +1601,6 @@
               markets = markets.map(m => ({ ...m, revenue: m.revenue.slice(0, -1) }));
             }
           }
-          markets = markets.filter(m => m.revenue.some(v => v > 0));
           setAllWeekStarts(weekStarts);
           setAllMarkets(markets);
           setSelected(new Set(markets.slice(0, 8).map(m => m.name)));
