@@ -2139,6 +2139,38 @@ app.get('/api/admin/backfill-market-performance', async (req, res) => {
   }
 });
 
+// Fast backfill just for 506 Retail and State St (runs async in background)
+app.get('/api/admin/backfill-store-locations', async (req, res) => {
+  res.json({ message: 'Backfill started in background for store locations...' });
+
+  // Run backfill in background (don't wait for it)
+  (async () => {
+    try {
+      console.log('⚡ Fast store locations backfill started...');
+
+      // Clear snapshot
+      if (fs.existsSync(MARKET_PERF_SNAPSHOT_FILE)) {
+        fs.unlinkSync(MARKET_PERF_SNAPSHOT_FILE);
+      }
+
+      const startDow = await fetchWorkweekStartDow();
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const currentWeekStart = getWeekStart(todayStr, startDow);
+      const rangeStart = addDays(currentWeekStart, -7 * 1040); // 20 years back
+
+      console.log(`📅 Fetching store location data from ${rangeStart} to ${currentWeekStart}`);
+      await getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow);
+
+      cacheManager.invalidatePrefix('market_perf_');
+      cacheManager.invalidatePrefix('store_perf_');
+
+      console.log('✅ Store locations backfill complete!');
+    } catch (err) {
+      console.error('❌ Store backfill error:', err.message);
+    }
+  })();
+});
+
 // Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
 app.get('/api/production', (req, res) => {
   const production = loadProduction();
