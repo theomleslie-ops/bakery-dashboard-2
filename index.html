@@ -1641,8 +1641,8 @@
       return (
         <div className="container">
           <header>
-            <h1>🏪 Performance by Market</h1>
-            <p className="subtitle">Weekly revenue by farmers market / pop-up location{rangeLabel ? ` · ${rangeLabel}` : ''}</p>
+            <h1>🏪 Performance by Location</h1>
+            <p className="subtitle">Weekly revenue by location{rangeLabel ? ` · ${rangeLabel}` : ''}</p>
           </header>
           <div className="controls">
             <div className="timeframe-controls">
@@ -2149,7 +2149,7 @@
                 <button className={`tab-button ${activeTab === 'quickbooks' ? 'active' : ''}`} onClick={() => setActiveTab('quickbooks')}>Revenue and COGS</button>
                 <button className={`tab-button ${activeTab === 'overtime' ? 'active' : ''}`} onClick={() => setActiveTab('overtime')}>Overtime Report</button>
                 <button className={`tab-button ${activeTab === 'prime-cost' ? 'active' : ''}`} onClick={() => setActiveTab('prime-cost')}>Prime Cost</button>
-                <button className={`tab-button ${activeTab === 'market-performance' ? 'active' : ''}`} onClick={() => setActiveTab('market-performance')}>Performance by Market</button>
+                <button className={`tab-button ${activeTab === 'market-performance' ? 'active' : ''}`} onClick={() => setActiveTab('market-performance')}>Performance by Location</button>
                 <button className={`tab-button ${activeTab === 'cash-balance' ? 'active' : ''}`} onClick={() => setActiveTab('cash-balance')}>Cash Balance</button>
               </div>
             </div>
