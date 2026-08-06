@@ -82,10 +82,8 @@ if (!fs.existsSync(PL_CHANNEL_FILE) && fs.existsSync(PL_CHANNEL_SEED)) {
 const WASTE_STORE_LOCATIONS = [
   { name: 'ARC', squareLocationId: 'L41E1NSH9N1GC' },
   { name: 'LSK', squareLocationId: 'LVTS3K9QFN95F' },
-  { name: 'State St', squareLocationId: 'L5J0D4FWK7FFY' },
   { name: 'Catering', squareLocationId: 'L2326PJNQ7KS9' },
   { name: 'Delivery 506', squareLocationId: 'LWSX9K7SC3V37' },
-  { name: '506 Retail', squareLocationId: 'L91Q2PN8KATAB' },
 ];
 
 // Every other currently-ACTIVE Square location (farmers markets, pop-ups, corporate-campus
