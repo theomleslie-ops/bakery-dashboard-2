@@ -2073,6 +2073,24 @@ app.get('/api/market-performance', async (req, res) => {
   }
 });
 
+// Force backfill of market-performance data for all locations
+app.get('/api/admin/backfill-market-performance', async (req, res) => {
+  try {
+    console.log('🔄 Forcing market-performance backfill for all locations...');
+    const startDow = await fetchWorkweekStartDow();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentWeekStart = getWeekStart(todayStr, startDow);
+    const rangeStart = addDays(currentWeekStart, -7 * 259); // 3+ years back
+
+    await getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow);
+    cacheManager.invalidatePrefix('market_perf_');
+
+    res.json({ success: true, message: 'Backfill complete. Cache cleared.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
 app.get('/api/production', (req, res) => {
   const production = loadProduction();
