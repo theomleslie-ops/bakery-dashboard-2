@@ -92,6 +92,8 @@ const WASTE_STORE_LOCATIONS = [
 // stands) - i.e. everything that isn't one of the storefronts above. Regenerate from Square's
 // Locations API (list, filter status === 'ACTIVE') if new markets are added or old ones retired.
 const WASTE_MARKET_LOCATIONS = [
+  { name: '506 Retail', squareLocationId: 'L91Q2PN8KATAB' },
+  { name: 'State St', squareLocationId: 'L5J0D4FWK7FFY' },
   { name: '25th AVE', squareLocationId: 'LGEFKKMZTYRJK' },
   { name: 'Alum Rock Village (Sun)', squareLocationId: 'LHFCY22W62WXD' },
   { name: 'Antioch SUN', squareLocationId: 'LZJJ8SPXW0J44' },
