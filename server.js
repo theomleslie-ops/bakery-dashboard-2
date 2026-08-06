@@ -2050,15 +2050,25 @@ app.get('/api/market-performance', async (req, res) => {
   if (cached) return res.json({ ...cached, cached: true });
 
   try {
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), 15000)
+    );
+
     const startDow = await fetchWorkweekStartDow();
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
-    const rangeStart = addDays(currentWeekStart, -7 * (weekCount - 1));
+    // Limit to recent data to avoid server overload
+    const effectiveWeekCount = Math.min(weekCount, 52);
+    const rangeStart = addDays(currentWeekStart, -7 * (effectiveWeekCount - 1));
 
     const weekStarts = [];
     for (let d = rangeStart; d <= currentWeekStart; d = addDays(d, 7)) weekStarts.push(d);
 
-    const revenueByMarket = await getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow);
+    const revenueByMarket = await Promise.race([
+      getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow),
+      timeoutPromise
+    ]);
 
     const markets = WASTE_MARKET_LOCATIONS
       .map((loc) => ({ name: loc.name, revenue: weekStarts.map((ws) => round2((revenueByMarket[loc.name] || {})[ws] || 0)) }))
@@ -2069,7 +2079,7 @@ app.get('/api/market-performance', async (req, res) => {
     cacheManager.set(cacheKey, response, 4 * 60 * 60 * 1000); // Cache for 4 hours
     res.json(response);
   } catch (err) {
-    res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message, weekStarts: [], markets: [] });
+    res.status(500).json({ error: 'Square API error', message: err.response?.data?.errors?.[0]?.detail || err.message || 'Request timeout', weekStarts: [], markets: [] });
   }
 });
 
