@@ -2431,7 +2431,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     });
 
     // Fetch PDFs from bills and extract itemized ingredient costs
-    const { pdfParser } = require('./pipeline/pdf-parser');
+    const { extractLineItemsFromPdf } = require('./pipeline/pdf-invoice-parser');
     const fetchBillsWithDetails = async () => {
       let billsProcessed = 0;
       for (const billSummary of billSummaries.slice(0, 10)) { // Sample first 10 bills for now
@@ -2445,7 +2445,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
           // Try to extract line items from PDF attachment
           let lineItems = [];
           try {
-            lineItems = await pdfParser.extractLineItemsFromPdf(fullBill.Id);
+            lineItems = await extractLineItemsFromPdf(fullBill.Id);
             console.log(`      ✓ Extracted ${lineItems.length} items from PDF`);
           } catch (e) {
             console.log(`      ⚠️ PDF extraction failed: ${e.message}`);
