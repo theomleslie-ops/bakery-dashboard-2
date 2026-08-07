@@ -2551,25 +2551,17 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
       });
       console.log(`  Found ${cookieItems.length} cookie-like items`);
 
-      // Find NO NUT Choc Chip Cookie - try various matching patterns
-      let matchedItem = cookieItems.find(item => {
+      // Find NO-NUT Choc Chip Cookie - try various matching patterns
+      let matchedItem = items.find(item => {
         const name = (item.item_data?.name || '').toUpperCase();
-        return name.includes('NO NUT') && name.includes('CHOC') && name.includes('CHIP');
+        return name.includes('NO-NUT') || name.includes('NO NUT');
       });
 
-      // If not found, try just NO NUT + COOKIE
+      // If still not found, try just NO + CHOC + CHIP
       if (!matchedItem) {
-        matchedItem = cookieItems.find(item => {
+        matchedItem = items.find(item => {
           const name = (item.item_data?.name || '').toUpperCase();
-          return name.includes('NO NUT');
-        });
-      }
-
-      // If still not found, try any chocolate chip cookie
-      if (!matchedItem) {
-        matchedItem = cookieItems.find(item => {
-          const name = (item.item_data?.name || '').toUpperCase();
-          return name.includes('CHOC') && name.includes('CHIP');
+          return name.includes('NO') && name.includes('CHOC') && name.includes('CHIP');
         });
       }
 
