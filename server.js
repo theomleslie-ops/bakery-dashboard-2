@@ -2381,7 +2381,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     }
 
     const recipesInFolder = await googleSheets.listSheetsInFolder(drive, recipeFolder.id);
-    const recipeName = 'Chocolate chips cookies (no nuts)';
+    const recipeName = 'COOKIES no nuts.xlsx';
     const recipeSheet = recipesInFolder.find(s => s.name.toLowerCase() === recipeName.toLowerCase());
     if (!recipeSheet) {
       return res.status(400).json({
