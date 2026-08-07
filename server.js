@@ -2405,7 +2405,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     // Extract ingredients from rows 8+ (Column A: name, Column B: Basic recipe qty in kg)
     const ingredients = [];
     if (recipeData && recipeData.length > 0) {
-      for (let i = 7; i < recipeData.length; i++) {
+      for (let i = 8; i < recipeData.length; i++) {
         const row = recipeData[i];
         if (!row || !row[0]) break; // Stop at empty row
         const name = String(row[0]).trim();
