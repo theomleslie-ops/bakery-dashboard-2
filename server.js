@@ -2447,6 +2447,9 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
           try {
             lineItems = await extractLineItemsFromPdf(fullBill.Id);
             console.log(`      ✓ Extracted ${lineItems.length} items from PDF`);
+            lineItems.slice(0, 3).forEach((item, idx) => {
+              console.log(`        Line ${idx + 1}: "${(item.description || item.name || item.item || '?').substring(0, 50)}" = $${item.amount || item.price || item.total || '?'}`);
+            });
           } catch (e) {
             console.log(`      ⚠️ PDF extraction failed: ${e.message}`);
           }
@@ -2533,22 +2536,42 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
       const items = squareRes.data.objects || [];
       console.log(`  Square catalog returned ${items.length} items`);
 
-      // Filter to cookies and show first 3
+      // Show first 5 items to understand catalog structure
+      console.log(`  First items in catalog:`);
+      items.slice(0, 5).forEach((item, idx) => {
+        const name = item.item_data?.name || '(no name)';
+        const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
+        console.log(`    ${idx + 1}. ${name} = $${price ? (price / 100).toFixed(2) : 'no price'}`);
+      });
+
+      // Filter to cookies and show them
       const cookieItems = items.filter(i => {
         const name = (i.item_data?.name || '').toUpperCase();
         return name.includes('COOKIE') || name.includes('CHOC');
       });
-      console.log(`  Found ${cookieItems.length} cookie-like items:`);
-      cookieItems.slice(0, 3).forEach((item, idx) => {
-        const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
-        console.log(`    ${idx + 1}. ${item.item_data?.name} = $${price ? (price / 100).toFixed(2) : 'no price'}`);
-      });
+      console.log(`  Found ${cookieItems.length} cookie-like items`);
 
-      // Find NO NUT Choc Chip Cookie
-      const matchedItem = cookieItems.find(item => {
+      // Find NO NUT Choc Chip Cookie - try various matching patterns
+      let matchedItem = cookieItems.find(item => {
         const name = (item.item_data?.name || '').toUpperCase();
         return name.includes('NO NUT') && name.includes('CHOC') && name.includes('CHIP');
       });
+
+      // If not found, try just NO NUT + COOKIE
+      if (!matchedItem) {
+        matchedItem = cookieItems.find(item => {
+          const name = (item.item_data?.name || '').toUpperCase();
+          return name.includes('NO NUT');
+        });
+      }
+
+      // If still not found, try any chocolate chip cookie
+      if (!matchedItem) {
+        matchedItem = cookieItems.find(item => {
+          const name = (item.item_data?.name || '').toUpperCase();
+          return name.includes('CHOC') && name.includes('CHIP');
+        });
+      }
 
       if (matchedItem?.item_data?.variations?.[0]) {
         const variation = matchedItem.item_data.variations[0];
