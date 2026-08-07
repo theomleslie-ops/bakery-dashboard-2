@@ -2421,36 +2421,115 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     // Step 3: Get ingredient costs from QB Chef's Warehouse bills
     console.log('  Step 3: Fetching Chef\'s Warehouse bills...');
     const sinceDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 90 days ago
-    const bills = await qbClient.listBills(vendor.Id, sinceDate);
-    console.log(`  ✓ Found ${bills.length} bills`);
-    // TODO: Extract ingredients and prices from bills
+    const billSummaries = await qbClient.listBills(vendor.Id, sinceDate);
+    console.log(`  ✓ Found ${billSummaries.length} bills`);
+
+    // Extract ingredient prices from bills
+    const ingredientPrices = {}; // ingredient name → {prices: [], unitCost: avg}
+    recipe.ingredients.forEach(ing => {
+      ingredientPrices[ing.name.toLowerCase()] = { prices: [] };
+    });
+
+    // Fetch full bill details and extract line items
+    const fetchBillsWithDetails = async () => {
+      for (const billSummary of billSummaries.slice(0, 10)) { // Sample first 10 bills for now
+        try {
+          const fullBill = await qbClient.getBillDetail(billSummary.Id);
+          if (!fullBill || !fullBill.Line) continue;
+
+          fullBill.Line.forEach(line => {
+            if (!line.Description) return;
+            const desc = line.Description.toUpperCase().trim();
+            const amount = line.Amount || 0;
+
+            // Try to match line description to recipe ingredients
+            for (const [ingKey, data] of Object.entries(ingredientPrices)) {
+              if (desc.includes(ingKey.toUpperCase())) {
+                data.prices.push(amount);
+                console.log(`    Matched: "${desc}" → ${ingKey} = $${amount}`);
+                break;
+              }
+            }
+          });
+        } catch (e) {
+          console.log(`    Skipped bill ${billSummary.Id}: ${e.message}`);
+        }
+      }
+    };
+
+    await fetchBillsWithDetails();
+
+    // Calculate average cost per ingredient
+    let totalCogs = 0;
+    for (const [ingName, data] of Object.entries(ingredientPrices)) {
+      if (data.prices.length > 0) {
+        const avgPrice = data.prices.reduce((a, b) => a + b, 0) / data.prices.length;
+        data.unitCost = avgPrice;
+        const recipeIng = recipe.ingredients.find(i => i.name.toLowerCase() === ingName);
+        if (recipeIng) {
+          const costPerBatch = (avgPrice / recipeIng.kgPerUnit); // Price for the amount needed for one batch
+          totalCogs += costPerBatch;
+        }
+      }
+    }
+    console.log(`  ✓ Calculated COGS per unit: $${totalCogs.toFixed(2)}`);
+    const cogs = totalCogs;
 
     // Step 4: Get product revenue from Square
     console.log('  Step 4: Fetching Square sales for NO-NUT Choc Chip Cookie...');
     if (!process.env.SQUARE_ACCESS_TOKEN) {
       return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
     }
-    // TODO: Query Square for product sales
+
+    let productPrice = null;
+    try {
+      const squareRes = await axios.get('https://connect.squareup.com/v2/catalog/search', {
+        headers: { Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}` },
+        params: { query: { text_filter: { keywords: ['NO NUT', 'CHOCOLATE CHIP', 'COOKIE'] } } }
+      });
+
+      const items = squareRes.data.results || [];
+      const matchedItem = items.find(item => {
+        const name = (item.object?.item?.name || '').toUpperCase();
+        return name.includes('NO NUT') && name.includes('CHOC') && name.includes('CHIP');
+      });
+
+      if (matchedItem && matchedItem.object?.item?.variations) {
+        const variation = matchedItem.object.item.variations[0];
+        productPrice = variation.item_variation_data?.price_money?.amount / 100; // Convert from cents
+        console.log(`  ✓ Found product: ${matchedItem.object.item.name} = $${productPrice}`);
+      }
+    } catch (e) {
+      console.log(`  ⚠️ Square query failed: ${e.message}`);
+    }
 
     // Step 5: Calculate gross margin
-    // TODO: Match recipe ingredients with prices, calculate COGS, then margin%
+    let grossMarginPercent = null;
+    if (productPrice && cogs) {
+      grossMarginPercent = ((productPrice - cogs) / productPrice) * 100;
+      console.log(`  ✓ Gross Margin: ${grossMarginPercent.toFixed(2)}% (Price: $${productPrice}, COGS: $${cogs.toFixed(2)})`);
+    }
 
     res.json({
-      status: 'building',
-      message: 'Recipe fetched, matching with costs and revenue',
+      status: grossMarginPercent !== null ? 'complete' : 'building',
+      message: grossMarginPercent !== null ? 'Gross margin calculated' : 'Calculating costs and revenue',
+      product: {
+        name: 'NO NUT Chocolate Chip Cookie',
+        price: productPrice,
+        cogs: cogs?.toFixed(2),
+        grossMarginPercent: grossMarginPercent?.toFixed(2)
+      },
+      recipe: {
+        name: recipe.name,
+        ingredientCount: recipe.ingredients.length,
+        ingredients: recipe.ingredients.slice(0, 3)
+      },
       vendor: { id: vendor.Id, name: vendor.DisplayName },
-      recipe: { name: recipe.name, ingredientCount: recipe.ingredients.length, ingredients: recipe.ingredients.slice(0, 3) },
-      billsFound: bills.length,
+      billsAnalyzed: Math.min(10, billSummaries.length),
       debug: {
         recipeDataRows: recipeData.length,
-        row5: recipeData[5]?.slice(0, 2),
-        row6: recipeData[6]?.slice(0, 2),
-        row7: recipeData[7]?.slice(0, 2),
-        row8: recipeData[8]?.slice(0, 2),
-        row9: recipeData[9]?.slice(0, 2),
-        row10: recipeData[10]?.slice(0, 2),
-      },
-      squareStatus: 'pending',
+        ingredientPriceCounts: Object.entries(ingredientPrices).map(([k, v]) => ({ ingredient: k, pricesSampled: v.prices.length }))
+      }
     });
   } catch (err) {
     console.error('❌ Error calculating margin:', err.message);
