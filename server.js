@@ -2610,6 +2610,41 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
   }
 });
 
+// Debug: List all Square products
+app.get('/api/debug/square-products', async (req, res) => {
+  try {
+    if (!process.env.SQUARE_ACCESS_TOKEN) {
+      return res.status(400).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
+    }
+
+    console.log('Fetching all Square products...');
+    const squareRes = await axios.post('https://connect.squareup.com/v2/catalog/list',
+      { types: ['ITEM'], limit: 100 },
+      { headers: { Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}` } }
+    );
+
+    const items = squareRes.data.objects || [];
+    const products = items.map(item => ({
+      id: item.id,
+      name: item.item_data?.name,
+      price: item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount ?
+        (item.item_data.variations[0].item_variation_data.price_money.amount / 100).toFixed(2) :
+        null
+    }));
+
+    res.json({
+      totalProducts: products.length,
+      products: products.slice(0, 20)
+    });
+  } catch (e) {
+    res.status(500).json({
+      error: e.message,
+      status: 'Square API failed',
+      details: e.response?.data
+    });
+  }
+});
+
 // Debug: Get recipe details
 app.get('/api/debug/recipe/:name', async (req, res) => {
   try {
