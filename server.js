@@ -2446,6 +2446,9 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
         row5: recipeData[5]?.slice(0, 2),
         row6: recipeData[6]?.slice(0, 2),
         row7: recipeData[7]?.slice(0, 2),
+        row8: recipeData[8]?.slice(0, 2),
+        row9: recipeData[9]?.slice(0, 2),
+        row10: recipeData[10]?.slice(0, 2),
       },
       squareStatus: 'pending',
     });
