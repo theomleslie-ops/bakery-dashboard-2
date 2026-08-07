@@ -2432,21 +2432,30 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
 
     // Fetch full bill details and extract line items
     const fetchBillsWithDetails = async () => {
+      let billsProcessed = 0;
       for (const billSummary of billSummaries.slice(0, 10)) { // Sample first 10 bills for now
         try {
           const fullBill = await qbClient.getBillDetail(billSummary.Id);
-          if (!fullBill || !fullBill.Line) continue;
+          if (!fullBill || !fullBill.Line) {
+            console.log(`    Bill ${billSummary.DocNumber}: no Line array`);
+            continue;
+          }
 
-          fullBill.Line.forEach(line => {
-            if (!line.Description) return;
-            const desc = line.Description.toUpperCase().trim();
+          billsProcessed++;
+          console.log(`    Bill ${billSummary.DocNumber}: ${fullBill.Line.length} line items`);
+
+          fullBill.Line.forEach((line, idx) => {
+            const desc = line.Description ? line.Description.toUpperCase().trim() : '(no desc)';
             const amount = line.Amount || 0;
+            if (idx < 3) console.log(`      Line ${idx + 1}: "${desc}" = $${amount}`);
+
+            if (!line.Description) return;
 
             // Try to match line description to recipe ingredients
             for (const [ingKey, data] of Object.entries(ingredientPrices)) {
               if (desc.includes(ingKey.toUpperCase())) {
                 data.prices.push(amount);
-                console.log(`    Matched: "${desc}" → ${ingKey} = $${amount}`);
+                console.log(`      ✓ Matched: "${desc}" → ${ingKey} = $${amount}`);
                 break;
               }
             }
@@ -2455,6 +2464,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
           console.log(`    Skipped bill ${billSummary.Id}: ${e.message}`);
         }
       }
+      console.log(`  Bills processed: ${billsProcessed}`);
     };
 
     await fetchBillsWithDetails();
@@ -2483,12 +2493,18 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
 
     let productPrice = null;
     try {
+      console.log(`  Searching Square for NO NUT cookie...`);
       const squareRes = await axios.get('https://connect.squareup.com/v2/catalog/search', {
         headers: { Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}` },
         params: { query: { text_filter: { keywords: ['NO NUT', 'CHOCOLATE CHIP', 'COOKIE'] } } }
       });
 
       const items = squareRes.data.results || [];
+      console.log(`  Square search returned ${items.length} items`);
+      items.slice(0, 3).forEach((item, idx) => {
+        console.log(`    ${idx + 1}. ${item.object?.item?.name || '(no name)'}`);
+      });
+
       const matchedItem = items.find(item => {
         const name = (item.object?.item?.name || '').toUpperCase();
         return name.includes('NO NUT') && name.includes('CHOC') && name.includes('CHIP');
@@ -2498,9 +2514,12 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
         const variation = matchedItem.object.item.variations[0];
         productPrice = variation.item_variation_data?.price_money?.amount / 100; // Convert from cents
         console.log(`  ✓ Found product: ${matchedItem.object.item.name} = $${productPrice}`);
+      } else {
+        console.log(`  ⚠️ No matching product found in Square results`);
       }
     } catch (e) {
       console.log(`  ⚠️ Square query failed: ${e.message}`);
+      if (e.response?.data) console.log(`    Response: ${JSON.stringify(e.response.data)}`);
     }
 
     // Step 5: Calculate gross margin
