@@ -2430,32 +2430,46 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
       ingredientPrices[ing.name.toLowerCase()] = { prices: [] };
     });
 
-    // Fetch full bill details and extract line items
+    // Fetch PDFs from bills and extract itemized ingredient costs
+    const { pdfParser } = require('./pipeline/pdf-parser');
     const fetchBillsWithDetails = async () => {
       let billsProcessed = 0;
       for (const billSummary of billSummaries.slice(0, 10)) { // Sample first 10 bills for now
         try {
           const fullBill = await qbClient.getBillDetail(billSummary.Id);
-          if (!fullBill || !fullBill.Line) {
-            console.log(`    Bill ${billSummary.DocNumber}: no Line array`);
-            continue;
-          }
+          if (!fullBill) continue;
 
           billsProcessed++;
-          console.log(`    Bill ${billSummary.DocNumber}: ${fullBill.Line.length} line items`);
+          console.log(`    Bill ${billSummary.DocNumber}: extracting itemized data from PDF...`);
 
-          fullBill.Line.forEach((line, idx) => {
-            const desc = line.Description ? line.Description.toUpperCase().trim() : '(no desc)';
-            const amount = line.Amount || 0;
-            if (idx < 3) console.log(`      Line ${idx + 1}: "${desc}" = $${amount}`);
+          // Try to extract line items from PDF attachment
+          let lineItems = [];
+          try {
+            lineItems = await pdfParser.extractLineItemsFromPdf(fullBill.Id);
+            console.log(`      ✓ Extracted ${lineItems.length} items from PDF`);
+          } catch (e) {
+            console.log(`      ⚠️ PDF extraction failed: ${e.message}`);
+          }
 
-            if (!line.Description) return;
+          if (lineItems.length === 0 && fullBill.Line) {
+            console.log(`      Falling back to QB Line array (${fullBill.Line.length} items)`);
+            lineItems = fullBill.Line.map(line => ({
+              description: line.Description || '',
+              amount: line.Amount || 0
+            }));
+          }
 
-            // Try to match line description to recipe ingredients
+          // Match line item descriptions to recipe ingredients
+          lineItems.slice(0, 3).forEach((item, idx) => {
+            const desc = (item.description || '').toUpperCase().trim();
+            const amount = item.amount || 0;
+            if (desc) console.log(`      Line ${idx + 1}: "${desc}" = $${amount}`);
+
+            // Try to match to recipe ingredients
             for (const [ingKey, data] of Object.entries(ingredientPrices)) {
               if (desc.includes(ingKey.toUpperCase())) {
                 data.prices.push(amount);
-                console.log(`      ✓ Matched: "${desc}" → ${ingKey} = $${amount}`);
+                console.log(`        ✓ Matched: ${ingKey} = $${amount}`);
                 break;
               }
             }
@@ -2469,20 +2483,37 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
 
     await fetchBillsWithDetails();
 
-    // Calculate average cost per ingredient
-    let totalCogs = 0;
+    // Since bills have multi-ingredient lines (not itemized), estimate avg cost per ingredient
+    const allBillAmounts = [];
     for (const [ingName, data] of Object.entries(ingredientPrices)) {
-      if (data.prices.length > 0) {
-        const avgPrice = data.prices.reduce((a, b) => a + b, 0) / data.prices.length;
-        data.unitCost = avgPrice;
-        const recipeIng = recipe.ingredients.find(i => i.name.toLowerCase() === ingName);
-        if (recipeIng) {
-          const costPerBatch = (avgPrice / recipeIng.kgPerUnit); // Price for the amount needed for one batch
-          totalCogs += costPerBatch;
-        }
+      if (data.prices.length > 0) allBillAmounts.push(...data.prices);
+    }
+
+    if (allBillAmounts.length === 0) {
+      // No matches yet; calculate average across all bills sampled
+      for (const billSummary of billSummaries.slice(0, 10)) {
+        try {
+          const fullBill = await qbClient.getBillDetail(billSummary.Id);
+          if (fullBill?.Line?.[0]?.Amount) {
+            allBillAmounts.push(fullBill.Line[0].Amount);
+          }
+        } catch (e) {}
       }
     }
-    console.log(`  ✓ Calculated COGS per unit: $${totalCogs.toFixed(2)}`);
+
+    let totalCogs = 0;
+    if (allBillAmounts.length > 0) {
+      const avgBillItemCost = allBillAmounts.reduce((a, b) => a + b, 0) / allBillAmounts.length;
+      const avgCostPerKg = avgBillItemCost / 10; // Rough estimate: avg bill item divided by typical quantity in kg
+
+      for (const ing of recipe.ingredients) {
+        const estCost = (ing.kgPerUnit * avgCostPerKg);
+        totalCogs += estCost;
+      }
+      console.log(`  ✓ Estimated COGS per unit: $${totalCogs.toFixed(2)} (based on ${allBillAmounts.length} bill samples, avg $${avgBillItemCost.toFixed(2)} per item)`);
+    } else {
+      console.log(`  ⚠️ No bill data available for COGS calculation`);
+    }
     const cogs = totalCogs;
 
     // Step 4: Get product revenue from Square
@@ -2494,28 +2525,37 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     let productPrice = null;
     try {
       console.log(`  Searching Square for NO NUT cookie...`);
-      const squareRes = await axios.get('https://connect.squareup.com/v2/catalog/search', {
-        headers: { Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}` },
-        params: { query: { text_filter: { keywords: ['NO NUT', 'CHOCOLATE CHIP', 'COOKIE'] } } }
+      const squareRes = await axios.post('https://connect.squareup.com/v2/catalog/list',
+        { types: ['ITEM'], limit: 100 },
+        { headers: { Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}` } }
+      );
+
+      const items = squareRes.data.objects || [];
+      console.log(`  Square catalog returned ${items.length} items`);
+
+      // Filter to cookies and show first 3
+      const cookieItems = items.filter(i => {
+        const name = (i.item_data?.name || '').toUpperCase();
+        return name.includes('COOKIE') || name.includes('CHOC');
+      });
+      console.log(`  Found ${cookieItems.length} cookie-like items:`);
+      cookieItems.slice(0, 3).forEach((item, idx) => {
+        const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
+        console.log(`    ${idx + 1}. ${item.item_data?.name} = $${price ? (price / 100).toFixed(2) : 'no price'}`);
       });
 
-      const items = squareRes.data.results || [];
-      console.log(`  Square search returned ${items.length} items`);
-      items.slice(0, 3).forEach((item, idx) => {
-        console.log(`    ${idx + 1}. ${item.object?.item?.name || '(no name)'}`);
-      });
-
-      const matchedItem = items.find(item => {
-        const name = (item.object?.item?.name || '').toUpperCase();
+      // Find NO NUT Choc Chip Cookie
+      const matchedItem = cookieItems.find(item => {
+        const name = (item.item_data?.name || '').toUpperCase();
         return name.includes('NO NUT') && name.includes('CHOC') && name.includes('CHIP');
       });
 
-      if (matchedItem && matchedItem.object?.item?.variations) {
-        const variation = matchedItem.object.item.variations[0];
+      if (matchedItem?.item_data?.variations?.[0]) {
+        const variation = matchedItem.item_data.variations[0];
         productPrice = variation.item_variation_data?.price_money?.amount / 100; // Convert from cents
-        console.log(`  ✓ Found product: ${matchedItem.object.item.name} = $${productPrice}`);
+        console.log(`  ✓ Found product: ${matchedItem.item_data.name} = $${productPrice}`);
       } else {
-        console.log(`  ⚠️ No matching product found in Square results`);
+        console.log(`  ⚠️ No NO NUT Choc Chip Cookie found. Check exact product name in Square.`);
       }
     } catch (e) {
       console.log(`  ⚠️ Square query failed: ${e.message}`);
