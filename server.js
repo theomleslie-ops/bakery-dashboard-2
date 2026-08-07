@@ -2351,6 +2351,59 @@ app.post('/api/rebuild-margins', async (req, res) => {
   }
 });
 
+// NO NUT Chocolate Chip Cookie Gross Margin Calculation
+// 1. Get recipe & ingredients from Google Sheets (COOKIE NO NUT)
+// 2. Get ingredient costs from QB Chef's Warehouse invoices
+// 3. Get revenue from Square
+// 4. Calculate: Gross Margin % = (Price - COGS) / Price
+app.get('/api/no-nut-cookie-margin', async (req, res) => {
+  try {
+    console.log('📊 Calculating NO NUT Cookie gross margin...');
+
+    // Step 1: Find Chef's Warehouse vendor in QB
+    console.log('  Step 1: Finding Chef\'s Warehouse vendor...');
+    const vendor = await qbClient.findVendorByName("Chef's Warehouse");
+    if (!vendor || !vendor.Id) {
+      return res.status(400).json({ error: 'Chef\'s Warehouse vendor not found in QB' });
+    }
+    console.log(`  ✓ Found vendor ID: ${vendor.Id}`);
+
+    // Step 2: Get recipe from Google Sheets
+    console.log('  Step 2: Fetching recipe from Google Sheets...');
+    // TODO: Fetch recipe "COOKIE NO NUT" from Google Sheets using OAuth
+    const recipe = { ingredients: [] }; // Placeholder
+
+    // Step 3: Get ingredient costs from QB Chef's Warehouse bills
+    console.log('  Step 3: Fetching Chef\'s Warehouse bills...');
+    const sinceDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 90 days ago
+    const bills = await qbClient.listBills(vendor.Id, sinceDate);
+    console.log(`  ✓ Found ${bills.length} bills`);
+    // TODO: Extract ingredients and prices from bills
+
+    // Step 4: Get product revenue from Square
+    console.log('  Step 4: Fetching Square sales for NO-NUT Choc Chip Cookie...');
+    if (!process.env.SQUARE_ACCESS_TOKEN) {
+      return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
+    }
+    // TODO: Query Square for product sales
+
+    // Step 5: Calculate gross margin
+    // TODO: Match recipe ingredients with prices, calculate COGS, then margin%
+
+    res.json({
+      status: 'building',
+      message: 'Endpoint structure ready, data sources in progress',
+      vendor: { id: vendor.Id, name: vendor.DisplayName },
+      billsFound: bills.length,
+      recipeStatus: 'pending',
+      squareStatus: 'pending',
+    });
+  } catch (err) {
+    console.error('❌ Error calculating margin:', err.message);
+    res.status(500).json({ error: err.message, code: err.code });
+  }
+});
+
 // Debug: Get recipe details
 app.get('/api/debug/recipe/:name', async (req, res) => {
   try {
