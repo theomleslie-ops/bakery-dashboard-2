@@ -2381,9 +2381,14 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     }
 
     const recipesInFolder = await googleSheets.listSheetsInFolder(drive, recipeFolder.id);
-    const recipeSheet = recipesInFolder.find(s => s.name.toLowerCase().includes('chocolate chip') && s.name.toLowerCase().includes('no nut'));
+    const recipeName = 'Chocolate chips cookies (no nuts)';
+    const recipeSheet = recipesInFolder.find(s => s.name.toLowerCase() === recipeName.toLowerCase());
     if (!recipeSheet) {
-      return res.status(400).json({ error: 'NO NUT Chocolate Chip Cookie recipe sheet not found' });
+      return res.status(400).json({
+        error: 'Recipe sheet not found',
+        looking_for: recipeName,
+        found_recipes: recipesInFolder.slice(0, 10).map(s => s.name)
+      });
     }
 
     const recipeData = await googleSheets.pullSpreadsheet(sheets, recipeSheet.id);
