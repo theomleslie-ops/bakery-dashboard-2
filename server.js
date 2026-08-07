@@ -2526,6 +2526,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     }
 
     let productPrice = null;
+    let squareDebug = { itemsFound: 0, productsListed: [] };
     try {
       console.log(`  Searching Square for NO NUT cookie...`);
       const squareRes = await axios.post('https://connect.squareup.com/v2/catalog/list',
@@ -2534,6 +2535,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
       );
 
       const items = squareRes.data.objects || [];
+      squareDebug.itemsFound = items.length;
       console.log(`  Square catalog returned ${items.length} items`);
 
       // Show first 5 items to understand catalog structure
@@ -2542,26 +2544,20 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
         const name = item.item_data?.name || '(no name)';
         const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
         console.log(`    ${idx + 1}. ${name} = $${price ? (price / 100).toFixed(2) : 'no price'}`);
+        squareDebug.productsListed.push(name);
       });
-
-      // Filter to cookies and show them
-      const cookieItems = items.filter(i => {
-        const name = (i.item_data?.name || '').toUpperCase();
-        return name.includes('COOKIE') || name.includes('CHOC');
-      });
-      console.log(`  Found ${cookieItems.length} cookie-like items`);
 
       // Find NO-NUT Choc Chip Cookie - try various matching patterns
       let matchedItem = items.find(item => {
-        const name = (item.item_data?.name || '').toUpperCase();
+        const name = (item.item_data?.name || '');
         return name.includes('NO-NUT') || name.includes('NO NUT');
       });
 
-      // If still not found, try just NO + CHOC + CHIP
+      // If still not found, try case-insensitive with variations
       if (!matchedItem) {
         matchedItem = items.find(item => {
           const name = (item.item_data?.name || '').toUpperCase();
-          return name.includes('NO') && name.includes('CHOC') && name.includes('CHIP');
+          return name.includes('NO') && (name.includes('CHOC') || name.includes('CHIP'));
         });
       }
 
@@ -2569,12 +2565,15 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
         const variation = matchedItem.item_data.variations[0];
         productPrice = variation.item_variation_data?.price_money?.amount / 100; // Convert from cents
         console.log(`  ✓ Found product: ${matchedItem.item_data.name} = $${productPrice}`);
+        squareDebug.matchedProduct = matchedItem.item_data.name;
+        squareDebug.matchedPrice = productPrice;
       } else {
-        console.log(`  ⚠️ No NO NUT Choc Chip Cookie found. Check exact product name in Square.`);
+        console.log(`  ⚠️ No matching product found. Searched through ${items.length} items.`);
       }
     } catch (e) {
       console.log(`  ⚠️ Square query failed: ${e.message}`);
       if (e.response?.data) console.log(`    Response: ${JSON.stringify(e.response.data)}`);
+      squareDebug.error = e.message;
     }
 
     // Step 5: Calculate gross margin
@@ -2602,7 +2601,8 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
       billsAnalyzed: Math.min(10, billSummaries.length),
       debug: {
         recipeDataRows: recipeData.length,
-        ingredientPriceCounts: Object.entries(ingredientPrices).map(([k, v]) => ({ ingredient: k, pricesSampled: v.prices.length }))
+        ingredientPriceCounts: Object.entries(ingredientPrices).map(([k, v]) => ({ ingredient: k, pricesSampled: v.prices.length })),
+        square: squareDebug
       }
     });
   } catch (err) {
