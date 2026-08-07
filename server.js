@@ -2391,17 +2391,20 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
       });
     }
 
-    const recipeData = await googleSheets.downloadAndParseExcel(drive, recipeSheet.id, recipeSheet.name);
+    const recipeExcel = await googleSheets.downloadAndParseExcel(drive, recipeSheet.id, recipeSheet.name);
     console.log(`  ✓ Found recipe: ${recipeSheet.name}`);
+
+    // Get the first sheet from tabs
+    const sheetName = Object.keys(recipeExcel.tabs)[0];
+    const recipeData = recipeExcel.tabs[sheetName].rows;
+    console.log(`  Recipe data rows: ${recipeData.length}`);
+    console.log(`  Row 5: ${JSON.stringify(recipeData[5]?.slice(0, 2))}`);
+    console.log(`  Row 6: ${JSON.stringify(recipeData[6]?.slice(0, 2))}`);
+    console.log(`  Row 7: ${JSON.stringify(recipeData[7]?.slice(0, 2))}`);
 
     // Extract ingredients from rows 6+ (Column A: name, Column B: Basic recipe qty in kg)
     const ingredients = [];
-    console.log(`  Recipe data rows: ${recipeData.length}`);
     if (recipeData && recipeData.length > 0) {
-      console.log(`  Row 5: ${JSON.stringify(recipeData[5]?.slice(0, 2))}`);
-      console.log(`  Row 6: ${JSON.stringify(recipeData[6]?.slice(0, 2))}`);
-      console.log(`  Row 7: ${JSON.stringify(recipeData[7]?.slice(0, 2))}`);
-
       for (let i = 6; i < recipeData.length; i++) {
         const row = recipeData[i];
         if (!row || !row[0]) break; // Stop at empty row
