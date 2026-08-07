@@ -2370,8 +2370,40 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
 
     // Step 2: Get recipe from Google Sheets
     console.log('  Step 2: Fetching recipe from Google Sheets...');
-    // TODO: Fetch recipe "COOKIE NO NUT" from Google Sheets using OAuth
-    const recipe = { ingredients: [] }; // Placeholder
+    if (!googleSheets.isConnected()) {
+      return res.status(401).json({ error: 'Google Sheets not connected. Authorize at /api/google/connect first.' });
+    }
+
+    const { drive, sheets } = await googleSheets.getClients();
+    const recipeFolder = await googleSheets.resolveFolderByName(drive, 'Recipe LSB');
+    if (!recipeFolder) {
+      return res.status(400).json({ error: 'Recipe LSB folder not found in Google Drive' });
+    }
+
+    const recipesInFolder = await googleSheets.listSheetsInFolder(drive, recipeFolder.id);
+    const recipeSheet = recipesInFolder.find(s => s.name.toLowerCase().includes('chocolate chip') && s.name.toLowerCase().includes('no nut'));
+    if (!recipeSheet) {
+      return res.status(400).json({ error: 'NO NUT Chocolate Chip Cookie recipe sheet not found' });
+    }
+
+    const recipeData = await googleSheets.pullSpreadsheet(sheets, recipeSheet.id);
+    console.log(`  ✓ Found recipe: ${recipeSheet.name}`);
+
+    // Extract ingredients from rows 6+ (Column A: name, Column B: Basic recipe qty in kg)
+    const ingredients = [];
+    if (recipeData[0]) {
+      for (let i = 5; i < recipeData.length; i++) {
+        const row = recipeData[i];
+        if (!row || !row[0]) break; // Stop at empty row
+        const name = String(row[0]).trim();
+        const qty = parseFloat(row[1]);
+        if (name && !isNaN(qty) && name.toLowerCase() !== 'total brut' && name.toLowerCase() !== 'total net') {
+          ingredients.push({ name, kgPerUnit: qty });
+        }
+      }
+    }
+    console.log(`  ✓ Extracted ${ingredients.length} ingredients`);
+    const recipe = { name: recipeSheet.name, ingredients };
 
     // Step 3: Get ingredient costs from QB Chef's Warehouse bills
     console.log('  Step 3: Fetching Chef\'s Warehouse bills...');
@@ -2392,10 +2424,10 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
 
     res.json({
       status: 'building',
-      message: 'Endpoint structure ready, data sources in progress',
+      message: 'Recipe fetched, matching with costs and revenue',
       vendor: { id: vendor.Id, name: vendor.DisplayName },
+      recipe: { name: recipe.name, ingredientCount: recipe.ingredients.length },
       billsFound: bills.length,
-      recipeStatus: 'pending',
       squareStatus: 'pending',
     });
   } catch (err) {
