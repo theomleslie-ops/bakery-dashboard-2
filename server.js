@@ -2391,12 +2391,12 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
       });
     }
 
-    const recipeData = await googleSheets.pullSpreadsheet(sheets, recipeSheet.id);
+    const recipeData = await googleSheets.downloadAndParseExcel(drive, recipeSheet.id, recipeSheet.name);
     console.log(`  ✓ Found recipe: ${recipeSheet.name}`);
 
     // Extract ingredients from rows 6+ (Column A: name, Column B: Basic recipe qty in kg)
     const ingredients = [];
-    if (recipeData[0]) {
+    if (recipeData && recipeData.length > 0) {
       for (let i = 5; i < recipeData.length; i++) {
         const row = recipeData[i];
         if (!row || !row[0]) break; // Stop at empty row
