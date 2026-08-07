@@ -2526,49 +2526,42 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     }
 
     let productPrice = null;
-    let squareDebug = { itemsFound: 0, productsListed: [] };
+    let squareDebug = { method: 'search_by_name' };
     try {
-      console.log(`  Searching Square for NO NUT cookie...`);
-      const squareRes = await axios.post('https://connect.squareup.com/v2/catalog/list',
-        { types: ['ITEM'], limit: 100 },
+      console.log(`  Searching Square for 'NO-NUT Choc Chip Cookie'...`);
+      // Search by exact product name
+      const squareRes = await axios.post('https://connect.squareup.com/v2/catalog/search',
+        {
+          query: {
+            text_query: {
+              keywords: ['NO-NUT Choc Chip Cookie']
+            }
+          }
+        },
         { headers: { Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}` } }
       );
 
-      const items = squareRes.data.objects || [];
-      squareDebug.itemsFound = items.length;
-      console.log(`  Square catalog returned ${items.length} items`);
+      const results = squareRes.data.results || [];
+      console.log(`  Square search returned ${results.length} results`);
+      squareDebug.resultsFound = results.length;
 
-      // Show first 5 items to understand catalog structure
-      console.log(`  First items in catalog:`);
-      items.slice(0, 5).forEach((item, idx) => {
-        const name = item.item_data?.name || '(no name)';
-        const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
-        console.log(`    ${idx + 1}. ${name} = $${price ? (price / 100).toFixed(2) : 'no price'}`);
-        squareDebug.productsListed.push(name);
-      });
-
-      // Find NO-NUT Choc Chip Cookie - try various matching patterns
-      let matchedItem = items.find(item => {
-        const name = (item.item_data?.name || '');
-        return name.includes('NO-NUT') || name.includes('NO NUT');
-      });
-
-      // If still not found, try case-insensitive with variations
-      if (!matchedItem) {
-        matchedItem = items.find(item => {
-          const name = (item.item_data?.name || '').toUpperCase();
-          return name.includes('NO') && (name.includes('CHOC') || name.includes('CHIP'));
+      if (results.length > 0) {
+        results.slice(0, 3).forEach((item, idx) => {
+          const name = item.object?.item?.name || '(no name)';
+          const price = item.object?.item?.variations?.[0]?.item_variation_data?.price_money?.amount;
+          console.log(`    ${idx + 1}. ${name} = $${price ? (price / 100).toFixed(2) : 'no price'}`);
         });
-      }
 
-      if (matchedItem?.item_data?.variations?.[0]) {
-        const variation = matchedItem.item_data.variations[0];
-        productPrice = variation.item_variation_data?.price_money?.amount / 100; // Convert from cents
-        console.log(`  ✓ Found product: ${matchedItem.item_data.name} = $${productPrice}`);
-        squareDebug.matchedProduct = matchedItem.item_data.name;
-        squareDebug.matchedPrice = productPrice;
+        const matchedItem = results[0]?.object?.item;
+        if (matchedItem?.variations?.[0]) {
+          const variation = matchedItem.variations[0];
+          productPrice = variation.item_variation_data?.price_money?.amount / 100;
+          console.log(`  ✓ Found product: ${matchedItem.name} = $${productPrice}`);
+          squareDebug.matchedProduct = matchedItem.name;
+          squareDebug.matchedPrice = productPrice;
+        }
       } else {
-        console.log(`  ⚠️ No matching product found. Searched through ${items.length} items.`);
+        console.log(`  ⚠️ No results found for 'NO-NUT Choc Chip Cookie'`);
       }
     } catch (e) {
       console.log(`  ⚠️ Square query failed: ${e.message}`);
