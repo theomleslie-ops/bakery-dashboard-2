@@ -2436,8 +2436,14 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
       status: 'building',
       message: 'Recipe fetched, matching with costs and revenue',
       vendor: { id: vendor.Id, name: vendor.DisplayName },
-      recipe: { name: recipe.name, ingredientCount: recipe.ingredients.length },
+      recipe: { name: recipe.name, ingredientCount: recipe.ingredients.length, ingredients: recipe.ingredients.slice(0, 3) },
       billsFound: bills.length,
+      debug: {
+        recipeDataRows: recipeData.length,
+        row5: recipeData[5]?.slice(0, 2),
+        row6: recipeData[6]?.slice(0, 2),
+        row7: recipeData[7]?.slice(0, 2),
+      },
       squareStatus: 'pending',
     });
   } catch (err) {
