@@ -2362,7 +2362,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
 
     // Step 1: Find Chef's Warehouse vendor in QB
     console.log('  Step 1: Finding Chef\'s Warehouse vendor...');
-    const vendor = await qbClient.findVendorByName("Chef");
+    const vendor = await qbClient.findVendorByName("Warehouse");
     if (!vendor || !vendor.Id) {
       return res.status(400).json({ error: 'Chef\'s Warehouse vendor not found in QB' });
     }
