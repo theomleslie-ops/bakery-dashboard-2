@@ -2400,7 +2400,13 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error calculating margin:', err.message);
-    res.status(500).json({ error: err.message, code: err.code });
+    console.error('Stack:', err.stack);
+    res.status(500).json({
+      error: err.message,
+      code: err.code,
+      status: 'error',
+      details: err.response?.data || err.message
+    });
   }
 });
 
