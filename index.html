@@ -2236,6 +2236,56 @@
       );
     }
 
+    function GrossMarginsDashboard() {
+      return (
+        <div className="container">
+          <header>
+            <h1>📊 Gross Margins</h1>
+            <p className="subtitle">Revenue, COGS, and gross margin % by product</p>
+          </header>
+
+          <div className="metrics">
+            <div className="metric-card">
+              <div className="metric-label">Product Name</div>
+              <div className="metric-value" style={{ fontSize: '18px' }}>—</div>
+              <div className="metric-sub">Configure product</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">Gross Margin %</div>
+              <div className="metric-value">—</div>
+              <div className="metric-sub">Target: 50%+</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">Gross Margin $</div>
+              <div className="metric-value" style={{ fontSize: '24px' }}>—</div>
+              <div className="metric-sub">Dollar amount</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">Total Revenue</div>
+              <div className="metric-value" style={{ fontSize: '24px' }}>—</div>
+              <div className="metric-sub">Period total</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">Total COGS</div>
+              <div className="metric-value" style={{ fontSize: '24px', color: '#ff9500' }}>—</div>
+              <div className="metric-sub">Cost of goods</div>
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-title">Setup Instructions</div>
+            <div className="panel-hint">Configure the gross margins infrastructure</div>
+            <div style={{ color: '#8b6c57', lineHeight: '1.6', fontSize: '14px' }}>
+              <p style={{ marginBottom: '12px' }}>1. Connect your product data source</p>
+              <p style={{ marginBottom: '12px' }}>2. Define which product to track</p>
+              <p style={{ marginBottom: '12px' }}>3. Map revenue and COGS fields</p>
+              <p>Gross margin will display once configured</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     function MainApp() {
       const [activeTab, setActiveTab] = useState('dashboard');
       return (
@@ -2247,6 +2297,7 @@
                 <button className={`tab-button ${activeTab === 'quickbooks' ? 'active' : ''}`} onClick={() => setActiveTab('quickbooks')}>Revenue and COGS</button>
                 <button className={`tab-button ${activeTab === 'overtime' ? 'active' : ''}`} onClick={() => setActiveTab('overtime')}>Overtime Report</button>
                 <button className={`tab-button ${activeTab === 'prime-cost' ? 'active' : ''}`} onClick={() => setActiveTab('prime-cost')}>Prime Cost</button>
+                <button className={`tab-button ${activeTab === 'gross-margins' ? 'active' : ''}`} onClick={() => setActiveTab('gross-margins')}>Gross Margins</button>
                 <button className={`tab-button ${activeTab === 'market-performance' ? 'active' : ''}`} onClick={() => setActiveTab('market-performance')}>Performance by Location</button>
                 <button className={`tab-button ${activeTab === 'cash-balance' ? 'active' : ''}`} onClick={() => setActiveTab('cash-balance')}>Cash Balance</button>
               </div>
@@ -2256,6 +2307,7 @@
           <div className={`tab-content ${activeTab === 'quickbooks' ? 'active' : ''}`}><QBDashboard /></div>
           <div className={`tab-content ${activeTab === 'overtime' ? 'active' : ''}`}><OvertimeContent /></div>
           <div className={`tab-content ${activeTab === 'prime-cost' ? 'active' : ''}`}><PrimeCostDashboard /></div>
+          <div className={`tab-content ${activeTab === 'gross-margins' ? 'active' : ''}`}><GrossMarginsDashboard /></div>
           <div className={`tab-content ${activeTab === 'market-performance' ? 'active' : ''}`}><MarketPerformanceDashboard /></div>
           <div className={`tab-content ${activeTab === 'cash-balance' ? 'active' : ''}`}><CashBalanceDashboard /></div>
         </div>
