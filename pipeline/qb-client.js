@@ -142,14 +142,37 @@ const downloadInvoicePdf = async (billId) => {
   }
 };
 
-// Extract text from a PDF buffer using pdf-parse
+// Extract text from a PDF buffer using pdftotext (system binary) or fallback to pdf-parse
 const extractPdfText = async (buf) => {
   try {
-    // Suppress Node.js API warnings from pdf.js
+    // Try pdftotext first (system binary, faster, works on scanned PDFs)
+    const fs = require('fs');
+    const { execSync } = require('child_process');
+    const tmpFile = `/tmp/bill-${Date.now()}.pdf`;
+    const txtFile = tmpFile.replace('.pdf', '.txt');
+
+    try {
+      fs.writeFileSync(tmpFile, buf);
+      execSync(`pdftotext "${tmpFile}" "${txtFile}"`, { stdio: 'pipe' });
+      const text = fs.readFileSync(txtFile, 'utf-8');
+      fs.unlinkSync(tmpFile);
+      fs.unlinkSync(txtFile);
+
+      if (text && text.trim().length > 0) {
+        console.log(`  ✓ pdftotext extracted ${text.length} chars`);
+        return text;
+      }
+    } catch (e) {
+      // pdftotext not available or failed, try pdf-parse
+      try { fs.unlinkSync(tmpFile); } catch {}
+      try { fs.unlinkSync(txtFile); } catch {}
+    }
+
+    // Fallback to pdf-parse with suppressed warnings
     const originalWarn = console.warn;
     console.warn = (...args) => {
       const msg = args.join(' ');
-      if (!msg.includes('DOMMatrix') && !msg.includes('ImageData') && !msg.includes('Path2D')) {
+      if (!msg.includes('DOMMatrix') && !msg.includes('ImageData') && !msg.includes('Path2D') && !msg.includes('require')) {
         originalWarn(...args);
       }
     };
