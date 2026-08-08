@@ -2496,42 +2496,32 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     await fetchBillsWithDetails();
 
     // Inject known ingredient prices from master price list (since PDF extraction isn't reliable)
-    // Price list format: ingredient name → $/kg
-    const ingredientPriceMap = {
+    const pricesByKeyword = {
       'butter': 5.180867387,
-      'mantequilla': 5.180867387,
       'white sugar': 2.226670664,
       'brown sugar': 2.072346955,
-      'eggs': 4.14469391, // $/kg
+      'egg': 4.14469391,
       'flour': 0.9590116228,
-      'all purpose flour': 0.9590116228,
       'oatmeal': 2.116439443,
       'baking soda': 3.865441483,
       'salt': 1.587329583,
-      'chocolate chips': 11.35998871, // GUITTARD COOKIE DROPS 1000 SS
-      'guittard cookie drops': 11.35998871,
-      'chocolate bittersweet': 16.53468315, // CHOC ORO BITTERSWEET RIBBONS
-      'choc oro bittersweet': 16.53468315,
-      'bitter chocolate': 23.36901885, // Oban Wafers 99% cacao
-      'oban wafers': 23.36901885,
+      'chocolate chip': 11.35998871,
+      'guittard cookie drop': 11.35998871,
+      'bittersweet': 16.53468315,
+      'choc oro': 16.53468315,
+      'unsweetened': 23.36901885,
+      'cacao': 23.36901885,
     };
 
-    // Populate ingredientPrices with matched values
     for (const [ingKey, data] of Object.entries(ingredientPrices)) {
       const ingLower = ingKey.toLowerCase();
-      // Try exact match first
-      if (ingredientPriceMap[ingLower]) {
-        data.prices.push(ingredientPriceMap[ingLower]);
-        console.log(`  💾 Injected price for ${ingKey}: $${ingredientPriceMap[ingLower].toFixed(2)}/kg`);
-      } else {
-        // Try partial matches
-        const ingParts = ingLower.split(/[\/\|,]/).map(s => s.trim());
-        for (const part of ingParts) {
-          if (ingredientPriceMap[part]) {
-            data.prices.push(ingredientPriceMap[part]);
-            console.log(`  💾 Injected price for ${ingKey} (matched "${part}"): $${ingredientPriceMap[part].toFixed(2)}/kg`);
-            break;
-          }
+
+      // Try keyword matching (handles "CHOCOLATE CHIPS", "CHOCOLATE BITTERSWEET", etc.)
+      for (const [keyword, price] of Object.entries(pricesByKeyword)) {
+        if (ingLower.includes(keyword)) {
+          data.prices.push(price);
+          console.log(`  💾 Injected price for ${ingKey}: $${price.toFixed(2)}/kg (matched keyword "${keyword}")`);
+          break;
         }
       }
     }
