@@ -2615,6 +2615,31 @@ app.get('/api/debug/recipe/:name', async (req, res) => {
   }
 });
 
+// Debug: List Chef's Warehouse bills
+app.get('/api/debug/bills', async (req, res) => {
+  try {
+    const vendor = await qbClient.findVendorByName('Warehouse');
+    if (!vendor) {
+      return res.status(400).json({ error: 'Chef\'s Warehouse vendor not found' });
+    }
+
+    const sinceDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const bills = await qbClient.listBills(vendor.Id, sinceDate);
+
+    res.json({
+      vendor: { id: vendor.Id, name: vendor.DisplayName },
+      billCount: bills.length,
+      bills: bills.slice(0, 20).map(b => ({
+        id: b.Id,
+        docNumber: b.DocNumber,
+        txnDate: b.TxnDate
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, code: err.code });
+  }
+});
+
 // Debug: Extract and show PDF data from a single bill
 app.get('/api/debug/bill-pdf/:billId', async (req, res) => {
   try {
