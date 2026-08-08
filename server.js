@@ -2448,8 +2448,10 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
             if (lineItems && lineItems.length > 0) {
               console.log(`      ✓ Extracted ${lineItems.length} items from PDF`);
               lineItems.slice(0, 5).forEach((item, idx) => {
-                console.log(`        ${idx + 1}. "${item.description.substring(0, 40)}" (${item.quantity} @ $${item.unitPrice})`);
+                console.log(`        ${idx + 1}. "${item.description.substring(0, 60)}" (${item.quantity} @ $${item.unitPrice})`);
               });
+            } else {
+              console.log(`      ⚠️  No items extracted from PDF`);
             }
           } catch (e) {
             console.log(`      ⚠️ PDF extraction failed: ${e.message}`);
@@ -2464,8 +2466,19 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
               // Try to match to recipe ingredients
               for (const [ingKey, data] of Object.entries(ingredientPrices)) {
                 const ingUpper = ingKey.toUpperCase();
-                // Match if ingredient name appears in description (e.g., "BUTTER" in "UNSALTED BUTTER 10LB")
-                if (desc.includes(ingUpper) || ingUpper.includes(desc.split(/\s+/)[0])) {
+                // Split bilingual names (e.g., "BUTTER/MANTEQUILLA" → ["BUTTER", "MANTEQUILLA"])
+                const ingParts = ingUpper.split(/[\/\|,]/).map(s => s.trim());
+
+                // Match if any part of ingredient name appears in description
+                let matched = false;
+                for (const part of ingParts) {
+                  if (part.length > 2 && desc.includes(part)) {
+                    matched = true;
+                    break;
+                  }
+                }
+
+                if (matched && unitPrice > 0) {
                   data.prices.push(unitPrice);
                   console.log(`        ✓ Matched: ${ingKey} = $${unitPrice} (qty: ${item.quantity})`);
                   break;
