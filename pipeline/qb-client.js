@@ -103,31 +103,43 @@ const listBills = async (vendorId, sinceDate) => {
 
 // Download a bill's itemized invoice PDF (skip email-body attachments). Returns Buffer|null.
 const downloadInvoicePdf = async (billId) => {
-  const attQuery = `select * from Attachable where AttachableRef.EntityRef.Value = '${billId}'`;
-  const attResponse = await query(attQuery);
-  const atts = attResponse.Attachable || [];
+  try {
+    const attQuery = `select * from Attachable where AttachableRef.EntityRef.Value = '${billId}'`;
+    const attResponse = await query(attQuery);
+    const atts = attResponse.Attachable || [];
 
-  // Log for debugging: show what we're querying and what we get
-  if (atts.length === 0) {
-    console.log(`      DEBUG: downloadInvoicePdf(${billId}): Attachable query returned 0 results`);
-  } else {
-    console.log(`      DEBUG: downloadInvoicePdf(${billId}): Found ${atts.length} attachments`);
+    console.log(`    [PDF] Bill ${billId}: Query returned ${atts.length} attachments`);
+    if (atts.length === 0) {
+      return null;
+    }
+
     atts.forEach(att => {
-      console.log(`        - ${att.FileName} (${att.ContentType})`);
+      console.log(`      - ${att.FileName} (${att.ContentType || 'unknown'}) [ID: ${att.Id}]`);
     });
+
+    const pdf = atts.find((a) => /pdf/i.test(a.ContentType || '') && !/email/i.test(a.FileName || ''))
+      || atts.find((a) => /pdf/i.test(a.ContentType || ''));
+
+    if (!pdf) {
+      console.log(`    [PDF] Bill ${billId}: No PDF found (filtered by ContentType)`);
+      return null;
+    }
+
+    console.log(`    [PDF] Bill ${billId}: Found PDF: ${pdf.FileName}`);
+    const full = (await query(`select * from Attachable where Id = '${pdf.Id}'`)).Attachable?.[0];
+    if (!full?.TempDownloadUri) {
+      console.log(`    [PDF] Bill ${billId}: No TempDownloadUri for ${pdf.FileName}`);
+      return null;
+    }
+
+    console.log(`    [PDF] Bill ${billId}: Downloading from URI...`);
+    const res = await axios.get(full.TempDownloadUri, { responseType: 'arraybuffer', timeout: 30000 });
+    console.log(`    [PDF] Bill ${billId}: ✓ Downloaded ${res.data.length} bytes`);
+    return Buffer.from(res.data);
+  } catch (e) {
+    console.log(`    [PDF] Bill ${billId}: Error - ${e.message}`);
+    return null;
   }
-
-  const pdf = atts.find((a) => /pdf/i.test(a.ContentType || '') && !/email/i.test(a.FileName || ''))
-    || atts.find((a) => /pdf/i.test(a.ContentType || ''));
-  if (!pdf) return null;
-
-  const full = (await query(`select * from Attachable where Id = '${pdf.Id}'`)).Attachable?.[0];
-  if (!full?.TempDownloadUri) return null;
-
-  console.log(`      DEBUG: Downloading PDF from TempDownloadUri...`);
-  const res = await axios.get(full.TempDownloadUri, { responseType: 'arraybuffer' });
-  console.log(`      DEBUG: Downloaded ${res.data.length} bytes`);
-  return Buffer.from(res.data);
 };
 
 // Extract text from a PDF buffer.
