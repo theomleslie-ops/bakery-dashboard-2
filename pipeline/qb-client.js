@@ -145,7 +145,7 @@ const downloadInvoicePdf = async (billId) => {
 // Extract text from a PDF buffer using pdfjs-dist (works in Node.js)
 const extractPdfText = async (buf) => {
   try {
-    const pdfjsLib = require('pdfjs-dist');
+    const pdfjsLib = await import('pdfjs-dist');
     const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     let text = '';
 
