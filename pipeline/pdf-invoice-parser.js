@@ -11,19 +11,46 @@ const qbClient = require('./qb-client');
 // Reconstructs multi-line item rows before pattern matching
 const parseInvoiceText = (text, billId) => {
   const items = [];
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const lines = text.split('\n');
 
-  // Search for flour items to debug extraction
-  const floorLines = [];
-  for (let idx = 0; idx < lines.length; idx++) {
-    const lineUpper = lines[idx].toUpperCase();
-    if (lineUpper.includes('FLOUR') || lineUpper.includes('GALAHAD')) {
-      floorLines.push({ idx, line: lines[idx] });
+  // Clean lines: trim, but preserve original spacing info for column detection
+  const cleanLines = lines.map(l => l.trim()).filter(l => l.length > 0);
+
+  console.log(`      📄 Parsing Chef's Warehouse invoice (${cleanLines.length} lines, ~${text.length} chars)`);
+
+  // Chef's Warehouse table structure:
+  // ORDERED QTY | SHIPPED QTY | ITEM# | DESCRIPTION | PRICE | UOM | EXTENDED PRICE
+  // Find the table header first
+  let tableStartIdx = -1;
+  for (let i = 0; i < Math.min(cleanLines.length, 50); i++) {
+    const line = cleanLines[i].toUpperCase();
+    if (line.includes('ORDERED') && line.includes('SHIPPED') && line.includes('DESCRIPTION')) {
+      tableStartIdx = i + 1;
+      console.log(`      📋 Table starts at line ${i}`);
+      break;
     }
   }
-  if (floorLines.length > 0) {
-    console.log(`      🌾 FOUND FLOUR in bill ${billId}:`);
-    for (const f of floorLines) {
+
+  if (tableStartIdx === -1) {
+    console.log(`      ⚠️  Could not find table header`);
+    tableStartIdx = 0;
+  }
+
+  // Search for flour items to debug extraction
+  const debugKeywords = ['FLOUR', 'BUTTER', 'SUGAR', 'CHOCOLATE', 'EGG'];
+  const debugLines = [];
+  for (let idx = 0; idx < cleanLines.length; idx++) {
+    const lineUpper = cleanLines[idx].toUpperCase();
+    for (const kw of debugKeywords) {
+      if (lineUpper.includes(kw)) {
+        debugLines.push({ idx, line: cleanLines[idx] });
+        break;
+      }
+    }
+  }
+  if (debugLines.length > 0) {
+    console.log(`      🔍 Found ${debugKeywords.join('|')} items:`);
+    for (const f of debugLines.slice(0, 5)) {
       console.log(`         [${f.idx}] "${f.line}"`);
     }
   }
@@ -110,15 +137,24 @@ const parseInvoiceText = (text, billId) => {
       }
     }
 
-    // Unit price is typically 2nd-to-last (last is usually extended price)
+    // For Chef's Warehouse format: ORDERED QTY | SHIPPED QTY | ITEM# | DESCRIPTION | UNIT_PRICE | UOM | EXT_PRICE
+    // The last two prices are usually unit price and extended price
+    // Extended price ≈ qty * unit_price, so extended > unit_price for qty > 1
     let unitPrice = null;
     if (validPrices.length >= 2) {
-      unitPrice = validPrices[validPrices.length - 2];
+      const lastPrice = validPrices[validPrices.length - 1];
+      const secondLastPrice = validPrices[validPrices.length - 2];
+      // If last price is roughly (qty * second-last), then second-last is unit price
+      if (lastPrice >= (qty * secondLastPrice * 0.9) && lastPrice <= (qty * secondLastPrice * 1.1)) {
+        unitPrice = secondLastPrice; // Second-to-last is unit price, last is extended
+      } else {
+        unitPrice = secondLastPrice; // Fallback: assume second-to-last
+      }
     } else if (validPrices.length === 1) {
       unitPrice = validPrices[0];
     }
 
-    if (!unitPrice) {
+    if (!unitPrice || unitPrice <= 0) {
       i++;
       continue;
     }
