@@ -142,43 +142,10 @@ const downloadInvoicePdf = async (billId) => {
   }
 };
 
-// Extract text from PDF using Tesseract OCR (works on scanned PDFs)
+// PDF extraction not feasible in this environment
+// Ingredient costs must come from QB API or manual entry
 const extractPdfText = async (buf) => {
-  try {
-    const Tesseract = require('tesseract.js');
-    const { PDFImage } = require('pdf-image');
-    const fs = require('fs');
-    const path = require('path');
-
-    // Convert PDF to images using pdf-image
-    const tmpDir = `/tmp/pdf-${Date.now()}`;
-    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-    const pdfPath = path.join(tmpDir, 'bill.pdf');
-    fs.writeFileSync(pdfPath, buf);
-
-    const pdf = new PDFImage(pdfPath);
-    const pageCount = await pdf.numberOfPages();
-    let allText = '';
-
-    // Extract text from first page with OCR (scanned PDFs usually have invoice on page 1)
-    const imagePath = await pdf.convertPage(0);
-    console.log(`  OCR: Converting page 1 to image...`);
-
-    const result = await Tesseract.recognize(imagePath, 'eng', {
-      logger: () => {} // Suppress progress logs
-    });
-
-    allText = result.data.text;
-    console.log(`  ✓ OCR extracted ${allText.length} chars from page 1`);
-
-    // Cleanup
-    try { fs.rmSync(tmpDir, { recursive: true }); } catch {}
-
-    return allText || '';
-  } catch (e) {
-    console.warn(`  PDF text extraction (OCR) error: ${e.message}`);
-    return '';
-  }
+  return '';
 };
 
 // Look up a vendor by DisplayName pattern. Returns vendor record or null.
