@@ -226,6 +226,18 @@ const getBillDetail = async (billId) => {
   const sql = `SELECT * FROM Bill WHERE Id = '${billId}'`;
   const response = await query(sql);
   const bill = (response.Bill || [])[0];
+
+  // Debug: Log Line array structure to see what fields are available
+  if (bill && bill.Line && bill.Line.length > 0) {
+    const line = bill.Line[0];
+    console.log(`    [QB-LINE] Bill ${billId} Line[0] fields:`, Object.keys(line).join(', '));
+    if (line.Description) console.log(`      Description: "${line.Description}"`);
+    if (line.Amount) console.log(`      Amount: ${line.Amount}`);
+    if (line.ItemBasedExpenseLineDetail) {
+      console.log(`      ItemBasedExpenseLineDetail:`, JSON.stringify(line.ItemBasedExpenseLineDetail));
+    }
+  }
+
   return bill || null;
 };
 
