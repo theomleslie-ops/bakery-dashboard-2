@@ -142,25 +142,27 @@ const downloadInvoicePdf = async (billId) => {
   }
 };
 
-// Extract text from a PDF buffer using pdf-text-extract (simpler, no DOM deps)
+// Extract text from a PDF buffer using pdf-parse
 const extractPdfText = async (buf) => {
-  return new Promise((resolve) => {
-    try {
-      const extract = require('pdf-text-extract');
-      extract(buf, { type: 'buffer' }, (err, pages) => {
-        if (err) {
-          console.warn(`  PDF text extraction error: ${err.message}`);
-          resolve('');
-        } else {
-          const text = pages.join('\n');
-          resolve(text);
-        }
-      });
-    } catch (e) {
-      console.warn(`  PDF text extraction error: ${e.message}`);
-      resolve('');
-    }
-  });
+  try {
+    // Suppress Node.js API warnings from pdf.js
+    const originalWarn = console.warn;
+    console.warn = (...args) => {
+      const msg = args.join(' ');
+      if (!msg.includes('DOMMatrix') && !msg.includes('ImageData') && !msg.includes('Path2D')) {
+        originalWarn(...args);
+      }
+    };
+
+    const pdfParse = require('pdf-parse');
+    const data = await pdfParse(buf);
+
+    console.warn = originalWarn;
+    return data.text || '';
+  } catch (e) {
+    console.warn(`  PDF text extraction error: ${e.message}`);
+    return '';
+  }
 };
 
 // Look up a vendor by DisplayName pattern. Returns vendor record or null.
