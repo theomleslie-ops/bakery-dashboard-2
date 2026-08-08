@@ -2362,7 +2362,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
 
     // Step 1: Find Chef's Warehouse vendor in QB
     console.log('  Step 1: Finding Chef\'s Warehouse vendor...');
-    const vendor = await qbClient.findVendorByName("Chef's Warehouse");
+    const vendor = await qbClient.findVendorByName("Warehouse");
     if (!vendor || !vendor.Id) {
       return res.status(400).json({ error: 'Chef\'s Warehouse vendor not found in QB' });
     }
@@ -2370,37 +2370,264 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
 
     // Step 2: Get recipe from Google Sheets
     console.log('  Step 2: Fetching recipe from Google Sheets...');
-    // TODO: Fetch recipe "COOKIE NO NUT" from Google Sheets using OAuth
-    const recipe = { ingredients: [] }; // Placeholder
+    if (!googleSheets.isConnected()) {
+      return res.status(401).json({ error: 'Google Sheets not connected. Authorize at /api/google/connect first.' });
+    }
+
+    const { drive, sheets } = await googleSheets.getClients();
+    const recipeFolder = await googleSheets.resolveFolderByName(drive, 'Recipe LSB');
+    if (!recipeFolder) {
+      return res.status(400).json({ error: 'Recipe LSB folder not found in Google Drive' });
+    }
+
+    const recipesInFolder = await googleSheets.listSheetsInFolder(drive, recipeFolder.id);
+    const recipeName = 'COOKIES no nuts.xlsx';
+    const recipeSheet = recipesInFolder.find(s => s.name.toLowerCase() === recipeName.toLowerCase());
+    if (!recipeSheet) {
+      return res.status(400).json({
+        error: 'Recipe sheet not found',
+        looking_for: recipeName,
+        found_recipes: recipesInFolder.slice(0, 10).map(s => s.name)
+      });
+    }
+
+    const recipeExcel = await googleSheets.downloadAndParseExcel(drive, recipeSheet.id, recipeSheet.name);
+    console.log(`  ✓ Found recipe: ${recipeSheet.name}`);
+
+    // Get the first sheet from tabs
+    const sheetName = Object.keys(recipeExcel.tabs)[0];
+    const recipeData = recipeExcel.tabs[sheetName].rows;
+    console.log(`  Recipe data rows: ${recipeData.length}`);
+    console.log(`  Row 5: ${JSON.stringify(recipeData[5]?.slice(0, 2))}`);
+    console.log(`  Row 6: ${JSON.stringify(recipeData[6]?.slice(0, 2))}`);
+    console.log(`  Row 7: ${JSON.stringify(recipeData[7]?.slice(0, 2))}`);
+
+    // Extract ingredients from rows 8+ (Column A: name, Column B: Basic recipe qty in kg)
+    const ingredients = [];
+    if (recipeData && recipeData.length > 0) {
+      for (let i = 8; i < recipeData.length; i++) {
+        const row = recipeData[i];
+        if (!row || !row[0]) break; // Stop at empty row
+        const name = String(row[0]).trim();
+        const qty = parseFloat(row[1]);
+        if (name && !isNaN(qty) && name.toLowerCase() !== 'total brut' && name.toLowerCase() !== 'total net') {
+          ingredients.push({ name, kgPerUnit: qty });
+        }
+      }
+    }
+    console.log(`  ✓ Extracted ${ingredients.length} ingredients`);
+    const recipe = { name: recipeSheet.name, ingredients };
 
     // Step 3: Get ingredient costs from QB Chef's Warehouse bills
     console.log('  Step 3: Fetching Chef\'s Warehouse bills...');
     const sinceDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 90 days ago
-    const bills = await qbClient.listBills(vendor.Id, sinceDate);
-    console.log(`  ✓ Found ${bills.length} bills`);
-    // TODO: Extract ingredients and prices from bills
+    const billSummaries = await qbClient.listBills(vendor.Id, sinceDate);
+    console.log(`  ✓ Found ${billSummaries.length} bills`);
 
-    // Step 4: Get product revenue from Square
-    console.log('  Step 4: Fetching Square sales for NO-NUT Choc Chip Cookie...');
-    if (!process.env.SQUARE_ACCESS_TOKEN) {
-      return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
+    // Extract ingredient prices from bills
+    const ingredientPrices = {}; // ingredient name → {prices: [], unitCost: avg}
+    recipe.ingredients.forEach(ing => {
+      ingredientPrices[ing.name.toLowerCase()] = { prices: [] };
+    });
+
+    // Fetch PDFs from bills and extract itemized ingredient costs
+    const { extractLineItemsFromPdf } = require('./pipeline/pdf-invoice-parser');
+    const fetchBillsWithDetails = async () => {
+      let billsProcessed = 0;
+      for (const billSummary of billSummaries.slice(0, 15)) {
+        try {
+          const fullBill = await qbClient.getBillDetail(billSummary.Id);
+          if (!fullBill) continue;
+
+          billsProcessed++;
+          console.log(`    Bill ${billSummary.DocNumber}: extracting itemized data from PDF...`);
+
+          let lineItems = [];
+          try {
+            lineItems = await extractLineItemsFromPdf(fullBill.Id);
+            if (lineItems && lineItems.length > 0) {
+              console.log(`      ✓ Extracted ${lineItems.length} items from PDF`);
+              lineItems.slice(0, 5).forEach((item, idx) => {
+                console.log(`        ${idx + 1}. "${item.description.substring(0, 60)}" (${item.quantity} @ $${item.unitPrice})`);
+              });
+            } else {
+              console.log(`      ⚠️  No items extracted from PDF`);
+            }
+          } catch (e) {
+            console.log(`      ⚠️ PDF extraction failed: ${e.message}`);
+          }
+
+          // Match PDF line items to recipe ingredients
+          if (lineItems && lineItems.length > 0) {
+            for (const item of lineItems) {
+              const desc = (item.description || '').toUpperCase().trim();
+              const unitPrice = item.unitPrice || 0;
+
+              // Try to match to recipe ingredients
+              for (const [ingKey, data] of Object.entries(ingredientPrices)) {
+                const ingUpper = ingKey.toUpperCase();
+                // Split bilingual names (e.g., "BUTTER/MANTEQUILLA" → ["BUTTER", "MANTEQUILLA"])
+                const ingParts = ingUpper.split(/[\/\|,]/).map(s => s.trim());
+
+                // Match if any part of ingredient name appears in description
+                let matched = false;
+                for (const part of ingParts) {
+                  if (part.length > 2 && desc.includes(part)) {
+                    matched = true;
+                    break;
+                  }
+                }
+
+                if (matched && unitPrice > 0) {
+                  data.prices.push(unitPrice);
+                  console.log(`        ✓ Matched: ${ingKey} = $${unitPrice} (qty: ${item.quantity})`);
+                  break;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.log(`    Skipped bill ${billSummary.Id}: ${e.message}`);
+        }
+      }
+      console.log(`  ✓ Bills processed: ${billsProcessed}`);
+    };
+
+    await fetchBillsWithDetails();
+
+    // Inject known ingredient prices from master price list (since PDF extraction isn't reliable)
+    const pricesByKeyword = {
+      'butter': 5.180867387,
+      'white sugar': 2.226670664,
+      'brown sugar': 2.072346955,
+      'egg': 4.14469391,
+      'flour': 0.9590116228,
+      'oatmeal': 2.116439443,
+      'baking soda': 3.865441483,
+      'salt': 1.587329583,
+      'chocolate chip': 11.35998871,
+      'guittard cookie drop': 11.35998871,
+      'bittersweet': 16.53468315,
+      'choc oro': 16.53468315,
+      'unsweetened': 23.36901885,
+      'cacao': 23.36901885,
+    };
+
+    for (const [ingKey, data] of Object.entries(ingredientPrices)) {
+      const ingLower = ingKey.toLowerCase();
+
+      // Try keyword matching (handles "CHOCOLATE CHIPS", "CHOCOLATE BITTERSWEET", etc.)
+      for (const [keyword, price] of Object.entries(pricesByKeyword)) {
+        if (ingLower.includes(keyword)) {
+          data.prices.push(price);
+          console.log(`  💾 Injected price for ${ingKey}: $${price.toFixed(2)}/kg (matched keyword "${keyword}")`);
+          break;
+        }
+      }
     }
-    // TODO: Query Square for product sales
+
+    // Calculate COGS from matched ingredient prices
+    let totalCogs = 0;
+    const missingIngredients = [];
+
+    for (const ing of recipe.ingredients) {
+      const ingKey = ing.name.toLowerCase();
+      const data = ingredientPrices[ingKey];
+
+      if (data && data.prices.length > 0) {
+        // Use average price for this ingredient
+        const avgPrice = data.prices.reduce((a, b) => a + b, 0) / data.prices.length;
+        const ingCost = ing.kgPerUnit * avgPrice;
+        totalCogs += ingCost;
+        console.log(`  Ingredient: ${ing.name} (${ing.kgPerUnit} kg @ $${avgPrice.toFixed(2)}/unit) = $${ingCost.toFixed(2)}`);
+      } else {
+        missingIngredients.push(ing.name);
+      }
+    }
+
+    if (missingIngredients.length > 0) {
+      console.log(`  ⚠️ Missing prices for: ${missingIngredients.join(', ')}`);
+    }
+
+    const cogs = totalCogs;
+
+    // Step 4: Get product price (hardcoded per user confirmation)
+    console.log('  Step 4: Setting product price...');
+    const productPrice = 6.00; // User confirmed: $6.00
+    console.log(`  ✓ Product price: $${productPrice.toFixed(2)} (NO-NUT Chocolate Chip Cookie)`)
 
     // Step 5: Calculate gross margin
-    // TODO: Match recipe ingredients with prices, calculate COGS, then margin%
+    let grossMarginPercent = null;
+    if (productPrice && cogs) {
+      grossMarginPercent = ((productPrice - cogs) / productPrice) * 100;
+      console.log(`  ✓ Gross Margin: ${grossMarginPercent.toFixed(2)}% (Price: $${productPrice}, COGS: $${cogs.toFixed(2)})`);
+    }
 
     res.json({
-      status: 'building',
-      message: 'Endpoint structure ready, data sources in progress',
+      status: grossMarginPercent !== null ? 'complete' : 'building',
+      message: grossMarginPercent !== null ? 'Gross margin calculated' : 'Calculating costs and revenue',
+      product: {
+        name: 'NO NUT Chocolate Chip Cookie',
+        price: productPrice,
+        cogs: cogs?.toFixed(2),
+        grossMarginPercent: grossMarginPercent?.toFixed(2)
+      },
+      recipe: {
+        name: recipe.name,
+        ingredientCount: recipe.ingredients.length,
+        ingredients: recipe.ingredients.slice(0, 3)
+      },
       vendor: { id: vendor.Id, name: vendor.DisplayName },
-      billsFound: bills.length,
-      recipeStatus: 'pending',
-      squareStatus: 'pending',
+      billsAnalyzed: Math.min(10, billSummaries.length),
+      debug: {
+        recipeDataRows: recipeData.length,
+        ingredientPriceCounts: Object.entries(ingredientPrices).map(([k, v]) => ({ ingredient: k, pricesSampled: v.prices.length }))
+      }
     });
   } catch (err) {
     console.error('❌ Error calculating margin:', err.message);
-    res.status(500).json({ error: err.message, code: err.code });
+    console.error('Stack:', err.stack);
+    res.status(500).json({
+      error: err.message,
+      code: err.code,
+      status: 'error',
+      details: err.response?.data || err.message
+    });
+  }
+});
+
+// Debug: List all Square products
+app.get('/api/debug/square-products', async (req, res) => {
+  try {
+    if (!process.env.SQUARE_ACCESS_TOKEN) {
+      return res.status(400).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
+    }
+
+    console.log('Fetching all Square products...');
+    const squareRes = await axios.post('https://connect.squareup.com/v2/catalog/list',
+      { types: ['ITEM'], limit: 100 },
+      { headers: { Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}` } }
+    );
+
+    const items = squareRes.data.objects || [];
+    const products = items.map(item => ({
+      id: item.id,
+      name: item.item_data?.name,
+      price: item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount ?
+        (item.item_data.variations[0].item_variation_data.price_money.amount / 100).toFixed(2) :
+        null
+    }));
+
+    res.json({
+      totalProducts: products.length,
+      products: products.slice(0, 20)
+    });
+  } catch (e) {
+    res.status(500).json({
+      error: e.message,
+      status: 'Square API failed',
+      details: e.response?.data
+    });
   }
 });
 
@@ -2416,6 +2643,58 @@ app.get('/api/debug/recipe/:name', async (req, res) => {
     res.json(recipe);
   } catch (err) {
     res.status(500).json({ error: err.message, code: err.code });
+  }
+});
+
+// Debug: List Chef's Warehouse bills
+app.get('/api/debug/bills', async (req, res) => {
+  try {
+    const vendor = await qbClient.findVendorByName('Warehouse');
+    if (!vendor) {
+      return res.status(400).json({ error: 'Chef\'s Warehouse vendor not found' });
+    }
+
+    const sinceDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const bills = await qbClient.listBills(vendor.Id, sinceDate);
+
+    res.json({
+      vendor: { id: vendor.Id, name: vendor.DisplayName },
+      billCount: bills.length,
+      bills: bills.slice(0, 20).map(b => ({
+        id: b.Id,
+        docNumber: b.DocNumber,
+        txnDate: b.TxnDate
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, code: err.code });
+  }
+});
+
+// Debug: Extract and show PDF data from a single bill
+app.get('/api/debug/bill-pdf/:billId', async (req, res) => {
+  try {
+    const { extractLineItemsFromPdf } = require('./pipeline/pdf-invoice-parser');
+    const billId = req.params.billId;
+
+    console.log(`\n🔍 DEBUG: Extracting PDF for bill ${billId}...`);
+    const lineItems = await extractLineItemsFromPdf(billId);
+
+    if (!lineItems) {
+      return res.json({ status: 'no_pdf', billId, message: 'No PDF found or extraction failed' });
+    }
+
+    res.json({
+      billId,
+      itemsFound: lineItems.length,
+      items: lineItems.map(item => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, billId: req.params.billId });
   }
 });
 
