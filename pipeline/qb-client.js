@@ -142,48 +142,41 @@ const downloadInvoicePdf = async (billId) => {
   }
 };
 
-// Extract text from a PDF buffer using pdftotext (system binary) or fallback to pdf-parse
+// Extract text from PDF using Tesseract OCR (works on scanned PDFs)
 const extractPdfText = async (buf) => {
   try {
-    // Try pdftotext first (system binary, faster, works on scanned PDFs)
+    const Tesseract = require('tesseract.js');
+    const { PDFImage } = require('pdf-image');
     const fs = require('fs');
-    const { execSync } = require('child_process');
-    const tmpFile = `/tmp/bill-${Date.now()}.pdf`;
-    const txtFile = tmpFile.replace('.pdf', '.txt');
+    const path = require('path');
 
-    try {
-      fs.writeFileSync(tmpFile, buf);
-      execSync(`pdftotext "${tmpFile}" "${txtFile}"`, { stdio: 'pipe' });
-      const text = fs.readFileSync(txtFile, 'utf-8');
-      fs.unlinkSync(tmpFile);
-      fs.unlinkSync(txtFile);
+    // Convert PDF to images using pdf-image
+    const tmpDir = `/tmp/pdf-${Date.now()}`;
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    const pdfPath = path.join(tmpDir, 'bill.pdf');
+    fs.writeFileSync(pdfPath, buf);
 
-      if (text && text.trim().length > 0) {
-        console.log(`  ✓ pdftotext extracted ${text.length} chars`);
-        return text;
-      }
-    } catch (e) {
-      // pdftotext not available or failed, try pdf-parse
-      try { fs.unlinkSync(tmpFile); } catch {}
-      try { fs.unlinkSync(txtFile); } catch {}
-    }
+    const pdf = new PDFImage(pdfPath);
+    const pageCount = await pdf.numberOfPages();
+    let allText = '';
 
-    // Fallback to pdf-parse with suppressed warnings
-    const originalWarn = console.warn;
-    console.warn = (...args) => {
-      const msg = args.join(' ');
-      if (!msg.includes('DOMMatrix') && !msg.includes('ImageData') && !msg.includes('Path2D') && !msg.includes('require')) {
-        originalWarn(...args);
-      }
-    };
+    // Extract text from first page with OCR (scanned PDFs usually have invoice on page 1)
+    const imagePath = await pdf.convertPage(0);
+    console.log(`  OCR: Converting page 1 to image...`);
 
-    const pdfParse = require('pdf-parse');
-    const data = await pdfParse(buf);
+    const result = await Tesseract.recognize(imagePath, 'eng', {
+      logger: () => {} // Suppress progress logs
+    });
 
-    console.warn = originalWarn;
-    return data.text || '';
+    allText = result.data.text;
+    console.log(`  ✓ OCR extracted ${allText.length} chars from page 1`);
+
+    // Cleanup
+    try { fs.rmSync(tmpDir, { recursive: true }); } catch {}
+
+    return allText || '';
   } catch (e) {
-    console.warn(`  PDF text extraction error: ${e.message}`);
+    console.warn(`  PDF text extraction (OCR) error: ${e.message}`);
     return '';
   }
 };
