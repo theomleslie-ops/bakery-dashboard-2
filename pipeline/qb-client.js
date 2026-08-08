@@ -132,9 +132,14 @@ const downloadInvoicePdf = async (billId) => {
 
 // Extract text from a PDF buffer.
 const extractPdfText = async (buf) => {
-  const { PDFParse } = require('pdf-parse');
-  const parsed = await new PDFParse({ data: buf }).getText().catch(() => ({ text: '' }));
-  return parsed.text || '';
+  try {
+    const pdfParse = require('pdf-parse');
+    const data = await pdfParse(buf);
+    return data.text || '';
+  } catch (e) {
+    console.warn(`  PDF text extraction error: ${e.message}`);
+    return '';
+  }
 };
 
 // Look up a vendor by DisplayName pattern. Returns vendor record or null.

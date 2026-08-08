@@ -2434,7 +2434,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     const { extractLineItemsFromPdf } = require('./pipeline/pdf-invoice-parser');
     const fetchBillsWithDetails = async () => {
       let billsProcessed = 0;
-      for (const billSummary of billSummaries.slice(0, 10)) { // Sample first 10 bills for now
+      for (const billSummary of billSummaries.slice(0, 15)) {
         try {
           const fullBill = await qbClient.getBillDetail(billSummary.Id);
           if (!fullBill) continue;
@@ -2442,132 +2442,75 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
           billsProcessed++;
           console.log(`    Bill ${billSummary.DocNumber}: extracting itemized data from PDF...`);
 
-          // Try to extract line items from PDF attachment
           let lineItems = [];
           try {
             lineItems = await extractLineItemsFromPdf(fullBill.Id);
-            console.log(`      ✓ Extracted ${lineItems.length} items from PDF`);
-            lineItems.slice(0, 3).forEach((item, idx) => {
-              console.log(`        Line ${idx + 1}: "${(item.description || item.name || item.item || '?').substring(0, 50)}" = $${item.amount || item.price || item.total || '?'}`);
-            });
+            if (lineItems && lineItems.length > 0) {
+              console.log(`      ✓ Extracted ${lineItems.length} items from PDF`);
+              lineItems.slice(0, 5).forEach((item, idx) => {
+                console.log(`        ${idx + 1}. "${item.description.substring(0, 40)}" (${item.quantity} @ $${item.unitPrice})`);
+              });
+            }
           } catch (e) {
             console.log(`      ⚠️ PDF extraction failed: ${e.message}`);
           }
 
-          if (lineItems.length === 0 && fullBill.Line) {
-            console.log(`      Falling back to QB Line array (${fullBill.Line.length} items)`);
-            lineItems = fullBill.Line.map(line => ({
-              description: line.Description || '',
-              amount: line.Amount || 0
-            }));
-          }
+          // Match PDF line items to recipe ingredients
+          if (lineItems && lineItems.length > 0) {
+            for (const item of lineItems) {
+              const desc = (item.description || '').toUpperCase().trim();
+              const unitPrice = item.unitPrice || 0;
 
-          // Match line item descriptions to recipe ingredients
-          lineItems.slice(0, 3).forEach((item, idx) => {
-            const desc = (item.description || '').toUpperCase().trim();
-            const amount = item.amount || 0;
-            if (desc) console.log(`      Line ${idx + 1}: "${desc}" = $${amount}`);
-
-            // Try to match to recipe ingredients
-            for (const [ingKey, data] of Object.entries(ingredientPrices)) {
-              if (desc.includes(ingKey.toUpperCase())) {
-                data.prices.push(amount);
-                console.log(`        ✓ Matched: ${ingKey} = $${amount}`);
-                break;
+              // Try to match to recipe ingredients
+              for (const [ingKey, data] of Object.entries(ingredientPrices)) {
+                const ingUpper = ingKey.toUpperCase();
+                // Match if ingredient name appears in description (e.g., "BUTTER" in "UNSALTED BUTTER 10LB")
+                if (desc.includes(ingUpper) || ingUpper.includes(desc.split(/\s+/)[0])) {
+                  data.prices.push(unitPrice);
+                  console.log(`        ✓ Matched: ${ingKey} = $${unitPrice} (qty: ${item.quantity})`);
+                  break;
+                }
               }
             }
-          });
+          }
         } catch (e) {
           console.log(`    Skipped bill ${billSummary.Id}: ${e.message}`);
         }
       }
-      console.log(`  Bills processed: ${billsProcessed}`);
+      console.log(`  ✓ Bills processed: ${billsProcessed}`);
     };
 
     await fetchBillsWithDetails();
 
-    // Since bills have multi-ingredient lines (not itemized), estimate avg cost per ingredient
-    const allBillAmounts = [];
-    for (const [ingName, data] of Object.entries(ingredientPrices)) {
-      if (data.prices.length > 0) allBillAmounts.push(...data.prices);
-    }
-
-    if (allBillAmounts.length === 0) {
-      // No matches yet; calculate average across all bills sampled
-      for (const billSummary of billSummaries.slice(0, 10)) {
-        try {
-          const fullBill = await qbClient.getBillDetail(billSummary.Id);
-          if (fullBill?.Line?.[0]?.Amount) {
-            allBillAmounts.push(fullBill.Line[0].Amount);
-          }
-        } catch (e) {}
-      }
-    }
-
+    // Calculate COGS from matched ingredient prices
     let totalCogs = 0;
-    if (allBillAmounts.length > 0) {
-      const avgBillItemCost = allBillAmounts.reduce((a, b) => a + b, 0) / allBillAmounts.length;
-      const avgCostPerKg = avgBillItemCost / 10; // Rough estimate: avg bill item divided by typical quantity in kg
+    const missingIngredients = [];
 
-      for (const ing of recipe.ingredients) {
-        const estCost = (ing.kgPerUnit * avgCostPerKg);
-        totalCogs += estCost;
+    for (const ing of recipe.ingredients) {
+      const ingKey = ing.name.toLowerCase();
+      const data = ingredientPrices[ingKey];
+
+      if (data && data.prices.length > 0) {
+        // Use average price for this ingredient
+        const avgPrice = data.prices.reduce((a, b) => a + b, 0) / data.prices.length;
+        const ingCost = ing.kgPerUnit * avgPrice;
+        totalCogs += ingCost;
+        console.log(`  Ingredient: ${ing.name} (${ing.kgPerUnit} kg @ $${avgPrice.toFixed(2)}/unit) = $${ingCost.toFixed(2)}`);
+      } else {
+        missingIngredients.push(ing.name);
       }
-      console.log(`  ✓ Estimated COGS per unit: $${totalCogs.toFixed(2)} (based on ${allBillAmounts.length} bill samples, avg $${avgBillItemCost.toFixed(2)} per item)`);
-    } else {
-      console.log(`  ⚠️ No bill data available for COGS calculation`);
     }
+
+    if (missingIngredients.length > 0) {
+      console.log(`  ⚠️ Missing prices for: ${missingIngredients.join(', ')}`);
+    }
+
     const cogs = totalCogs;
 
-    // Step 4: Get product revenue from Square
-    console.log('  Step 4: Fetching Square sales for NO-NUT Choc Chip Cookie...');
-    if (!process.env.SQUARE_ACCESS_TOKEN) {
-      return res.status(500).json({ error: 'SQUARE_ACCESS_TOKEN not configured' });
-    }
-
-    let productPrice = null;
-    let squareDebug = { method: 'search_by_name' };
-    try {
-      console.log(`  Searching Square for 'NO-NUT Choc Chip Cookie'...`);
-      // Search by exact product name
-      const squareRes = await axios.post('https://connect.squareup.com/v2/catalog/search',
-        {
-          query: {
-            text_query: {
-              keywords: ['NO-NUT Choc Chip Cookie']
-            }
-          }
-        },
-        { headers: { Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}` } }
-      );
-
-      const results = squareRes.data.results || [];
-      console.log(`  Square search returned ${results.length} results`);
-      squareDebug.resultsFound = results.length;
-
-      if (results.length > 0) {
-        results.slice(0, 3).forEach((item, idx) => {
-          const name = item.object?.item?.name || '(no name)';
-          const price = item.object?.item?.variations?.[0]?.item_variation_data?.price_money?.amount;
-          console.log(`    ${idx + 1}. ${name} = $${price ? (price / 100).toFixed(2) : 'no price'}`);
-        });
-
-        const matchedItem = results[0]?.object?.item;
-        if (matchedItem?.variations?.[0]) {
-          const variation = matchedItem.variations[0];
-          productPrice = variation.item_variation_data?.price_money?.amount / 100;
-          console.log(`  ✓ Found product: ${matchedItem.name} = $${productPrice}`);
-          squareDebug.matchedProduct = matchedItem.name;
-          squareDebug.matchedPrice = productPrice;
-        }
-      } else {
-        console.log(`  ⚠️ No results found for 'NO-NUT Choc Chip Cookie'`);
-      }
-    } catch (e) {
-      console.log(`  ⚠️ Square query failed: ${e.message}`);
-      if (e.response?.data) console.log(`    Response: ${JSON.stringify(e.response.data)}`);
-      squareDebug.error = e.message;
-    }
+    // Step 4: Get product price (hardcoded per user confirmation)
+    console.log('  Step 4: Setting product price...');
+    const productPrice = 6.00; // User confirmed: $6.00
+    console.log(`  ✓ Product price: $${productPrice.toFixed(2)} (NO-NUT Chocolate Chip Cookie)`)
 
     // Step 5: Calculate gross margin
     let grossMarginPercent = null;
