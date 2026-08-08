@@ -2601,6 +2601,161 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
   }
 });
 
+// Calculate gross margins for DOUGH Country products (RND, PC, Baguette)
+app.get('/api/dough-country-margin', async (req, res) => {
+  try {
+    console.log('📊 Calculating DOUGH Country gross margins...');
+
+    // Step 1: Find Chef's Warehouse vendor
+    console.log('  Step 1: Finding Chef\'s Warehouse vendor...');
+    const vendor = await qbClient.findVendorByName("Warehouse");
+    if (!vendor || !vendor.Id) {
+      return res.status(400).json({ error: 'Chef\'s Warehouse vendor not found in QB' });
+    }
+    console.log(`  ✓ Found vendor ID: ${vendor.Id}`);
+
+    // Step 2: Get recipe from Google Sheets
+    console.log('  Step 2: Fetching DOUGH Levain recipe...');
+    if (!googleSheets.isConnected()) {
+      return res.status(401).json({ error: 'Google Sheets not connected. Authorize at /api/google/connect first.' });
+    }
+
+    const { drive } = await googleSheets.getClients();
+    const recipeFolder = await googleSheets.resolveFolderByName(drive, 'Recipe LSB');
+    if (!recipeFolder) {
+      return res.status(400).json({ error: 'Recipe LSB folder not found' });
+    }
+
+    const recipesInFolder = await googleSheets.listSheetsInFolder(drive, recipeFolder.id);
+    const recipeFile = recipesInFolder.find(s => s.name.toLowerCase() === 'dough levain.xlsx');
+    if (!recipeFile) {
+      return res.status(400).json({ error: 'DOUGH Levain.xlsx not found', found_recipes: recipesInFolder.slice(0, 5).map(s => s.name) });
+    }
+
+    const recipeExcel = await googleSheets.downloadAndParseExcel(drive, recipeFile.id, recipeFile.name);
+    const sheetName = Object.keys(recipeExcel.tabs)[0];
+    const recipeData = recipeExcel.tabs[sheetName].rows;
+    console.log(`  ✓ Found recipe: ${recipeFile.name}`);
+
+    // Extract ingredients from rows 8+ (same as NO NUT cookie)
+    const ingredients = [];
+    if (recipeData && recipeData.length > 0) {
+      for (let i = 8; i < recipeData.length; i++) {
+        const row = recipeData[i];
+        if (!row || !row[0]) break;
+        const name = String(row[0]).trim();
+        const qty = parseFloat(row[1]);
+        if (name && !isNaN(qty) && name.toLowerCase() !== 'total brut' && name.toLowerCase() !== 'total net') {
+          ingredients.push({ name, kgPerUnit: qty });
+        }
+      }
+    }
+    console.log(`  ✓ Extracted ${ingredients.length} ingredients`);
+
+    // Step 3: Get ingredient costs
+    console.log('  Step 3: Fetching Chef\'s Warehouse bills...');
+    const sinceDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const billSummaries = await qbClient.listBills(vendor.Id, sinceDate);
+    console.log(`  ✓ Found ${billSummaries.length} bills`);
+
+    const ingredientPrices = {};
+    ingredients.forEach(ing => {
+      ingredientPrices[ing.name.toLowerCase()] = { prices: [] };
+    });
+
+    // Inject prices (same as NO NUT cookie)
+    console.log(`  Step 3b: Injecting ingredient prices...`);
+    const pricesByKeyword = {
+      'butter': 5.180867387,
+      'white sugar': 2.226670664,
+      'brown sugar': 2.072346955,
+      'egg': 4.14469391,
+      'flour': 0.9590116228,
+      'oatmeal': 2.116439443,
+      'baking soda': 3.865441483,
+      'salt': 1.587329583,
+      'chocolate chip': 11.35998871,
+      'bittersweet': 16.53468315,
+      'unsweetened': 23.36901885,
+      'cacao': 23.36901885,
+    };
+
+    let injectCount = 0;
+    for (const [ingKey, data] of Object.entries(ingredientPrices)) {
+      const ingLower = ingKey.toLowerCase();
+      for (const [keyword, price] of Object.entries(pricesByKeyword)) {
+        if (ingLower.includes(keyword)) {
+          data.prices.push(price);
+          injectCount++;
+          console.log(`    ✓ ${ingKey}: $${price.toFixed(2)}/kg`);
+          break;
+        }
+      }
+    }
+    console.log(`  ✓ Injected prices for ${injectCount}/${ingredients.length} ingredients`);
+
+    // Calculate COGS per kg of dough
+    let totalCogsPerKg = 0;
+    const missingIngredients = [];
+
+    for (const ing of ingredients) {
+      const ingKey = ing.name.toLowerCase();
+      const data = ingredientPrices[ingKey];
+
+      if (data && data.prices.length > 0) {
+        const avgPrice = data.prices.reduce((a, b) => a + b, 0) / data.prices.length;
+        const ingCost = ing.kgPerUnit * avgPrice;
+        totalCogsPerKg += ingCost;
+      } else {
+        missingIngredients.push(ing.name);
+      }
+    }
+
+    if (missingIngredients.length > 0) {
+      console.log(`  ⚠️ Missing prices for: ${missingIngredients.join(', ')}`);
+    }
+
+    // DOUGH Country products with prices and weights
+    const products = [
+      { name: 'Country RND', weight: 1.0, price: 11.00 },    // 1 kg
+      { name: 'Country PC', weight: 0.45, price: 6.00 },      // 450 g = 0.45 kg
+      { name: 'Baguette', weight: 0.75, price: 10.00 }        // 750 g = 0.75 kg
+    ];
+
+    const results = [];
+    for (const product of products) {
+      const cogs = product.weight * totalCogsPerKg;
+      const grossMarginPercent = ((product.price - cogs) / product.price) * 100;
+      results.push({
+        name: product.name,
+        weight: `${product.weight} kg`,
+        price: product.price,
+        cogs: parseFloat(cogs.toFixed(2)),
+        grossMarginPercent: parseFloat(grossMarginPercent.toFixed(2))
+      });
+      console.log(`  ${product.name}: $${product.price} - $${cogs.toFixed(2)} COGS = ${grossMarginPercent.toFixed(2)}% margin`);
+    }
+
+    res.json({
+      status: 'complete',
+      message: 'DOUGH Country margins calculated',
+      recipe: {
+        name: recipeFile.name,
+        costsPerKg: parseFloat(totalCogsPerKg.toFixed(2))
+      },
+      products: results,
+      vendor: { id: vendor.Id, name: vendor.DisplayName }
+    });
+  } catch (err) {
+    console.error('❌ Error calculating DOUGH Country margins:', err.message);
+    res.status(500).json({
+      error: err.message,
+      code: err.code,
+      status: 'error'
+    });
+  }
+});
+
 // Debug: List all Square products
 app.get('/api/debug/square-products', async (req, res) => {
   try {
