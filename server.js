@@ -2615,6 +2615,33 @@ app.get('/api/debug/recipe/:name', async (req, res) => {
   }
 });
 
+// Debug: Extract and show PDF data from a single bill
+app.get('/api/debug/bill-pdf/:billId', async (req, res) => {
+  try {
+    const { extractLineItemsFromPdf } = require('./pipeline/pdf-invoice-parser');
+    const billId = req.params.billId;
+
+    console.log(`\n🔍 DEBUG: Extracting PDF for bill ${billId}...`);
+    const lineItems = await extractLineItemsFromPdf(billId);
+
+    if (!lineItems) {
+      return res.json({ status: 'no_pdf', billId, message: 'No PDF found or extraction failed' });
+    }
+
+    res.json({
+      billId,
+      itemsFound: lineItems.length,
+      items: lineItems.map(item => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, billId: req.params.billId });
+  }
+});
+
 // ============= HEALTH CHECK =============
 
 app.get('/api/health', (req, res) => {
