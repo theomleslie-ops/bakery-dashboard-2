@@ -2496,6 +2496,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
     await fetchBillsWithDetails();
 
     // Inject known ingredient prices from master price list (since PDF extraction isn't reliable)
+    console.log(`  Step 3b: Injecting ingredient prices from hardcoded price list...`);
     const pricesByKeyword = {
       'butter': 5.180867387,
       'white sugar': 2.226670664,
@@ -2513,18 +2514,22 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
       'cacao': 23.36901885,
     };
 
+    let injectCount = 0;
     for (const [ingKey, data] of Object.entries(ingredientPrices)) {
       const ingLower = ingKey.toLowerCase();
+      console.log(`    Checking: "${ingKey}" (${ingLower})`);
 
       // Try keyword matching (handles "CHOCOLATE CHIPS", "CHOCOLATE BITTERSWEET", etc.)
       for (const [keyword, price] of Object.entries(pricesByKeyword)) {
         if (ingLower.includes(keyword)) {
           data.prices.push(price);
-          console.log(`  💾 Injected price for ${ingKey}: $${price.toFixed(2)}/kg (matched keyword "${keyword}")`);
+          injectCount++;
+          console.log(`      ✓ Matched keyword "${keyword}" → $${price.toFixed(2)}/kg`);
           break;
         }
       }
     }
+    console.log(`  ✓ Injected prices for ${injectCount}/${Object.keys(ingredientPrices).length} ingredients`);
 
     // Calculate COGS from matched ingredient prices
     let totalCogs = 0;
