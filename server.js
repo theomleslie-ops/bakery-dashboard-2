@@ -2537,8 +2537,7 @@ app.get('/api/no-nut-cookie-margin', async (req, res) => {
       billsAnalyzed: Math.min(10, billSummaries.length),
       debug: {
         recipeDataRows: recipeData.length,
-        ingredientPriceCounts: Object.entries(ingredientPrices).map(([k, v]) => ({ ingredient: k, pricesSampled: v.prices.length })),
-        square: squareDebug
+        ingredientPriceCounts: Object.entries(ingredientPrices).map(([k, v]) => ({ ingredient: k, pricesSampled: v.prices.length }))
       }
     });
   } catch (err) {
