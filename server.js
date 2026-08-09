@@ -1536,15 +1536,13 @@ const parseQBPeriodPL = (report) => {
   const revenueVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Income'));
   const cogsVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'COGS'));
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
-  // Match the "Total for 6200 LABOR/PAYROLL EXPENSES" summary row - this ensures we get the
-  // correct total including all sub-items (wages, taxes, workers comp) rather than individual line items
-  const laborRowByTotal = findQBRowByLabel(report.Rows?.Row, 'Total for 6200 LABOR/PAYROLL');
-  const laborRowByLabel = findQBRowByLabel(report.Rows?.Row, 'LABOR/PAYROLL');
-  const laborVals = getQBRowVals(laborRowByTotal) || getQBRowVals(laborRowByLabel);
-  if (!laborRowByTotal && laborRowByLabel) {
-    const laborLabel = laborRowByLabel.Header?.ColData?.[0]?.value || laborRowByLabel.ColData?.[0]?.value || 'unknown';
-    console.warn(`⚠️ QB Labor: using fallback row labeled "${laborLabel}" (Total row not found)`);
-  }
+  // Match the labor/payroll row - try account 6200 (LABOR/PAYROLL EXPENSES) in this order:
+  // 1. Total for 6200 LABOR/PAYROLL - summary total with all sub-items
+  // 2. Just 6200 - the account total
+  // 3. LABOR/PAYROLL - fallback by account name
+  const laborVals = getQBRowVals(findQBRowByLabel(report.Rows?.Row, 'Total for 6200')) ||
+                    getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6200')) ||
+                    getQBRowVals(findQBRowByLabel(report.Rows?.Row, 'LABOR/PAYROLL'));
   const netVals = getQBRowVals(report.Rows?.Row?.find((r) => r.group === 'NetIncome'));
 
   return periodCols.map((col) => {
