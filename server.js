@@ -2159,6 +2159,54 @@ app.get('/api/admin/backfill-market-performance', async (req, res) => {
   }
 });
 
+// GET /api/admin/backfill-market-performance-range?startDate=2026-07-01&endDate=2026-08-31
+// Backfill market performance data for a specific date range without clearing entire snapshot
+app.get('/api/admin/backfill-market-performance-range', async (req, res) => {
+  try {
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Missing startDate and/or endDate query parameters (format: YYYY-MM-DD)' });
+    }
+
+    console.log(`🔄 Backfilling market-performance for range ${startDate} to ${endDate}...`);
+
+    const startDow = await fetchWorkweekStartDow();
+    const snapshot = loadMarketPerfSnapshot();
+
+    // Backfill the requested range
+    const backfillResults = await mapWithConcurrency(WASTE_MARKET_LOCATIONS, 6, async (loc) => {
+      try {
+        return {
+          name: loc.name,
+          revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, startDate, addDays(endDate, 1), startDow),
+        };
+      } catch (err) {
+        console.warn(`⚠️ Failed to backfill data for ${loc.name}:`, err.message);
+        return { name: loc.name, revenueByWeek: {} };
+      }
+    });
+
+    backfillResults.forEach(({ name, revenueByWeek }) => {
+      snapshot.revenueByMarket[name] = { ...(snapshot.revenueByMarket[name] || {}), ...revenueByWeek };
+    });
+
+    // If this range extends further back than current backfill, update the marker
+    if (!snapshot.backfilledFrom || startDate < snapshot.backfilledFrom) {
+      snapshot.backfilledFrom = startDate;
+    }
+
+    saveMarketPerfSnapshot(snapshot);
+    cacheManager.invalidatePrefix('market_perf_');
+    cacheManager.invalidatePrefix('store_perf_');
+
+    res.json({ success: true, message: `Backfill complete for ${startDate} to ${endDate}. Cache cleared.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Backfill disabled due to server overload - just fetch recent data
 app.get('/api/admin/backfill-store-locations', async (req, res) => {
   res.json({ message: 'Backfill disabled. Dashboards now show recent data only.' });
