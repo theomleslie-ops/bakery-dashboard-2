@@ -703,6 +703,7 @@
               monthlyData[monthKey] = {
                 month: monthName,
                 year: date.getFullYear(),
+                dateObj: date,
                 revenue: 0,
                 cogs: 0,
                 labor: 0,
@@ -721,13 +722,14 @@
               return {
                 label: m.month,
                 fullLabel: m.month + ' ' + m.year,
+                dateObj: m.dateObj,
                 revenue: m.revenue,
                 foodPercent,
                 laborPercent,
                 totalPercent: foodPercent + laborPercent,
               };
             })
-            .sort((a, b) => a.fullLabel.localeCompare(b.fullLabel));
+            .sort((a, b) => a.dateObj - b.dateObj);
 
           if (combined.length > 1) {
             const lastRevenue = combined[combined.length - 1].revenue;
