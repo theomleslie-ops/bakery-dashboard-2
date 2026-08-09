@@ -4031,8 +4031,8 @@ const server = app.listen(PORT, async () => {
   if (qbConfigured) {
     startQBRefreshJobs();
 
-    // Refresh 5 years of QB historical data on startup (runs in background)
-    setImmediate(async () => {
+    // Refresh 5 years of QB historical data on startup (runs in background after QB cache is ready)
+    setTimeout(async () => {
       try {
         console.log('🔄 Refreshing 5 years of QB historical P&L data...');
         const todayStr = new Date().toISOString().slice(0, 10);
@@ -4049,8 +4049,9 @@ const server = app.listen(PORT, async () => {
         console.log('💾 QB historical snapshot cached successfully');
       } catch (err) {
         console.error('⚠️  QB historical refresh failed:', err.message);
+        console.error('   Stack:', err.stack);
       }
-    });
+    }, 2000); // Wait 2 seconds for QB cache to initialize
   }
 
   // Initialize automated margin calculation scheduler
