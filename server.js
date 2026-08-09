@@ -3444,6 +3444,9 @@ app.get('/api/debug/cache-structure', (req, res) => {
 });
 
 app.get('/api/ingredient-costs/status', (req, res) => {
+  if (!ingredientScheduler) {
+    return res.json({ status: 'disabled', message: 'Ingredient extraction disabled - using hardcoded product margins' });
+  }
   const status = ingredientScheduler.getStatus();
   res.json({
     status: status.isRunning ? 'extracting' : 'idle',
@@ -3454,6 +3457,9 @@ app.get('/api/ingredient-costs/status', (req, res) => {
 
 // Manually trigger ingredient extraction (runs in background)
 app.post('/api/ingredient-costs/trigger', async (req, res) => {
+  if (!ingredientScheduler) {
+    return res.status(400).json({ status: 'disabled', message: 'Ingredient extraction disabled - using hardcoded product margins' });
+  }
   const weeks = parseInt(req.query.weeks || '52');
   const triggered = await ingredientScheduler.triggerNow(weeks);
 
@@ -3939,7 +3945,8 @@ const server = app.listen(PORT, async () => {
 
   // Initialize ingredient cost extraction scheduler
   // Runs on startup to populate cache (takes time, runs in background)
-  ingredientScheduler = ingredientSchedulerModule.start();
+  // Disabled: bills aren't needed since using hardcoded product margins instead
+  // ingredientScheduler = ingredientSchedulerModule.start();
 
   // Auto-rebuild product margins weekly (Sundays at 3am)
   // Fetches vendor prices from QB + recipes from Google Drive
