@@ -218,22 +218,11 @@ const main = async ({ squareSalesData = [] } = {}) => {
   console.log('Step 1: Reading ingredient prices…');
   let ingredientCosts = {};
 
-  // Try QB bills first
-  const qbBillExtractor = require('./qb-bill-extractor');
-  try {
-    console.log('  Attempting to pull from QuickBooks bills (Chef\'s Warehouse, Green Leaf, Allen Brothers)…');
-    const billResult = await qbBillExtractor.extractBills({ weeks: 52 }); // Last year of bills
-
-    // Convert bill extractor output to ingredient cost format
-    for (const ing of billResult.ingredients) {
-      ingredientCosts[ing.ingredient] = ing.mostRecentCost;
-    }
-    console.log(`  ✓ Loaded ${billResult.ingredients.length} ingredients from QB bills\n`);
-  } catch (e) {
-    console.warn(`  ⚠️  QB bill extraction failed (${e.code || e.message}), falling back to Google Sheet…`);
-    ingredientCosts = await readIngredientsSheet(drive, sheets, folder.id);
-    console.log(`  ✓ Loaded ${Object.keys(ingredientCosts).length} ingredient prices from Google Sheet\n`);
-  }
+  // Disabled: QB bills no longer needed since using hardcoded product margins
+  // Skip bill extraction and go straight to Google Sheets for ingredient costs
+  console.log('  Skipping QB bill extraction (using hardcoded product margins)…');
+  ingredientCosts = await readIngredientsSheet(drive, sheets, folder.id);
+  console.log(`  ✓ Loaded ${Object.keys(ingredientCosts).length} ingredient prices from Google Sheet\n`);
 
   // Step 4: Pull recipes from Recipe LSB
   console.log('Step 2: Parsing recipe sheets from Recipe LSB…');
