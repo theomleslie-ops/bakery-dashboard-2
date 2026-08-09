@@ -3801,25 +3801,25 @@ app.get('/api/cash-balance', async (req, res) => {
       const startDateStr = firstDay.toISOString().split('T')[0];
       const endDateStr = lastDay.toISOString().split('T')[0];
 
-      // Disabled CashFlow fetching to avoid QB API rate limiting
-      // try {
-      //   const cfRes = await axios.get(
-      //     `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
-      //     {
-      //       params: { start_date: startDateStr, end_date: endDateStr },
-      //       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
-      //     }
-      //   );
-      //   const cash = findCashAtEnd(cfRes.data.Rows?.Row) || 0;
-      //   currentCash = cash;
-      //   balances.push({
-      //     date: endDateStr,
-      //     balance: round2(cash),
-      //   });
-      //   console.log(`  ✅ ${endDateStr}: $${round2(cash)}`);
-      // } catch (err) {
-      //   console.warn(`Failed to fetch CashFlow for ${monthData.name} ${monthData.year}: ${err.message}`);
-      // }
+      // CashFlow fetching re-enabled (rate limiting issue resolved)
+      try {
+        const cfRes = await axios.get(
+          `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
+          {
+            params: { start_date: startDateStr, end_date: endDateStr },
+            headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+          }
+        );
+        const cash = findCashAtEnd(cfRes.data.Rows?.Row) || 0;
+        currentCash = cash;
+        balances.push({
+          date: endDateStr,
+          balance: round2(cash),
+        });
+        console.log(`  ✅ ${endDateStr}: $${round2(cash)}`);
+      } catch (err) {
+        console.warn(`Failed to fetch CashFlow for ${monthData.name} ${monthData.year}: ${err.message}`);
+      }
     }
 
     console.log(`✅ Fetched ${balances.length} month-end cash balances from QB`);
