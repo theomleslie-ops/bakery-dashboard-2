@@ -1574,27 +1574,35 @@ const parseQBPeriodPL = (report) => {
   // 1. Total for 6200 LABOR/PAYROLL - summary total with all sub-items
   // 2. Just 6200 - the account total
   // 3. LABOR/PAYROLL - fallback by account name
+  // Search for labor/payroll row with multiple strategies
   const labor6200Total = findQBRowByLabel(report.Rows?.Row, 'Total for 6200');
   const labor6200 = findQBRowByLabel(report.Rows?.Row, '6200');
-  const laborPayroll = findQBRowByLabel(report.Rows?.Row, 'LABOR/PAYROLL');
-  const laborVals = getQBRowVals(labor6200Total) || getQBRowVals(labor6200) || getQBRowVals(laborPayroll);
+  const laborPayroll = findQBRowByLabel(report.Rows?.Row, 'LABOR');
+  const laborPayroll2 = findQBRowByLabel(report.Rows?.Row, 'PAYROLL');
+  const laborVals = getQBRowVals(labor6200Total) || getQBRowVals(labor6200) || getQBRowVals(laborPayroll) || getQBRowVals(laborPayroll2);
 
   if (!laborVals || laborVals.length === 0) {
-    console.warn('⚠️  Labor row not found in QB report. Searched for: "Total for 6200", "6200", "LABOR/PAYROLL"');
-    console.warn('Found rows:', { labor6200Total: !!labor6200Total, labor6200: !!labor6200, laborPayroll: !!laborPayroll });
+    console.warn('⚠️  Labor/payroll row not found in QB report');
+    console.warn('  Searched for: "Total for 6200", "6200", "LABOR", "PAYROLL"');
 
-    // Debug: dump all row labels to help diagnose the issue
+    // Debug: dump all row labels and account codes
     const allLabels = [];
+    const allAccounts = [];
     const walkRows = (rows) => {
       if (!rows) return;
       for (const row of rows) {
         const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        if (label) allLabels.push(label.substring(0, 80));
+        if (label) {
+          allLabels.push(label.substring(0, 80));
+          const acctMatch = label.match(/^\d+/);
+          if (acctMatch) allAccounts.push(acctMatch[0]);
+        }
         if (row.Rows?.Row) walkRows(row.Rows.Row);
       }
     };
     if (report.Rows?.Row) walkRows(report.Rows.Row);
-    console.warn('Available rows:', allLabels.slice(0, 20).join(', '));
+    console.warn('  Available rows:', allLabels.join(' | '));
+    console.warn('  Account codes found:', [...new Set(allAccounts)].sort().join(', '));
   } else {
     console.log('✓ Labor values found:', laborVals.slice(0, 3).map(v => `$${v.toFixed(0)}`).join(', '));
   }
