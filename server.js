@@ -1538,7 +1538,13 @@ const parseQBPeriodPL = (report) => {
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
   // Match the "Total for 6200 LABOR/PAYROLL EXPENSES" summary row - this ensures we get the
   // correct total including all sub-items (wages, taxes, workers comp) rather than individual line items
-  const laborVals = getQBRowVals(findQBRowByLabel(report.Rows?.Row, 'Total for 6200 LABOR/PAYROLL')) || getQBRowVals(findQBRowByLabel(report.Rows?.Row, 'LABOR/PAYROLL'));
+  const laborRowByTotal = findQBRowByLabel(report.Rows?.Row, 'Total for 6200 LABOR/PAYROLL');
+  const laborRowByLabel = findQBRowByLabel(report.Rows?.Row, 'LABOR/PAYROLL');
+  const laborVals = getQBRowVals(laborRowByTotal) || getQBRowVals(laborRowByLabel);
+  if (!laborRowByTotal && laborRowByLabel) {
+    const laborLabel = laborRowByLabel.Header?.ColData?.[0]?.value || laborRowByLabel.ColData?.[0]?.value || 'unknown';
+    console.warn(`⚠️ QB Labor: using fallback row labeled "${laborLabel}" (Total row not found)`);
+  }
   const netVals = getQBRowVals(report.Rows?.Row?.find((r) => r.group === 'NetIncome'));
 
   return periodCols.map((col) => {
