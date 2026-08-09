@@ -1767,6 +1767,9 @@ app.get('/api/quickbooks/expenses', async (req, res) => {
 
 // Get combined P/L data
 app.get('/api/dashboard', async (req, res) => {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
   try {
     const recipes = loadData(RECIPES_FILE);
     const ingredients = loadData(INGREDIENTS_FILE);
