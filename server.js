@@ -2213,24 +2213,27 @@ app.get('/api/admin/backfill-store-locations', async (req, res) => {
 });
 
 // GET /api/product-margins - Product pricing, COGS, and margin data
+const PRODUCT_MARGINS = {
+  products: [
+    {name: "Long Braid", cogs: 2.77, squarePrice: 16, margin: 0.826875},
+    {name: "Country Round", cogs: 0.68, squarePrice: 12, margin: 0.9433333333},
+    {name: "Baguette", cogs: 0.51, squarePrice: 10, margin: 0.949},
+    {name: "Epi", cogs: 0.51, squarePrice: 12, margin: 0.9575},
+    {name: "Country PC", cogs: 0.31, squarePrice: 6, margin: 0.9483333333},
+    {name: "Double Choc Cookie", cogs: 1.85, squarePrice: 6.5, margin: 0.7153846154},
+    {name: "No Nut Cookie", cogs: 1.38, squarePrice: 6, margin: 0.77},
+    {name: "Oatmeal Raisin Cookie", cogs: 0.98, squarePrice: 6, margin: 0.8366666667},
+    {name: "PB Cookie", cogs: 0.88, squarePrice: 6, margin: 0.8533333333},
+    {name: "Original Cookie", cogs: 1.58, squarePrice: 6.5, margin: 0.7569230769},
+    {name: "Breakfast Bar", cogs: 1.61, squarePrice: 7.5, margin: 0.7853333333},
+    {name: "WW Round", cogs: 0.86, squarePrice: 12, margin: 0.9283333333},
+    {name: "WW PC", cogs: 0.3866666667, squarePrice: 6, margin: 0.9355555556},
+    {name: "Mini Banana Bread", cogs: 0.45, squarePrice: 7, margin: 0.9357142857}
+  ]
+};
+
 app.get('/api/product-margins', (req, res) => {
-  try {
-    const filepath = path.join(DATA_DIR, 'product-margins.json');
-    if (!fs.existsSync(filepath)) {
-      console.warn(`⚠️ Product margins file not found at ${filepath}`);
-      return res.json({ products: [] });
-    }
-    const data = loadData(filepath);
-    if (data && data.products && Array.isArray(data.products)) {
-      res.json(data);
-    } else {
-      console.warn(`⚠️ Invalid data structure from product margins file`, data);
-      res.json({ products: [] });
-    }
-  } catch (err) {
-    console.error(`❌ Error loading product margins:`, err.message);
-    res.status(500).json({ error: 'Failed to load product margins', products: [] });
-  }
+  res.json(PRODUCT_MARGINS);
 });
 
 // Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
