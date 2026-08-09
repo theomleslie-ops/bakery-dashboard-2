@@ -1438,10 +1438,9 @@
       const getY = (val) => plotBottom - (val / chartMax) * (plotBottom - plotTop);
       const labelStride = Math.max(1, Math.ceil(n / 16));
 
-      // Find August 4th (start of incomplete week) in the visible weekStarts
+      // Find August 4th (start of week) in the visible weekStarts
       const aug4Index = focusMarketsActive ? weekStarts.findIndex(ws => ws === '2026-08-04' || ws.startsWith('2026-08-04')) : -1;
-      const isWeekComplete = aug4Index >= 0 && series.some(s => s.revenue[aug4Index] > 0);
-      const showAug4Line = focusMarketsActive && aug4Index >= 0 && isWeekComplete;
+      const showAug4Line = focusMarketsActive && aug4Index >= 0;
 
       const handleMove = (e) => {
         const rect = e.currentTarget.getBoundingClientRect();
