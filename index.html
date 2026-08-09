@@ -1438,9 +1438,10 @@
       const getY = (val) => plotBottom - (val / chartMax) * (plotBottom - plotTop);
       const labelStride = Math.max(1, Math.ceil(n / 16));
 
-      // Find August 5th in the visible weekStarts
-      const aug5Index = focusMarketsActive ? weekStarts.findIndex(ws => ws === '2026-08-05' || ws.startsWith('2026-08-05')) : -1;
-      const showAug5Line = focusMarketsActive && aug5Index >= 0;
+      // Find August 4th (start of incomplete week) in the visible weekStarts
+      const aug4Index = focusMarketsActive ? weekStarts.findIndex(ws => ws === '2026-08-04' || ws.startsWith('2026-08-04')) : -1;
+      const isWeekComplete = aug4Index >= 0 && series.some(s => s.revenue[aug4Index] > 0);
+      const showAug4Line = focusMarketsActive && aug4Index >= 0 && isWeekComplete;
 
       const handleMove = (e) => {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -1464,8 +1465,8 @@
               </g>
             );
           })}
-          {showAug5Line && (
-            <line x1={xPos(aug5Index)} y1={plotTop} x2={xPos(aug5Index)} y2={plotBottom} stroke="black" strokeWidth="2" />
+          {showAug4Line && (
+            <line x1={xPos(aug4Index)} y1={plotTop} x2={xPos(aug4Index)} y2={plotBottom} stroke="black" strokeWidth="1" />
           )}
           {weekStarts.map((ws, i) => (i % labelStride === 0) && (
             <text key={`xlabel${i}`} x={xPos(i)} y={plotBottom + 20} textAnchor="middle" fontSize="11" fill="var(--chart-ink)" fontWeight="600">{fmtWeekLabel(ws)}</text>
