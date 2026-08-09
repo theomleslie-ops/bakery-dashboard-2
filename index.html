@@ -1889,6 +1889,8 @@
       const [weeksRange, setWeeksRange] = useState(16);
       const [offset, setOffset] = useState(0);
       const [viewMode, setViewMode] = useState('dollars');
+      const [hoveredPoint, setHoveredPoint] = useState(null);
+      const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
       useEffect(() => { fetchQBData(); }, [weeksRange, offset]);
       const fetchQBData = async () => {
         try {
@@ -1991,7 +1993,7 @@
                   const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   const displayVal = getDisplayValue(d.revenue, d.revenue);
                   const y = 370 - (displayVal / maxValue) * 320;
-                  return <circle key={`rev-${i}`} cx={x} cy={y} r="4" fill="#3f8361" />;
+                  return <circle key={`rev-${i}`} cx={x} cy={y} r="4" fill="#3f8361" style={{ cursor: 'pointer' }} onMouseEnter={() => { setHoveredPoint({ i, type: 'revenue', value: d.revenue, date: d.month }); setTooltipPos({ x, y }); }} onMouseLeave={() => setHoveredPoint(null)} />;
                 })}
                 {data.length > 1 && (
                   <polyline points={data.map((d, i) => {
@@ -2006,7 +2008,7 @@
                   const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   const displayVal = getDisplayValue(d.cogs, d.revenue);
                   const y = 370 - (displayVal / maxValue) * 320;
-                  return <circle key={`cogs-${i}`} cx={x} cy={y} r="4" fill="#c05621" />;
+                  return <circle key={`cogs-${i}`} cx={x} cy={y} r="4" fill="#c05621" style={{ cursor: 'pointer' }} onMouseEnter={() => { setHoveredPoint({ i, type: 'cogs', value: d.cogs, date: d.month, revenue: d.revenue }); setTooltipPos({ x, y }); }} onMouseLeave={() => setHoveredPoint(null)} />;
                 })}
                 {data.length > 1 && (
                   <polyline points={data.map((d, i) => {
@@ -2017,6 +2019,16 @@
                   }).join(' ')} stroke="#c05621" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                 )}
               </svg>
+              {hoveredPoint && (
+                <div style={{ position: 'absolute', background: '#2c2416', color: 'white', fontSize: '12px', padding: '8px 12px', borderRadius: '6px', pointerEvents: 'none', zIndex: 10, marginTop: '-420px', marginLeft: `${tooltipPos.x - 40}px` }}>
+                  <div>{getDateLabel(hoveredPoint.date)}</div>
+                  {hoveredPoint.type === 'revenue' ? (
+                    <div><strong>Revenue:</strong> {fmtMoney(hoveredPoint.value)}</div>
+                  ) : (
+                    <div><div><strong>COGS:</strong> {fmtMoney(hoveredPoint.value)}</div><div><strong>COGS %:</strong> {((hoveredPoint.value / hoveredPoint.revenue) * 100).toFixed(1)}%</div></div>
+                  )}
+                </div>
+              )}
               </div>
             )}
           </div>
