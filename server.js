@@ -1378,6 +1378,50 @@ app.post('/api/admin/refresh-qb-weekly', async (req, res) => {
   }
 });
 
+// POST /api/admin/refresh-qb-historical - Refresh 5 years of QB weekly P&L data
+app.post('/api/admin/refresh-qb-historical', async (req, res) => {
+  try {
+    const isQBConnected = () => {
+      try { const t = qbClient.loadTokens(); return !!(t && t.refresh_token); } catch { return false; }
+    };
+
+    if (!isQBConnected()) {
+      return res.status(400).json({ error: 'QuickBooks not connected', message: 'Connect QuickBooks first to refresh historical data' });
+    }
+
+    console.log('Starting 5-year historical QB P&L refresh...');
+    const startTime = Date.now();
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentWeekStart = getWeekStart(todayStr, 0);
+    const fiveYearsAgo = addDays(currentWeekStart, -365 * 5);
+
+    const snapshot = loadQBWeeklySnapshot();
+    console.log(`Fetching weekly P&L data from ${fiveYearsAgo} to ${currentWeekStart}...`);
+    const weeklyRows = await fetchQBWeeklyRows(fiveYearsAgo, addDays(currentWeekStart, 7));
+    console.log(`Fetched ${Object.keys(weeklyRows).length} weeks of data`);
+
+    Object.assign(snapshot.weeks, weeklyRows);
+    saveQBWeeklySnapshot(snapshot);
+
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    res.json({
+      success: true,
+      message: '5-year historical QB weekly P&L data refreshed successfully',
+      refreshedRange: `${fiveYearsAgo} to ${currentWeekStart}`,
+      weeksRefreshed: Object.keys(weeklyRows).length,
+      duration: `${duration}s`,
+      cachedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Historical QB snapshot refresh failed:', err.message);
+    res.status(500).json({
+      error: 'QB historical refresh failed',
+      message: err.message,
+    });
+  }
+});
+
 // ============= GOOGLE OAUTH 2.0 (recipe sheets) =============
 // Authenticate as the bakery's own Google user so the pipeline can read the private recipe folder.
 // Same shape as the QuickBooks flow above. Token handling lives in pipeline/sheets-oauth.js.
@@ -1813,7 +1857,7 @@ app.get('/api/dashboard', async (req, res) => {
     let periodData = [];
     let periodSource = 'QuickBooks not connected';
     try {
-      const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 16, 52);
+      const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 16, 260); // Allow up to 5 years
       const offsetWeeks = parseInt(req.query.offset, 10) || 0;
       const todayStr = new Date().toISOString().slice(0, 10);
       const currentWeekStart = getWeekStart(todayStr, 0);
