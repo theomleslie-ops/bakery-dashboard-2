@@ -1574,9 +1574,17 @@ const parseQBPeriodPL = (report) => {
   // 1. Total for 6200 LABOR/PAYROLL - summary total with all sub-items
   // 2. Just 6200 - the account total
   // 3. LABOR/PAYROLL - fallback by account name
-  const laborVals = getQBRowVals(findQBRowByLabel(report.Rows?.Row, 'Total for 6200')) ||
-                    getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6200')) ||
-                    getQBRowVals(findQBRowByLabel(report.Rows?.Row, 'LABOR/PAYROLL'));
+  const labor6200Total = findQBRowByLabel(report.Rows?.Row, 'Total for 6200');
+  const labor6200 = findQBRowByLabel(report.Rows?.Row, '6200');
+  const laborPayroll = findQBRowByLabel(report.Rows?.Row, 'LABOR/PAYROLL');
+  const laborVals = getQBRowVals(labor6200Total) || getQBRowVals(labor6200) || getQBRowVals(laborPayroll);
+
+  if (!laborVals || laborVals.length === 0) {
+    console.warn('⚠️  Labor row not found in QB report. Searched for: "Total for 6200", "6200", "LABOR/PAYROLL"');
+    console.warn('Found rows:', { labor6200Total: !!labor6200Total, labor6200: !!labor6200, laborPayroll: !!laborPayroll });
+  } else {
+    console.log('✓ Labor values found:', laborVals.slice(0, 3).map(v => `$${v.toFixed(0)}`).join(', '));
+  }
   const netVals = getQBRowVals(report.Rows?.Row?.find((r) => r.group === 'NetIncome'));
 
   return periodCols.map((col) => {
