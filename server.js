@@ -1579,7 +1579,27 @@ const parseQBPeriodPL = (report) => {
   const labor6200 = findQBRowByLabel(report.Rows?.Row, '6200');
   const laborPayroll = findQBRowByLabel(report.Rows?.Row, 'LABOR');
   const laborPayroll2 = findQBRowByLabel(report.Rows?.Row, 'PAYROLL');
-  const laborVals = getQBRowVals(labor6200Total) || getQBRowVals(labor6200) || getQBRowVals(laborPayroll) || getQBRowVals(laborPayroll2);
+
+  // Try summing sub-accounts if main account not found (6145, 6204, 6206, 6500, 6560)
+  let laborVals = getQBRowVals(labor6200Total) || getQBRowVals(labor6200) || getQBRowVals(laborPayroll) || getQBRowVals(laborPayroll2);
+
+  if (!laborVals || laborVals.length === 0) {
+    // Try summing payroll sub-accounts
+    const sub6145 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6145'));
+    const sub6204 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6204'));
+    const sub6206 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6206'));
+    const sub6500 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6500'));
+    const sub6560 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6560'));
+
+    if ((sub6145 || sub6204 || sub6206 || sub6500 || sub6560) && periodCols.length > 0) {
+      // Sum sub-accounts for each period
+      laborVals = periodCols.map(col => {
+        const sum = (sub6145?.[col.index] || 0) + (sub6204?.[col.index] || 0) +
+                    (sub6206?.[col.index] || 0) + (sub6500?.[col.index] || 0) + (sub6560?.[col.index] || 0);
+        return sum;
+      });
+    }
+  }
 
   if (!laborVals || laborVals.length === 0) {
     console.warn('⚠️  Labor/payroll row not found in QB report');
