@@ -2215,13 +2215,20 @@ app.get('/api/admin/backfill-store-locations', async (req, res) => {
 // GET /api/product-margins - Product pricing, COGS, and margin data
 app.get('/api/product-margins', (req, res) => {
   try {
-    const data = loadData(path.join(DATA_DIR, 'product-margins.json'));
-    if (data && data.products) {
+    const filepath = path.join(DATA_DIR, 'product-margins.json');
+    if (!fs.existsSync(filepath)) {
+      console.warn(`⚠️ Product margins file not found at ${filepath}`);
+      return res.json({ products: [] });
+    }
+    const data = loadData(filepath);
+    if (data && data.products && Array.isArray(data.products)) {
       res.json(data);
     } else {
+      console.warn(`⚠️ Invalid data structure from product margins file`, data);
       res.json({ products: [] });
     }
   } catch (err) {
+    console.error(`❌ Error loading product margins:`, err.message);
     res.status(500).json({ error: 'Failed to load product margins', products: [] });
   }
 });
