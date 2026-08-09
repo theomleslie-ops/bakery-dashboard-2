@@ -2020,7 +2020,7 @@
                 )}
               </svg>
               {hoveredPoint && (
-                <div style={{ position: 'absolute', background: '#2c2416', color: 'white', fontSize: '12px', padding: '8px 12px', borderRadius: '6px', pointerEvents: 'none', zIndex: 10, marginTop: '-420px', marginLeft: `${tooltipPos.x - 40}px` }}>
+                <div style={{ position: 'fixed', background: '#2c2416', color: 'white', fontSize: '12px', padding: '8px 12px', borderRadius: '6px', pointerEvents: 'none', zIndex: 100, left: `${tooltipPos.x}px`, top: `${tooltipPos.y - 10}px`, transform: 'translateX(-50%)' }}>
                   <div>{getDateLabel(hoveredPoint.date)}</div>
                   {hoveredPoint.type === 'revenue' ? (
                     <div><strong>Revenue:</strong> {fmtMoney(hoveredPoint.value)}</div>
