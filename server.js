@@ -3981,6 +3981,27 @@ const server = app.listen(PORT, async () => {
 
   if (qbConfigured) {
     startQBRefreshJobs();
+
+    // Refresh 5 years of QB historical data on startup (runs in background)
+    setImmediate(async () => {
+      try {
+        console.log('🔄 Refreshing 5 years of QB historical P&L data...');
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const currentWeekStart = getWeekStart(todayStr, 0);
+        const fiveYearsAgo = addDays(currentWeekStart, -365 * 5);
+
+        const snapshot = loadQBWeeklySnapshot();
+        console.log(`📊 Fetching weekly P&L data from ${fiveYearsAgo} to ${currentWeekStart}...`);
+        const weeklyRows = await fetchQBWeeklyRows(fiveYearsAgo, addDays(currentWeekStart, 7));
+        console.log(`✅ Fetched ${Object.keys(weeklyRows).length} weeks of historical data`);
+
+        Object.assign(snapshot.weeks, weeklyRows);
+        saveQBWeeklySnapshot(snapshot);
+        console.log('💾 QB historical snapshot cached successfully');
+      } catch (err) {
+        console.error('⚠️  QB historical refresh failed:', err.message);
+      }
+    });
   }
 
   // Initialize automated margin calculation scheduler
