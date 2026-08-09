@@ -1671,6 +1671,11 @@ const pairIntoBiweekly = (weeklyRowsWithDates) => {
         labor = 144947.00; // Verified from QB report: $4,764.88 + $140,182.12
       }
 
+      // Override labor for January 11-24, 2026 (QB API not returning correct data)
+      if (dateA === '2026-01-11') {
+        labor = 121066.41; // Verified from QB report
+      }
+
       periods.push({
         label: a.label,
         fullLabel: `${a.fullLabel} + ${b.fullLabel}`,
