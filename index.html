@@ -696,29 +696,60 @@
             throw new Error('Missing financial data from server');
           }
           setPeriodSource(dashData.periodSource || '');
-          // Backend now returns monthly data directly from QB
-          let combined = dashData.periodData
-            .filter(p => p.revenue > 0)
-            .map(p => {
-              let labor = p.labor;
+          // Group biweekly periods by month for Prime Cost dashboard
+          const monthlyData = {};
+          dashData.periodData.forEach(w => {
+            if (!w.startDate) return;
+            const date = new Date(w.startDate + 'T00:00');
+            const monthKey = date.getFullYear() + '-' + String(date.getMonth()).padStart(2, '0');
+            const monthName = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getMonth()];
+
+            if (!monthlyData[monthKey]) {
+              monthlyData[monthKey] = {
+                month: monthName,
+                year: date.getFullYear(),
+                dateObj: date,
+                revenue: 0,
+                cogs: 0,
+                labor: 0,
+              };
+            }
+            monthlyData[monthKey].revenue += w.revenue || 0;
+            monthlyData[monthKey].cogs += w.cogs || 0;
+            monthlyData[monthKey].labor += w.labor || 0;
+          });
+
+          let combined = Object.values(monthlyData)
+            .filter(m => m.revenue > 0)
+            .map(m => {
+              let labor = m.labor;
 
               // Monthly labor overrides (QB API not returning correct values)
-              if (p.fullLabel && p.fullLabel.includes('Jul') && p.fullLabel.includes('2026')) {
+              if (m.month === 'Jul' && m.year === 2026) {
                 labor = 291994.64; // Verified from QB report
               }
 
-              const foodPercent = (p.cogs / p.revenue) * 100;
-              const laborPercent = (labor / p.revenue) * 100;
+              const foodPercent = (m.cogs / m.revenue) * 100;
+              const laborPercent = (labor / m.revenue) * 100;
               return {
-                label: p.label,
-                fullLabel: p.fullLabel,
-                revenue: p.revenue,
+                label: m.month,
+                fullLabel: m.month + ' ' + m.year,
+                dateObj: m.dateObj,
+                revenue: m.revenue,
                 foodPercent,
                 laborPercent,
                 totalPercent: foodPercent + laborPercent,
               };
-            });
+            })
+            .sort((a, b) => a.dateObj - b.dateObj);
 
+          if (combined.length > 1) {
+            const lastRevenue = combined[combined.length - 1].revenue;
+            const avgRevenue = combined.slice(0, -1).reduce((sum, p) => sum + p.revenue, 0) / (combined.length - 1);
+            if (avgRevenue > 0 && lastRevenue < avgRevenue * 0.6) {
+              combined = combined.slice(0, -1);
+            }
+          }
           setWeeks(combined);
           setStatus(combined.length > 0 ? 'ready' : 'empty');
         } catch (err) {
