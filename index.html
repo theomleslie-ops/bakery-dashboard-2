@@ -722,8 +722,15 @@
           let combined = Object.values(monthlyData)
             .filter(m => m.revenue > 0)
             .map(m => {
+              let labor = m.labor;
+
+              // Monthly labor overrides (QB API not returning correct values)
+              if (m.month === 'Jul' && m.year === 2026) {
+                labor = 291994.64; // Verified from QB report
+              }
+
               const foodPercent = (m.cogs / m.revenue) * 100;
-              const laborPercent = (m.labor / m.revenue) * 100;
+              const laborPercent = (labor / m.revenue) * 100;
               return {
                 label: m.month,
                 fullLabel: m.month + ' ' + m.year,

@@ -1676,15 +1676,6 @@ const pairIntoBiweekly = (weeklyRowsWithDates) => {
         labor = 121066.41; // Verified from QB report
       }
 
-      // Override labor for July 12-25, 2026 (part of July monthly total)
-      if (dateA === '2026-07-12') {
-        labor = 73523.82; // July total $291,994.64 - June 28-July 11 $144,947 = $147,047.64, split in half
-      }
-
-      // Override labor for July 26-Aug 8, 2026 (part of July monthly total)
-      if (dateA === '2026-07-26') {
-        labor = 73523.82; // Second half of remaining July labor
-      }
 
       periods.push({
         label: a.label,
