@@ -1664,13 +1664,20 @@ const pairIntoBiweekly = (weeklyRowsWithDates) => {
     // Check if next week exists and is exactly 7 days after this one (consecutive)
     if (nextItem && addDays(dateA, 7) === nextItem.date) {
       const { row: b, date: dateB } = nextItem;
+      let labor = round2(a.labor + b.labor);
+
+      // Override labor for June 28-July 11, 2026 (QB API not returning correct data)
+      if (dateA === '2026-06-28') {
+        labor = 144947.00; // Verified from QB report: $4,764.88 + $140,182.12
+      }
+
       periods.push({
         label: a.label,
         fullLabel: `${a.fullLabel} + ${b.fullLabel}`,
         revenue: round2(a.revenue + b.revenue),
         cogs: round2(a.cogs + b.cogs),
         opex: round2(a.opex + b.opex),
-        labor: round2(a.labor + b.labor),
+        labor: labor,
         pl: round2(a.pl + b.pl),
         startDate: dateA,
       });
