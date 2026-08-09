@@ -1591,13 +1591,18 @@ const parseQBPeriodPL = (report) => {
     const sub6500 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6500'));
     const sub6560 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6560'));
 
-    if ((sub6145 || sub6204 || sub6206 || sub6500 || sub6560) && periodCols.length > 0) {
+    const hasAnySub = (sub6145?.length > 0) || (sub6204?.length > 0) || (sub6206?.length > 0) || (sub6500?.length > 0) || (sub6560?.length > 0);
+
+    if (hasAnySub && periodCols.length > 0) {
       // Sum sub-accounts for each period
       laborVals = periodCols.map(col => {
         const sum = (sub6145?.[col.index] || 0) + (sub6204?.[col.index] || 0) +
                     (sub6206?.[col.index] || 0) + (sub6500?.[col.index] || 0) + (sub6560?.[col.index] || 0);
         return sum;
       });
+      console.log('📊 Labor summed from sub-accounts: 6145=' + (sub6145?.length || 0) + ' items, 6204=' + (sub6204?.length || 0) + ' items, 6206=' + (sub6206?.length || 0) + ' items');
+    } else {
+      console.warn('⚠️  No payroll sub-accounts found (6145, 6204, 6206, 6500, 6560)');
     }
   }
 
