@@ -1915,30 +1915,40 @@ app.get('/api/dashboard', async (req, res) => {
       source: 'Multi-month P/L Statements'
     } : { source: 'No financial data uploaded yet' };
 
-    // 2-week period data comes from real per-week QuickBooks ledger totals summed in pairs, never
-    // averaged or estimated - only available once QuickBooks has been connected. Periods instead
-    // of raw weeks because labor/payroll posts roughly biweekly, so a single-week view is
-    // dominated by whichever week payroll happened to land in. Completed weeks are served from a
-    // disk-persisted snapshot (data/qb-weekly-pl-snapshot.json) instead of re-fetched every time -
-    // only the most recent 2 weeks are ever pulled live.
+    // Monthly period data comes from QuickBooks monthly P&L reports
     let periodData = [];
     let periodSource = 'QuickBooks not connected';
     try {
-      const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 16, 260); // Allow up to 5 years
-      const offsetWeeks = parseInt(req.query.offset, 10) || 0;
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const currentWeekStart = getWeekStart(todayStr, 0);
-      const weekEndForOffset = addDays(currentWeekStart, -7 * offsetWeeks);
-      const rangeStart = addDays(weekEndForOffset, -7 * weeksBack);
-      const weeklyRows = await getQBWeeklyRows(rangeStart, weekEndForOffset);
+      const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 26, 260); // Convert weeks to approximate months
+      const monthsBack = Math.ceil(weeksBack / 4.33);
+      const today = new Date();
+      const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0); // Last day of current month
+      const startDate = new Date(today.getFullYear(), today.getMonth() - monthsBack, 1); // First day of month N months ago
 
-      const pairedData = pairIntoBiweekly(weeklyRows);
-      periodData = pairedData;
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
 
-      periodSource = 'QuickBooks (cached + live, every 2 weeks)';
+      const report = await fetchQBProfitAndLoss(startDateStr, endDateStr, 'Month');
+      const parsed = parseQBPeriodPL(report);
+
+      // Convert monthly rows to period format
+      periodData = parsed
+        .filter(p => p.revenue > 0)
+        .map((p, i) => ({
+          label: p.label,
+          fullLabel: p.fullLabel,
+          revenue: p.revenue,
+          cogs: p.cogs,
+          opex: p.opex,
+          labor: p.labor,
+          pl: p.pl,
+          startDate: startDate.toISOString().split('T')[0], // Approximate start date
+        }));
+
+      periodSource = 'QuickBooks (monthly)';
     } catch (err) {
       if (err.code !== 'QB_NOT_CONNECTED') {
-        console.error('Weekly QuickBooks P&L fetch failed:', err.response?.data?.fault?.detail?.[0]?.message || err.message);
+        console.error('Monthly QuickBooks P&L fetch failed:', err.response?.data?.fault?.detail?.[0]?.message || err.message);
         periodSource = 'QuickBooks fetch failed';
       }
     }
