@@ -2232,6 +2232,38 @@
     }
 
     function GrossMarginsDashboard() {
+      const [products, setProducts] = useState([]);
+      const [sortBy, setSortBy] = useState('margin');
+      const [sortDir, setSortDir] = useState('desc');
+
+      useEffect(() => {
+        const fetchData = async () => {
+          try {
+            const baseUrl = window.location.origin;
+            const response = await fetch(`${baseUrl}/data/product-margins.json`);
+            const data = await response.json();
+            setProducts(data.products || []);
+          } catch (err) {
+            console.error('Failed to load product margins:', err);
+          }
+        };
+        fetchData();
+      }, []);
+
+      const sorted = [...products].sort((a, b) => {
+        const aVal = a[sortBy];
+        const bVal = b[sortBy];
+        const cmp = typeof aVal === 'number' ? aVal - bVal : String(aVal).localeCompare(String(bVal));
+        return sortDir === 'asc' ? cmp : -cmp;
+      });
+
+      const toggle = (field) => {
+        if (sortBy === field) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+        else { setSortBy(field); setSortDir('desc'); }
+      };
+
+      const avgMargin = products.length > 0 ? (products.reduce((s, p) => s + p.margin, 0) / products.length * 100).toFixed(1) : 0;
+
       return (
         <div className="container">
           <header>
@@ -2241,42 +2273,54 @@
 
           <div className="metrics">
             <div className="metric-card">
-              <div className="metric-label">Product Name</div>
-              <div className="metric-value" style={{ fontSize: '18px' }}>—</div>
-              <div className="metric-sub">Configure product</div>
+              <div className="metric-label">Products</div>
+              <div className="metric-value">{products.length}</div>
+              <div className="metric-sub">Total tracked</div>
             </div>
             <div className="metric-card">
-              <div className="metric-label">Gross Margin %</div>
-              <div className="metric-value">—</div>
-              <div className="metric-sub">Target: 50%+</div>
+              <div className="metric-label">Avg Margin %</div>
+              <div className="metric-value">{avgMargin}%</div>
+              <div className="metric-sub">Across all products</div>
             </div>
             <div className="metric-card">
-              <div className="metric-label">Gross Margin $</div>
-              <div className="metric-value" style={{ fontSize: '24px' }}>—</div>
-              <div className="metric-sub">Dollar amount</div>
+              <div className="metric-label">Highest Margin</div>
+              <div className="metric-value" style={{ fontSize: '18px' }}>{products.length > 0 ? (Math.max(...products.map(p => p.margin)) * 100).toFixed(1) : '—'}%</div>
+              <div className="metric-sub">{products.length > 0 ? products.reduce((max, p) => p.margin > max.margin ? p : max).name : '—'}</div>
             </div>
             <div className="metric-card">
-              <div className="metric-label">Total Revenue</div>
-              <div className="metric-value" style={{ fontSize: '24px' }}>—</div>
-              <div className="metric-sub">Period total</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">Total COGS</div>
-              <div className="metric-value" style={{ fontSize: '24px', color: '#ff9500' }}>—</div>
-              <div className="metric-sub">Cost of goods</div>
+              <div className="metric-label">Lowest Margin</div>
+              <div className="metric-value" style={{ fontSize: '18px', color: '#ff9500' }}>{products.length > 0 ? (Math.min(...products.map(p => p.margin)) * 100).toFixed(1) : '—'}%</div>
+              <div className="metric-sub">{products.length > 0 ? products.reduce((min, p) => p.margin < min.margin ? p : min).name : '—'}</div>
             </div>
           </div>
 
-          <div className="panel">
-            <div className="panel-title">Setup Instructions</div>
-            <div className="panel-hint">Configure the gross margins infrastructure</div>
-            <div style={{ color: '#8b6c57', lineHeight: '1.6', fontSize: '14px' }}>
-              <p style={{ marginBottom: '12px' }}>1. Connect your product data source</p>
-              <p style={{ marginBottom: '12px' }}>2. Define which product to track</p>
-              <p style={{ marginBottom: '12px' }}>3. Map revenue and COGS fields</p>
-              <p>Gross margin will display once configured</p>
+          {products.length > 0 && (
+            <div className="panel" style={{ overflowX: 'auto' }}>
+              <div className="panel-title">Product Margins</div>
+              <table style={{ fontSize: '13px' }}>
+                <thead>
+                  <tr>
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('name')}>Product {sortBy === 'name' && (sortDir === 'asc' ? '▲' : '▼')}</th>
+                    <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('cogs')}>COGS {sortBy === 'cogs' && (sortDir === 'asc' ? '▲' : '▼')}</th>
+                    <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('squarePrice')}>Price {sortBy === 'squarePrice' && (sortDir === 'asc' ? '▲' : '▼')}</th>
+                    <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('margin')}>Margin % {sortBy === 'margin' && (sortDir === 'asc' ? '▲' : '▼')}</th>
+                    <th className="num">Margin $</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map(p => (
+                    <tr key={p.name}>
+                      <td>{p.name}</td>
+                      <td className="num">${p.cogs.toFixed(2)}</td>
+                      <td className="num">${p.squarePrice.toFixed(2)}</td>
+                      <td className="num" style={{ fontWeight: '600', color: p.margin >= 0.8 ? '#10b981' : p.margin >= 0.75 ? '#6b4423' : '#ff9500' }}>{(p.margin * 100).toFixed(1)}%</td>
+                      <td className="num">${(p.squarePrice - p.cogs).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
+          )}
         </div>
       );
     }
