@@ -2282,16 +2282,6 @@
               <div className="metric-value">{avgMargin}%</div>
               <div className="metric-sub">Across all products</div>
             </div>
-            <div className="metric-card">
-              <div className="metric-label">Highest Margin</div>
-              <div className="metric-value" style={{ fontSize: '18px' }}>{products.length > 0 ? (Math.max(...products.map(p => p.margin)) * 100).toFixed(1) : '—'}%</div>
-              <div className="metric-sub">{products.length > 0 ? products.reduce((max, p) => p.margin > max.margin ? p : max).name : '—'}</div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label">Lowest Margin</div>
-              <div className="metric-value" style={{ fontSize: '18px', color: '#ff9500' }}>{products.length > 0 ? (Math.min(...products.map(p => p.margin)) * 100).toFixed(1) : '—'}%</div>
-              <div className="metric-sub">{products.length > 0 ? products.reduce((min, p) => p.margin < min.margin ? p : min).name : '—'}</div>
-            </div>
           </div>
 
           {products.length > 0 && (
