@@ -691,20 +691,44 @@
             throw new Error('Missing financial data from server');
           }
           setPeriodSource(dashData.periodSource || '');
-          let combined = dashData.periodData
-            .filter(w => w.revenue > 0)
-            .map(w => {
-              const foodPercent = (w.cogs / w.revenue) * 100;
-              const laborPercent = (w.labor / w.revenue) * 100;
+          // Group biweekly periods by month
+          const monthlyData = {};
+          dashData.periodData.forEach(w => {
+            if (!w.startDate) return;
+            const date = new Date(w.startDate + 'T00:00');
+            const monthKey = date.getFullYear() + '-' + String(date.getMonth()).padStart(2, '0');
+            const monthName = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getMonth()];
+
+            if (!monthlyData[monthKey]) {
+              monthlyData[monthKey] = {
+                month: monthName,
+                year: date.getFullYear(),
+                revenue: 0,
+                cogs: 0,
+                labor: 0,
+              };
+            }
+            monthlyData[monthKey].revenue += w.revenue || 0;
+            monthlyData[monthKey].cogs += w.cogs || 0;
+            monthlyData[monthKey].labor += w.labor || 0;
+          });
+
+          let combined = Object.values(monthlyData)
+            .filter(m => m.revenue > 0)
+            .map(m => {
+              const foodPercent = (m.cogs / m.revenue) * 100;
+              const laborPercent = (m.labor / m.revenue) * 100;
               return {
-                label: w.label,
-                fullLabel: w.fullLabel,
-                revenue: w.revenue,
+                label: m.month,
+                fullLabel: m.month + ' ' + m.year,
+                revenue: m.revenue,
                 foodPercent,
                 laborPercent,
                 totalPercent: foodPercent + laborPercent,
               };
-            });
+            })
+            .sort((a, b) => a.fullLabel.localeCompare(b.fullLabel));
+
           if (combined.length > 1) {
             const lastRevenue = combined[combined.length - 1].revenue;
             const avgRevenue = combined.slice(0, -1).reduce((sum, p) => sum + p.revenue, 0) / (combined.length - 1);
@@ -725,7 +749,7 @@
         <div className="container">
           <header>
             <h1>🎯 Prime Cost Dashboard</h1>
-            <p className="subtitle">Food Cost + Labor as % of Revenue, every 2 weeks (Goal: ≤60%)</p>
+            <p className="subtitle">Food Cost + Labor as % of Revenue, monthly (Goal: ≤60%)</p>
           </header>
           <div className="controls">
             <div className="view-toggle">
@@ -751,14 +775,14 @@
                 </div>
               </div>
               <div className="chart-container">
-                <div className="chart-title">Prime Cost, every 2 weeks (% of Revenue)</div>
+                <div className="chart-title">Prime Cost, by Month (% of Revenue)</div>
                 <PrimeCostChart weeks={weeks} />
               </div>
             </>
           )}
           {status === 'ready' && weeks.length === 0 && (
             <div className="empty">
-              No financial data available ({periodSource || 'loading…'}). Check back shortly while data is being cached — each period is two real weeks summed together, never averaged down from monthly totals.
+              No financial data available ({periodSource || 'loading…'}). Check back shortly while data is being cached — monthly totals are aggregated from biweekly periods.
             </div>
           )}
         </div>
