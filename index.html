@@ -1993,7 +1993,15 @@
                   const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   const displayVal = getDisplayValue(d.revenue, d.revenue);
                   const y = 370 - (displayVal / maxValue) * 320;
-                  return <circle key={`rev-${i}`} cx={x} cy={y} r="7" fill="#3f8361" style={{ cursor: 'pointer' }} onMouseEnter={() => { setHoveredPoint({ i, type: 'revenue', value: d.revenue, date: d.month }); setTooltipPos({ x, y }); }} onMouseLeave={() => setHoveredPoint(null)} />;
+                  const handleRevHover = (e) => {
+                    const svg = e.target.closest('svg');
+                    const svgRect = svg.getBoundingClientRect();
+                    const screenX = svgRect.left + (x / 900) * svgRect.width;
+                    const screenY = svgRect.top + (y / 700) * svgRect.height;
+                    setHoveredPoint({ i, type: 'revenue', value: d.revenue, date: d.month });
+                    setTooltipPos({ x: screenX, y: screenY });
+                  };
+                  return <circle key={`rev-${i}`} cx={x} cy={y} r="7" fill="#3f8361" style={{ cursor: 'pointer' }} onMouseEnter={handleRevHover} onMouseLeave={() => setHoveredPoint(null)} />;
                 })}
                 {data.length > 1 && (
                   <polyline points={data.map((d, i) => {
@@ -2008,7 +2016,15 @@
                   const x = 80 + (i / (data.length - 1 || 1)) * 770;
                   const displayVal = getDisplayValue(d.cogs, d.revenue);
                   const y = 370 - (displayVal / maxValue) * 320;
-                  return <circle key={`cogs-${i}`} cx={x} cy={y} r="7" fill="#c05621" style={{ cursor: 'pointer' }} onMouseEnter={() => { setHoveredPoint({ i, type: 'cogs', value: d.cogs, date: d.month, revenue: d.revenue }); setTooltipPos({ x, y }); }} onMouseLeave={() => setHoveredPoint(null)} />;
+                  const handleCogsHover = (e) => {
+                    const svg = e.target.closest('svg');
+                    const svgRect = svg.getBoundingClientRect();
+                    const screenX = svgRect.left + (x / 900) * svgRect.width;
+                    const screenY = svgRect.top + (y / 700) * svgRect.height;
+                    setHoveredPoint({ i, type: 'cogs', value: d.cogs, date: d.month, revenue: d.revenue });
+                    setTooltipPos({ x: screenX, y: screenY });
+                  };
+                  return <circle key={`cogs-${i}`} cx={x} cy={y} r="7" fill="#c05621" style={{ cursor: 'pointer' }} onMouseEnter={handleCogsHover} onMouseLeave={() => setHoveredPoint(null)} />;
                 })}
                 {data.length > 1 && (
                   <polyline points={data.map((d, i) => {
