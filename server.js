@@ -1582,6 +1582,19 @@ const parseQBPeriodPL = (report) => {
   if (!laborVals || laborVals.length === 0) {
     console.warn('⚠️  Labor row not found in QB report. Searched for: "Total for 6200", "6200", "LABOR/PAYROLL"');
     console.warn('Found rows:', { labor6200Total: !!labor6200Total, labor6200: !!labor6200, laborPayroll: !!laborPayroll });
+
+    // Debug: dump all row labels to help diagnose the issue
+    const allLabels = [];
+    const walkRows = (rows) => {
+      if (!rows) return;
+      for (const row of rows) {
+        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+        if (label) allLabels.push(label.substring(0, 80));
+        if (row.Rows?.Row) walkRows(row.Rows.Row);
+      }
+    };
+    if (report.Rows?.Row) walkRows(report.Rows.Row);
+    console.warn('Available rows:', allLabels.slice(0, 20).join(', '));
   } else {
     console.log('✓ Labor values found:', laborVals.slice(0, 3).map(v => `$${v.toFixed(0)}`).join(', '));
   }
