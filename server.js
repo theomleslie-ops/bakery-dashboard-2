@@ -2216,7 +2216,11 @@ app.get('/api/admin/backfill-store-locations', async (req, res) => {
 app.get('/api/product-margins', (req, res) => {
   try {
     const data = loadData(path.join(DATA_DIR, 'product-margins.json'));
-    res.json(data || { products: [] });
+    if (data && data.products) {
+      res.json(data);
+    } else {
+      res.json({ products: [] });
+    }
   } catch (err) {
     res.status(500).json({ error: 'Failed to load product margins', products: [] });
   }
