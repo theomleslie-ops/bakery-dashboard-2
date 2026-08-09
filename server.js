@@ -1353,6 +1353,41 @@ app.post('/api/quickbooks/refresh', async (req, res) => {
   }
 });
 
+// POST /api/admin/refresh-qb-weekly - Refresh the QB weekly P&L snapshot (used by Prime Cost dashboard)
+app.post('/api/admin/refresh-qb-weekly', async (req, res) => {
+  try {
+    const isQBConnected = () => {
+      try { const t = qbClient.loadTokens(); return !!(t && t.refresh_token); } catch { return false; }
+    };
+
+    if (!isQBConnected()) {
+      return res.status(400).json({ error: 'QuickBooks not connected', message: 'Connect QuickBooks first to refresh weekly data' });
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentWeekStart = getWeekStart(todayStr, 0);
+    const twoWeeksAgo = addDays(currentWeekStart, -14);
+
+    const snapshot = loadQBWeeklySnapshot();
+    const weeklyRows = await fetchQBWeeklyRows(twoWeeksAgo, addDays(currentWeekStart, 7));
+    Object.assign(snapshot.weeks, weeklyRows);
+    saveQBWeeklySnapshot(snapshot);
+
+    res.json({
+      success: true,
+      message: 'QB weekly P&L snapshot refreshed successfully',
+      refreshedRange: `${twoWeeksAgo} to ${currentWeekStart}`,
+      cachedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Weekly QB snapshot refresh failed:', err.message);
+    res.status(500).json({
+      error: 'QB weekly refresh failed',
+      message: err.message,
+    });
+  }
+});
+
 // ============= GOOGLE OAUTH 2.0 (recipe sheets) =============
 // Authenticate as the bakery's own Google user so the pipeline can read the private recipe folder.
 // Same shape as the QuickBooks flow above. Token handling lives in pipeline/sheets-oauth.js.
