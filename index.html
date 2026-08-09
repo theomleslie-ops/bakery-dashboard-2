@@ -2240,7 +2240,7 @@
         const fetchData = async () => {
           try {
             const baseUrl = window.location.origin;
-            const response = await fetch(`${baseUrl}/data/product-margins.json`);
+            const response = await fetch(`${baseUrl}/api/product-margins`);
             const data = await response.json();
             setProducts(data.products || []);
           } catch (err) {

@@ -2212,6 +2212,16 @@ app.get('/api/admin/backfill-store-locations', async (req, res) => {
   res.json({ message: 'Backfill disabled. Dashboards now show recent data only.' });
 });
 
+// GET /api/product-margins - Product pricing, COGS, and margin data
+app.get('/api/product-margins', (req, res) => {
+  try {
+    const data = loadData(path.join(DATA_DIR, 'product-margins.json'));
+    res.json(data || { products: [] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load product margins', products: [] });
+  }
+});
+
 // Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
 app.get('/api/production', (req, res) => {
   const production = loadProduction();
