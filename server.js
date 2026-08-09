@@ -1536,10 +1536,9 @@ const parseQBPeriodPL = (report) => {
   const revenueVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Income'));
   const cogsVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'COGS'));
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
-  // Match the "LABOR/PAYROLL EXPENSES" line specifically - a plain 'LABOR' substring also
-  // matches unrelated accounts like "Contracted labor", which silently returns the wrong
-  // (all-zero) row once the date range is wide enough for that account to appear in the report.
-  const laborVals = getQBRowVals(findQBRowByLabel(report.Rows?.Row, 'LABOR/PAYROLL'));
+  // Match the "Total for 6200 LABOR/PAYROLL EXPENSES" summary row - this ensures we get the
+  // correct total including all sub-items (wages, taxes, workers comp) rather than individual line items
+  const laborVals = getQBRowVals(findQBRowByLabel(report.Rows?.Row, 'Total for 6200 LABOR/PAYROLL')) || getQBRowVals(findQBRowByLabel(report.Rows?.Row, 'LABOR/PAYROLL'));
   const netVals = getQBRowVals(report.Rows?.Row?.find((r) => r.group === 'NetIncome'));
 
   return periodCols.map((col) => {
