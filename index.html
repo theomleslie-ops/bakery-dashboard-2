@@ -678,7 +678,12 @@
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
       const [periodSource, setPeriodSource] = useState('');
-      const [weeksRange, setWeeksRange] = useState(16);
+      const [weeksRange, setWeeksRange] = useState(26); // Start with 6 months
+      const PRIME_COST_MONTH_OPTIONS = [
+        { weeks: 17, label: '4 Months' },
+        { weeks: 26, label: '6 Months' },
+        { weeks: 52, label: '1 Year' },
+      ];
       useEffect(() => { fetchData(); }, [weeksRange]);
       const fetchData = async () => {
         try {
@@ -746,7 +751,7 @@
         }
       };
       const goalMet = weeks.filter(w => w.totalPercent <= 60).length;
-      const latestWeek = weeks.length > 0 ? weeks[weeks.length - 1] : null;
+      const avgPrimeCost = weeks.length > 0 ? weeks.reduce((sum, w) => sum + w.totalPercent, 0) / weeks.length : 0;
       return (
         <div className="container">
           <header>
@@ -755,7 +760,7 @@
           </header>
           <div className="controls">
             <div className="view-toggle">
-              {WEEK_COUNT_OPTIONS.map(opt => (
+              {PRIME_COST_MONTH_OPTIONS.map(opt => (
                 <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
               ))}
             </div>
@@ -766,9 +771,9 @@
             <>
               <div className="metrics">
                 <div className="metric-card">
-                  <div className="metric-label">Latest Period Prime Cost</div>
-                  <div className="metric-value">{latestWeek.totalPercent.toFixed(1)}%</div>
-                  <div className="metric-sub">{latestWeek.fullLabel}</div>
+                  <div className="metric-label">Avg Prime Cost</div>
+                  <div className="metric-value">{avgPrimeCost.toFixed(1)}%</div>
+                  <div className="metric-sub">Average across all months</div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-label">Goal</div>
