@@ -2409,11 +2409,17 @@ app.get('/api/product-margins', async (req, res) => {
     let totalOrders = 0;
 
     // Get all location IDs for the filter
+    console.log(`  🔍 Building location IDs...`);
+    console.log(`     WASTE_STORE_LOCATIONS exists:`, !!WASTE_STORE_LOCATIONS, `length: ${WASTE_STORE_LOCATIONS?.length || 0}`);
+    console.log(`     WASTE_MARKET_LOCATIONS exists:`, !!WASTE_MARKET_LOCATIONS, `length: ${WASTE_MARKET_LOCATIONS?.length || 0}`);
+
     const allLocationIds = [
       ...WASTE_STORE_LOCATIONS.map(l => l.squareLocationId),
       ...WASTE_MARKET_LOCATIONS.map(l => l.squareLocationId),
     ];
-    console.log(`  Using ${allLocationIds.length} location IDs for Square query`);
+    console.log(`  ✅ Using ${allLocationIds.length} location IDs for Square query`);
+    console.log(`     First 5: ${allLocationIds.slice(0, 5).join(', ')}`);
+
     if (allLocationIds.length === 0) {
       console.warn(`  ⚠️  WARNING: No location IDs found! Check WASTE_STORE_LOCATIONS and WASTE_MARKET_LOCATIONS`);
     }
@@ -2421,8 +2427,6 @@ app.get('/api/product-margins', async (req, res) => {
     while (page < 500) {
       try {
         const requestBody = {
-          limit: 100,
-          sort_order: 'DESC',
           query: {
             filter: {
               state_filter: { states: ['COMPLETED'] },
@@ -2431,6 +2435,8 @@ app.get('/api/product-margins', async (req, res) => {
                 closed_at: { start_at: beginTime, end_at: endTime },
               },
             },
+            sort_order: 'DESC',
+            limit: 100,
           },
         };
 
