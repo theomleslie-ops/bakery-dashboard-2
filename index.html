@@ -2171,26 +2171,18 @@
 
     function GrossMarginsDashboard() {
       const [products, setProducts] = useState([]);
-      const [loading, setLoading] = useState(true);
-      const [error, setError] = useState(null);
-      const [sortBy, setSortBy] = useState('marginPct');
+      const [sortBy, setSortBy] = useState('margin');
       const [sortDir, setSortDir] = useState('desc');
 
       useEffect(() => {
         const fetchData = async () => {
           try {
-            setLoading(true);
             const baseUrl = window.location.origin;
-            const response = await fetch(`${baseUrl}/api/bakery-margins`);
-            if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
+            const response = await fetch(`${baseUrl}/api/product-margins`);
             const data = await response.json();
-            setProducts(data.top20 || []);
-            if (data.warning) console.warn('Bakery margins warning:', data.warning);
+            setProducts(data.products || []);
           } catch (err) {
             console.error('Failed to load product margins:', err);
-            setError(err.message);
-          } finally {
-            setLoading(false);
           }
         };
         fetchData();
@@ -2208,15 +2200,12 @@
         else { setSortBy(field); setSortDir('desc'); }
       };
 
-      const avgMargin = products.length > 0 ? (products.reduce((s, p) => s + p.marginPct, 0) / products.length).toFixed(1) : 0;
-
-      if (loading) return <div style={{ padding: '20px' }}>Loading Gross Margins…</div>;
-      if (error) return <div style={{ padding: '20px', color: 'red' }}>Error: {error}</div>;
+      const avgMargin = products.length > 0 ? (products.reduce((s, p) => s + p.margin, 0) / products.length * 100).toFixed(1) : 0;
 
       return (
         <div className="container">
           <header>
-            <h1>📊 Gross Margins (Last 12 Months)</h1>
+            <h1>📊 Gross Margins</h1>
             <p className="subtitle">Revenue, COGS, and gross margin % by product</p>
           </header>
 
@@ -2240,11 +2229,10 @@
                 <thead>
                   <tr>
                     <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('name')}>Product {sortBy === 'name' && (sortDir === 'asc' ? '▲' : '▼')}</th>
-                    <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('quantity')}>Volume {sortBy === 'quantity' && (sortDir === 'asc' ? '▲' : '▼')}</th>
-                    <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('revenue')}>Revenue {sortBy === 'revenue' && (sortDir === 'asc' ? '▲' : '▼')}</th>
-                    <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('price')}>Price {sortBy === 'price' && (sortDir === 'asc' ? '▲' : '▼')}</th>
+                    <th className="num">Volume</th>
                     <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('cogs')}>COGS {sortBy === 'cogs' && (sortDir === 'asc' ? '▲' : '▼')}</th>
-                    <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('marginPct')}>Margin % {sortBy === 'marginPct' && (sortDir === 'asc' ? '▲' : '▼')}</th>
+                    <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('squarePrice')}>Price {sortBy === 'squarePrice' && (sortDir === 'asc' ? '▲' : '▼')}</th>
+                    <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('margin')}>Margin % {sortBy === 'margin' && (sortDir === 'asc' ? '▲' : '▼')}</th>
                     <th className="num">Margin $</th>
                   </tr>
                 </thead>
@@ -2252,12 +2240,11 @@
                   {sorted.map(p => (
                     <tr key={p.name}>
                       <td>{p.name}</td>
-                      <td className="num">{Math.round(p.quantity).toLocaleString()}</td>
-                      <td className="num">${p.revenue.toLocaleString('en-US', {maximumFractionDigits: 2})}</td>
-                      <td className="num">${p.price.toFixed(2)}</td>
+                      <td className="num">—</td>
                       <td className="num">${p.cogs.toFixed(2)}</td>
-                      <td className="num" style={{ fontWeight: '600', color: p.marginPct >= 80 ? '#10b981' : p.marginPct >= 75 ? '#6b4423' : '#ff9500' }}>{p.marginPct.toFixed(1)}%</td>
-                      <td className="num">${p.margin$.toFixed(2)}</td>
+                      <td className="num">${p.squarePrice.toFixed(2)}</td>
+                      <td className="num" style={{ fontWeight: '600', color: p.margin >= 0.8 ? '#10b981' : p.margin >= 0.75 ? '#6b4423' : '#ff9500' }}>{(p.margin * 100).toFixed(1)}%</td>
+                      <td className="num">${(p.squarePrice - p.cogs).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
