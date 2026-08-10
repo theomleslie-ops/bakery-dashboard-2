@@ -2177,7 +2177,7 @@ const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow) =
 
 // GET /api/market-performance?weeks=156
 // Weekly gross sales revenue per farmers-market/pop-up location, straight from Square orders -
-// real per-week totals, not estimated or averaged. Range goes back up to 3 years (156 weeks).
+// real per-week totals, not estimated or averaged. Range goes back up to 5 years (260 weeks).
 // Completed weeks come from the on-disk snapshot; only the most recent 2 weeks are ever
 // re-fetched live. A short in-memory cache on top smooths out rapid repeat page loads.
 app.get('/api/market-performance', async (req, res) => {
@@ -2200,8 +2200,8 @@ app.get('/api/market-performance', async (req, res) => {
     const startDow = await fetchWorkweekStartDow();
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
-    // Limit to recent data to avoid server overload
-    const effectiveWeekCount = Math.min(weekCount, 52);
+    // Allow up to 5 years of data (260 weeks)
+    const effectiveWeekCount = Math.min(weekCount, 260);
     const rangeStart = addDays(currentWeekStart, -7 * (effectiveWeekCount - 1));
 
     const weekStarts = [];
@@ -2246,8 +2246,8 @@ app.get('/api/store-locations-performance', async (req, res) => {
     const startDow = await fetchWorkweekStartDow();
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
-    // Limit to recent data to avoid server overload
-    const effectiveWeekCount = Math.min(weekCount, 52);
+    // Allow up to 5 years of data (260 weeks)
+    const effectiveWeekCount = Math.min(weekCount, 260);
     const rangeStart = addDays(currentWeekStart, -7 * (effectiveWeekCount - 1));
 
     const weekStarts = [];
