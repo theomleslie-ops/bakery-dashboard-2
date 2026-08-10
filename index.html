@@ -726,14 +726,19 @@
             })
             .sort((a, b) => a.dateObj - b.dateObj);
 
-          if (combined.length > 1) {
-            const lastRevenue = combined[combined.length - 1].revenue;
-            const avgRevenue = combined.slice(0, -1).reduce((sum, p) => sum + p.revenue, 0) / (combined.length - 1);
+          // Filter to only show months within the requested time range
+          const today = new Date();
+          const cutoffDate = new Date(today.getTime() - weeksRange * 7 * 24 * 60 * 60 * 1000);
+          const filtered = combined.filter(m => m.dateObj >= cutoffDate);
+
+          if (filtered.length > 1) {
+            const lastRevenue = filtered[filtered.length - 1].revenue;
+            const avgRevenue = filtered.slice(0, -1).reduce((sum, p) => sum + p.revenue, 0) / (filtered.length - 1);
             if (avgRevenue > 0 && lastRevenue < avgRevenue * 0.6) {
-              combined = combined.slice(0, -1);
+              filtered.pop();
             }
           }
-          setWeeks(combined);
+          setWeeks(filtered);
           setStatus(combined.length > 0 ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
