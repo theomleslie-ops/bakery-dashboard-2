@@ -2410,7 +2410,7 @@ app.get('/api/product-margins', async (req, res) => {
 
     while (page < 500) {
       try {
-        const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, {
+        const requestBody = {
           limit: 100,
           sort_order: 'DESC',
           query: {
@@ -2421,8 +2421,13 @@ app.get('/api/product-margins', async (req, res) => {
               },
             },
           },
-          ...(cursor && { cursor }),
-        }, {
+        };
+
+        if (cursor) {
+          requestBody.query.cursor = cursor;
+        }
+
+        const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, requestBody, {
           headers: {
             Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
             'Content-Type': 'application/json',
