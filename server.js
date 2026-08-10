@@ -2413,6 +2413,10 @@ app.get('/api/product-margins', async (req, res) => {
       ...WASTE_STORE_LOCATIONS.map(l => l.squareLocationId),
       ...WASTE_MARKET_LOCATIONS.map(l => l.squareLocationId),
     ];
+    console.log(`  Using ${allLocationIds.length} location IDs for Square query`);
+    if (allLocationIds.length === 0) {
+      console.warn(`  ⚠️  WARNING: No location IDs found! Check WASTE_STORE_LOCATIONS and WASTE_MARKET_LOCATIONS`);
+    }
 
     while (page < 500) {
       try {
@@ -2429,6 +2433,10 @@ app.get('/api/product-margins', async (req, res) => {
             },
           },
         };
+
+        if (page === 0) {
+          console.log(`  📤 Sending request with location_ids:`, allLocationIds.slice(0, 3), `...+${allLocationIds.length - 3}`);
+        }
 
         if (cursor) {
           requestBody.query.cursor = cursor;
