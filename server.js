@@ -2192,9 +2192,9 @@ app.get('/api/market-performance', async (req, res) => {
   if (cached) return res.json({ ...cached, cached: true });
 
   try {
-    // Add timeout to prevent hanging
+    // Add timeout to prevent hanging (longer timeout for larger date ranges)
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Request timeout')), 15000)
+      setTimeout(() => reject(new Error('Request timeout')), 60000)
     );
 
     const startDow = await fetchWorkweekStartDow();
@@ -2238,9 +2238,9 @@ app.get('/api/store-locations-performance', async (req, res) => {
   if (cached) return res.json({ ...cached, cached: true });
 
   try {
-    // Add timeout to prevent hanging
+    // Add timeout to prevent hanging (longer timeout for larger date ranges)
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Request timeout')), 15000)
+      setTimeout(() => reject(new Error('Request timeout')), 60000)
     );
 
     const startDow = await fetchWorkweekStartDow();
