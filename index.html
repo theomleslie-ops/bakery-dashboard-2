@@ -2229,7 +2229,7 @@
                 <thead>
                   <tr>
                     <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('name')}>Product {sortBy === 'name' && (sortDir === 'asc' ? '▲' : '▼')}</th>
-                    <th className="num">Volume</th>
+                    <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('quantity')}>Volume {sortBy === 'quantity' && (sortDir === 'asc' ? '▲' : '▼')}</th>
                     <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('cogs')}>COGS {sortBy === 'cogs' && (sortDir === 'asc' ? '▲' : '▼')}</th>
                     <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('squarePrice')}>Price {sortBy === 'squarePrice' && (sortDir === 'asc' ? '▲' : '▼')}</th>
                     <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggle('margin')}>Margin % {sortBy === 'margin' && (sortDir === 'asc' ? '▲' : '▼')}</th>
