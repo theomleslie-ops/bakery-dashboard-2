@@ -2355,166 +2355,41 @@ app.get('/api/admin/backfill-store-locations', async (req, res) => {
 });
 
 // GET /api/product-margins - Product pricing, COGS, and margin data
+// Quantities from Square Item Sales report (Aug 10, 2025 - Aug 10, 2026)
 const PRODUCT_MARGINS = {
   products: [
-    {name: "Long Braid", cogs: 2.77, squarePrice: 16, margin: 0.826875},
-    {name: "Country Round", cogs: 0.68, squarePrice: 12, margin: 0.9433333333},
-    {name: "Baguette", cogs: 0.51, squarePrice: 10, margin: 0.949},
-    {name: "Epi", cogs: 0.51, squarePrice: 12, margin: 0.9575},
-    {name: "Country PC", cogs: 0.31, squarePrice: 6, margin: 0.9483333333},
-    {name: "Double Choc Cookie", cogs: 1.85, squarePrice: 6.5, margin: 0.7153846154},
-    {name: "No Nut Cookie", cogs: 1.38, squarePrice: 6, margin: 0.77},
-    {name: "Oatmeal Raisin Cookie", cogs: 0.98, squarePrice: 6, margin: 0.8366666667},
-    {name: "PB Cookie", cogs: 0.88, squarePrice: 6, margin: 0.8533333333},
-    {name: "Original Cookie", cogs: 1.58, squarePrice: 6.5, margin: 0.7569230769},
-    {name: "Breakfast Bar", cogs: 1.61, squarePrice: 7.5, margin: 0.7853333333},
-    {name: "WW Round", cogs: 0.86, squarePrice: 12, margin: 0.9283333333},
-    {name: "WW PC", cogs: 0.3866666667, squarePrice: 6, margin: 0.9355555556},
-    {name: "Mini Banana Bread", cogs: 0.45, squarePrice: 7, margin: 0.9357142857},
-    {name: "Plain PDM", cogs: 1.03, squarePrice: 13, margin: 0.9207692308},
-    {name: "Plain Rye", cogs: 0.96, squarePrice: 13, margin: 0.9261538462},
-    {name: "Sesame Round", cogs: 0.98, squarePrice: 13, margin: 0.9246153846},
-    {name: "Sesame PC", cogs: 0.47, squarePrice: 6.5, margin: 0.9276923077},
-    {name: "Raisin Walnut Round", cogs: 0.89, squarePrice: 7, margin: 0.8728571429},
-    {name: "Raisin Walnut PC", cogs: 1.84, squarePrice: 14, margin: 0.8685714286},
-    {name: "Whole Wheat Seeded Round", cogs: 1.09, squarePrice: 13, margin: 0.9161538462},
-    {name: "WW Seeded PC", cogs: 0.4766666667, squarePrice: 6.5, margin: 0.9266666667},
-    {name: "Lemon Currant Scone", cogs: 0.57, squarePrice: 6, margin: 0.905},
-    {name: "Chocolate Chips Scone", cogs: 0.75, squarePrice: 6, margin: 0.875},
-    {name: "Berries and Cream Scone No Compote", cogs: 0.5, squarePrice: 7, margin: 0.9285714286}
+    {name: "Long Braid", cogs: 2.77, squarePrice: 16, margin: 0.826875, quantity: 9333},
+    {name: "Country Round", cogs: 0.68, squarePrice: 12, margin: 0.9433333333, quantity: 23817},
+    {name: "Baguette", cogs: 0.51, squarePrice: 10, margin: 0.949, quantity: 13320},
+    {name: "Epi", cogs: 0.51, squarePrice: 12, margin: 0.9575, quantity: 9524},
+    {name: "Country PC", cogs: 0.31, squarePrice: 6, margin: 0.9483333333, quantity: 36317},
+    {name: "Double Choc Cookie", cogs: 1.85, squarePrice: 6.5, margin: 0.7153846154, quantity: 26366},
+    {name: "No Nut Cookie", cogs: 1.38, squarePrice: 6, margin: 0.77, quantity: 33868},
+    {name: "Oatmeal Raisin Cookie", cogs: 0.98, squarePrice: 6, margin: 0.8366666667, quantity: 23674},
+    {name: "PB Cookie", cogs: 0.88, squarePrice: 6, margin: 0.8533333333, quantity: 16255},
+    {name: "Original Cookie", cogs: 1.58, squarePrice: 6.5, margin: 0.7569230769, quantity: 28804},
+    {name: "Breakfast Bar", cogs: 1.61, squarePrice: 7.5, margin: 0.7853333333, quantity: 40445},
+    {name: "WW Round", cogs: 0.86, squarePrice: 12, margin: 0.9283333333, quantity: 3941},
+    {name: "WW PC", cogs: 0.3866666667, squarePrice: 6, margin: 0.9355555556, quantity: 7580},
+    {name: "Mini Banana Bread", cogs: 0.45, squarePrice: 7, margin: 0.9357142857, quantity: 13759},
+    {name: "Plain PDM", cogs: 1.03, squarePrice: 13, margin: 0.9207692308, quantity: 6110},
+    {name: "Plain Rye", cogs: 0.96, squarePrice: 13, margin: 0.9261538462, quantity: 1384},
+    {name: "Sesame Round", cogs: 0.98, squarePrice: 13, margin: 0.9246153846, quantity: 2746},
+    {name: "Sesame PC", cogs: 0.47, squarePrice: 6.5, margin: 0.9276923077, quantity: 7578},
+    {name: "Raisin Walnut Round", cogs: 0.89, squarePrice: 7, margin: 0.8728571429, quantity: 1599},
+    {name: "Raisin Walnut PC", cogs: 1.84, squarePrice: 14, margin: 0.8685714286, quantity: 13951},
+    {name: "Whole Wheat Seeded Round", cogs: 1.09, squarePrice: 13, margin: 0.9161538462, quantity: 4420},
+    {name: "WW Seeded PC", cogs: 0.4766666667, squarePrice: 6.5, margin: 0.9266666667, quantity: 14453},
+    {name: "Lemon Currant Scone", cogs: 0.57, squarePrice: 6, margin: 0.905, quantity: 11668},
+    {name: "Chocolate Chips Scone", cogs: 0.75, squarePrice: 6, margin: 0.875, quantity: 12612},
+    {name: "Berries and Cream Scone No Compote", cogs: 0.5, squarePrice: 7, margin: 0.9285714286, quantity: 91}
   ]
 };
 
-app.get('/api/product-margins', async (req, res) => {
-  try {
-    console.log('📦 /api/product-margins called');
-
-    if (!process.env.SQUARE_ACCESS_TOKEN) {
-      console.log('❌ No SQUARE_ACCESS_TOKEN, returning hardcoded data');
-      return res.json(PRODUCT_MARGINS);
-    }
-
-    // Always recalculate (no cache for now to ensure fresh data)
-    console.log('📊 Fetching 12 months of Square data...');
-
-    const now = new Date();
-    const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-    const beginTime = oneYearAgo.toISOString();
-    const endTime = now.toISOString();
-
-    // Aggregate quantity by product from Square
-    const productQuantity = {};
-    let cursor = null;
-    let page = 0;
-    let totalOrders = 0;
-
-    // Get all location IDs for the filter
-    console.log(`  🔍 Building location IDs...`);
-    console.log(`     WASTE_STORE_LOCATIONS exists:`, !!WASTE_STORE_LOCATIONS, `length: ${WASTE_STORE_LOCATIONS?.length || 0}`);
-    console.log(`     WASTE_MARKET_LOCATIONS exists:`, !!WASTE_MARKET_LOCATIONS, `length: ${WASTE_MARKET_LOCATIONS?.length || 0}`);
-
-    const allLocationIds = [
-      ...WASTE_STORE_LOCATIONS.map(l => l.squareLocationId),
-      ...WASTE_MARKET_LOCATIONS.map(l => l.squareLocationId),
-    ];
-    console.log(`  ✅ Using ${allLocationIds.length} location IDs for Square query`);
-    console.log(`     First 5: ${allLocationIds.slice(0, 5).join(', ')}`);
-
-    if (allLocationIds.length === 0) {
-      console.warn(`  ⚠️  WARNING: No location IDs found! Check WASTE_STORE_LOCATIONS and WASTE_MARKET_LOCATIONS`);
-    }
-
-    while (page < 500) {
-      try {
-        const requestBody = {
-          query: {
-            filter: {
-              state_filter: { states: ['COMPLETED'] },
-              location_ids: allLocationIds,
-              date_time_filter: {
-                closed_at: { start_at: beginTime, end_at: endTime },
-              },
-            },
-            sort_order: 'DESC',
-            limit: 100,
-          },
-        };
-
-        if (page === 0) {
-          console.log(`  📤 Sending request with location_ids:`, allLocationIds.slice(0, 3), `...+${allLocationIds.length - 3}`);
-        }
-
-        if (cursor) {
-          requestBody.query.cursor = cursor;
-        }
-
-        const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, requestBody, {
-          headers: {
-            Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 8000,
-        });
-
-        const orders = response.data.orders || [];
-        totalOrders += orders.length;
-        console.log(`  Page ${page}: ${orders.length} orders`);
-
-        for (const order of orders) {
-          for (const lineItem of order.line_items || []) {
-            const squareName = (lineItem.name || '').trim();
-            if (!squareName) continue;
-            const qty = parseFloat(lineItem.quantity || 0);
-            productQuantity[squareName] = (productQuantity[squareName] || 0) + qty;
-          }
-        }
-
-        cursor = response.data.cursor;
-        page += 1;
-        if (!cursor) break;
-      } catch (err) {
-        console.warn(`❌ Error fetching Square data page ${page}: ${err.message}`);
-        if (err.response?.status === 400) {
-          console.warn(`   Status: 400 Bad Request - Details:`, JSON.stringify(err.response?.data).substring(0, 200));
-        } else if (err.response?.status === 401) {
-          console.warn(`   Status: 401 Unauthorized - Check SQUARE_ACCESS_TOKEN`);
-        }
-        break;
-      }
-    }
-
-    console.log(`✅ Fetched ${totalOrders} total orders, ${Object.keys(productQuantity).length} unique products`);
-    console.log('📝 Sample products in Square:', Object.keys(productQuantity).slice(0, 5));
-
-    // Merge quantity data with product margins
-    const productsWithQty = PRODUCT_MARGINS.products.map(p => {
-      // Try to match product name to Square name
-      const squareName = Object.keys(productQuantity).find(sq =>
-        sq.toLowerCase() === p.name.toLowerCase() ||
-        sq.toLowerCase().includes(p.name.toLowerCase()) ||
-        p.name.toLowerCase().includes(sq.toLowerCase())
-      );
-      const qty = squareName ? productQuantity[squareName] : 0;
-      if (qty > 0) console.log(`  ${p.name} => ${squareName || 'NO MATCH'}: ${qty}`);
-      return {
-        ...p,
-        quantity: qty,
-      };
-    });
-
-    const response_data = {
-      products: productsWithQty,
-      cached: false,
-    };
-
-    console.log(`🎉 Returning ${productsWithQty.length} products with quantities`);
-    res.json(response_data);
-  } catch (err) {
-    console.error('❌ Product margins fetch error:', err.message);
-    // Fallback to hardcoded without quantities
-    console.log('⚠️  Falling back to hardcoded data');
-    res.json(PRODUCT_MARGINS);
-  }
+app.get('/api/product-margins', (req, res) => {
+  console.log('📦 /api/product-margins called');
+  console.log(`✅ Returning ${PRODUCT_MARGINS.products.length} products with hardcoded quantities`);
+  res.json(PRODUCT_MARGINS);
 });
 
 // Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
