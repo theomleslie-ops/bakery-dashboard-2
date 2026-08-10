@@ -3751,6 +3751,11 @@ app.get('/api/debug/source-document/:billId', async (req, res) => {
 // Cash balance trend - fetches Statement of Cash Flows from QB
 app.get('/api/cash-balance', async (req, res) => {
   try {
+    // Check cache first
+    const cacheKey = 'cash_balance_5yr';
+    const cached = cacheManager.get(cacheKey);
+    if (cached) return res.json({ ...cached, cached: true });
+
     const qbClient = require('./pipeline/qb-client');
     const tokens = await qbClient.getValidTokens();
 
@@ -3836,22 +3841,26 @@ app.get('/api/cash-balance', async (req, res) => {
 
     console.log(`✅ Fetched ${balances.length} month-end cash balances from QB`);
 
-    res.json({
+    const response = {
       success: true,
       currentCash: round2(currentCash),
       balances,
       generatedAt: new Date().toISOString(),
-    });
+    };
+    cacheManager.set(cacheKey, response, 24 * 60 * 60 * 1000); // Cache for 24 hours
+    res.json(response);
   } catch (err) {
     console.error('Cash balance fetch error:', err.message);
     // Return empty balances instead of failing - QB CashFlow is rate limited
-    res.json({
+    const response = {
       success: true,
       currentCash: 0,
       balances: [],
       generatedAt: new Date().toISOString(),
       note: 'CashFlow data unavailable due to QB rate limiting',
-    });
+    };
+    cacheManager.set(cacheKey, response, 1 * 60 * 60 * 1000); // Cache error for 1 hour
+    res.json(response);
   }
 });
 
