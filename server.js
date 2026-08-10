@@ -3220,6 +3220,175 @@ let marginsCacheTime = 0;
 const MARGINS_CACHE_TTL = 1 * 60 * 60 * 1000; // 1 hour
 
 // Bakery margin analysis endpoint - LIVE data from Square Orders with caching
+app.get('/api/bakery-margins', async (req, res) => {
+  try {
+    const cacheKey = 'bakery_margins_12m';
+    const cached = cacheManager.get(cacheKey);
+    if (cached) return res.json({ ...cached, cached: true });
+
+    if (!process.env.SQUARE_ACCESS_TOKEN) {
+      return res.status(400).json({ error: 'Square API credentials not configured' });
+    }
+
+    // Fetch all locations for the last 12 months
+    const now = new Date();
+    const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const beginTime = oneYearAgo.toISOString();
+    const endTime = now.toISOString();
+
+    console.log(`📊 Fetching bakery margins for last 12 months (${oneYearAgo.toISOString().slice(0, 10)} to ${now.toISOString().slice(0, 10)})`);
+
+    // Fetch all Square orders
+    const allOrders = [];
+    let cursor = null;
+    let page = 0;
+    const MAX_PAGES = 500;
+
+    while (page < MAX_PAGES) {
+      const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, {
+        limit: 100,
+        sort_order: 'DESC',
+        query: {
+          filter: {
+            state_filter: { states: ['COMPLETED'] },
+            date_time_filter: {
+              closed_at: { start_at: beginTime, end_at: endTime },
+            },
+          },
+        },
+        ...(cursor && { cursor }),
+      }, {
+        headers: {
+          Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      });
+
+      const orders = response.data.orders || [];
+      allOrders.push(...orders);
+
+      cursor = response.data.cursor;
+      page += 1;
+      if (!cursor) break;
+    }
+
+    console.log(`📦 Fetched ${allOrders.length} orders`);
+
+    // Aggregate by product name
+    const productData = {};
+    const unmatchedProducts = new Set();
+
+    for (const order of allOrders) {
+      for (const lineItem of order.line_items || []) {
+        const squareName = (lineItem.name || '').trim();
+        if (!squareName) continue;
+
+        // Match to PRODUCT_MARGINS
+        const matchedProduct = matchProductName(squareName, PRODUCT_MARGINS.products);
+        const displayName = matchedProduct?.name || squareName;
+
+        if (!matchedProduct) {
+          unmatchedProducts.add(squareName);
+        }
+
+        const qty = parseFloat(lineItem.quantity || 0);
+        const revenue = (lineItem.gross_sales_money?.amount || 0) / 100;
+
+        if (!productData[displayName]) {
+          productData[displayName] = {
+            name: displayName,
+            squareName: squareName,
+            quantity: 0,
+            revenue: 0,
+            cogs: matchedProduct?.cogs || 0,
+            price: matchedProduct?.squarePrice || 0,
+          };
+        }
+        productData[displayName].quantity += qty;
+        productData[displayName].revenue += revenue;
+      }
+    }
+
+    // Calculate margins
+    const products = Object.values(productData).map(p => ({
+      name: p.name,
+      quantity: p.quantity,
+      revenue: p.revenue,
+      price: p.revenue > 0 ? p.revenue / p.quantity : p.price,
+      cogs: p.cogs,
+      margin$: p.revenue - (p.cogs * p.quantity),
+      marginPct: p.revenue > 0 ? ((p.revenue - (p.cogs * p.quantity)) / p.revenue) * 100 : 0,
+    })).filter(p => p.quantity > 0);
+
+    // Sort by revenue descending and take top 20
+    const top20 = products.sort((a, b) => b.revenue - a.revenue).slice(0, 20);
+
+    // Calculate summary
+    const summary = {
+      total_revenue: round2(products.reduce((s, p) => s + p.revenue, 0)),
+      total_cogs: round2(products.reduce((s, p) => s + (p.cogs * p.quantity), 0)),
+      total_profit: round2(products.reduce((s, p) => s + p.margin$, 0)),
+      total_units: Math.round(products.reduce((s, p) => s + p.quantity, 0)),
+      blended_margin_pct: products.reduce((s, p) => s + p.revenue, 0) > 0
+        ? (products.reduce((s, p) => s + p.margin$, 0) / products.reduce((s, p) => s + p.revenue, 0)) * 100
+        : 0,
+    };
+
+    const dataRange = `${beginTime} to ${endTime}`;
+    const response_data = {
+      success: true,
+      top20,
+      summary,
+      dataRange,
+      ordersProcessed: allOrders.length,
+      unmatchedProducts: Array.from(unmatchedProducts),
+      generatedAt: new Date().toISOString(),
+    };
+
+    if (unmatchedProducts.size > 0) {
+      console.log(`⚠️  Unmatched Square products (${unmatchedProducts.size}):`, Array.from(unmatchedProducts).slice(0, 5).join(', '));
+      response_data.warning = `${unmatchedProducts.size} products couldn't be matched to dashboard products`;
+    }
+
+    cacheManager.set(cacheKey, response_data, MARGINS_CACHE_TTL);
+    res.json(response_data);
+  } catch (err) {
+    console.error('Bakery margins fetch error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch bakery margins', message: err.message });
+  }
+});
+
+// Helper function to match Square product names to dashboard products
+function matchProductName(squareName, dashboardProducts) {
+  const squareNameLower = squareName.toLowerCase().trim();
+
+  // Try exact match first (case-insensitive)
+  let match = dashboardProducts.find(p => p.name.toLowerCase() === squareNameLower);
+  if (match) return match;
+
+  // Try partial matches
+  // Remove common words like "item", "product", etc.
+  const cleanedSquare = squareNameLower.replace(/\b(item|product|qty|qty\.)\b/gi, '').trim();
+
+  match = dashboardProducts.find(p => {
+    const pLower = p.name.toLowerCase();
+    // Check if cleaned square name contains product name or vice versa
+    return cleanedSquare.includes(pLower) || pLower.includes(cleanedSquare);
+  });
+  if (match) return match;
+
+  // Try word-by-word similarity (at least 80% match)
+  const squareWords = cleanedSquare.split(/\s+/);
+  match = dashboardProducts.find(p => {
+    const pWords = p.name.toLowerCase().split(/\s+/);
+    const matchCount = squareWords.filter(w => pWords.some(pw => pw.includes(w) || w.includes(pw))).length;
+    return matchCount >= Math.ceil(squareWords.length * 0.8);
+  });
+
+  return match || null;
+}
+
 // Debug endpoint to see raw Square data vs QB
 app.get('/api/bakery-margins-debug', async (req, res) => {
   try {
