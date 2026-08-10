@@ -2240,7 +2240,7 @@
                   {sorted.map(p => (
                     <tr key={p.name}>
                       <td>{p.name}</td>
-                      <td className="num">—</td>
+                      <td className="num">{p.quantity ? Math.round(p.quantity).toLocaleString() : '—'}</td>
                       <td className="num">${p.cogs.toFixed(2)}</td>
                       <td className="num">${p.squarePrice.toFixed(2)}</td>
                       <td className="num" style={{ fontWeight: '600', color: p.margin >= 0.8 ? '#10b981' : p.margin >= 0.75 ? '#6b4423' : '#ff9500' }}>{(p.margin * 100).toFixed(1)}%</td>
