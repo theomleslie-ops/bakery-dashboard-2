@@ -1797,21 +1797,12 @@
       const [loading, setLoading] = useState(true);
       const [data, setData] = useState(null);
       const [error, setError] = useState(null);
-      const [period, setPeriod] = useState('1_week');
-
-      const PERIOD_OPTIONS = [
-        { value: '1_week', label: '1 Week' },
-        { value: '2_weeks', label: '2 Weeks' },
-        { value: '2_months', label: '2 Months' },
-        { value: '6_months', label: '6 Months' },
-        { value: '1_year', label: '1 Year' },
-      ];
 
       useEffect(() => {
         const fetchData = async () => {
           try {
             setLoading(true);
-            const res = await fetch(`/api/bakery-margins?period=${period}`);
+            const res = await fetch(`/api/bakery-margins`);
             if (!res.ok) throw new Error(`Failed to fetch bakery margins: ${res.status}`);
             const result = await res.json();
             setData(result);
@@ -1822,7 +1813,7 @@
           }
         };
         fetchData();
-      }, [period]);
+      }, []);
 
       // Format the actual date range from API response
       const getDateRangeDisplay = () => {
@@ -1844,19 +1835,12 @@
       return (
         <div className="container" style={{ padding: '20px' }}>
           <div style={{ marginBottom: '30px' }}>
-            <h2 style={{ margin: '0 0 20px 0' }}>🥐 Bakery Margins</h2>
+            <h2 style={{ margin: '0 0 20px 0' }}>🥐 Bakery Margins (Last 12 Months)</h2>
 
-            <div className="controls" style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <div className="view-toggle">
-                {PERIOD_OPTIONS.map(opt => (
-                  <button key={opt.value} className={period === opt.value ? 'active' : ''} onClick={() => setPeriod(opt.value)}>{opt.label}</button>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ marginTop: '20px', padding: '15px', background: '#f5f1ed', borderRadius: '6px', fontSize: '14px', color: '#6b4423', fontWeight: '500' }}>
+            <div style={{ padding: '15px', background: '#f5f1ed', borderRadius: '6px', fontSize: '14px', color: '#6b4423', fontWeight: '500' }}>
               📅 {getDateRangeDisplay()}
               {data && data.cached && <span style={{ marginLeft: '10px', opacity: 0.7 }}>💾 (cached)</span>}
+              {data && data.warning && <span style={{ marginLeft: '10px', color: '#d97706' }}>⚠️ {data.warning}</span>}
             </div>
           </div>
 
