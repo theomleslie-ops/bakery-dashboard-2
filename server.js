@@ -3230,50 +3230,63 @@ app.get('/api/bakery-margins', async (req, res) => {
       return res.status(400).json({ error: 'Square API credentials not configured' });
     }
 
-    // Fetch all locations for the last 12 months
-    const now = new Date();
-    const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-    const beginTime = oneYearAgo.toISOString();
-    const endTime = now.toISOString();
+    // Set a global timeout of 30 seconds for this entire request
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
+    );
 
-    console.log(`📊 Fetching bakery margins for last 12 months (${oneYearAgo.toISOString().slice(0, 10)} to ${now.toISOString().slice(0, 10)})`);
+    const fetchPromise = (async () => {
+      // Fetch all locations for the last 12 months
+      const now = new Date();
+      const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+      const beginTime = oneYearAgo.toISOString();
+      const endTime = now.toISOString();
 
-    // Fetch all Square orders
-    const allOrders = [];
-    let cursor = null;
-    let page = 0;
-    const MAX_PAGES = 500;
+      console.log(`📊 Fetching bakery margins for last 12 months (${oneYearAgo.toISOString().slice(0, 10)} to ${now.toISOString().slice(0, 10)})`);
 
-    while (page < MAX_PAGES) {
-      const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, {
-        limit: 100,
-        sort_order: 'DESC',
-        query: {
-          filter: {
-            state_filter: { states: ['COMPLETED'] },
-            date_time_filter: {
-              closed_at: { start_at: beginTime, end_at: endTime },
+      // Fetch all Square orders
+      const allOrders = [];
+      let cursor = null;
+      let page = 0;
+      const MAX_PAGES = 500;
+      const MAX_TIME = 25000; // Stop after 25 seconds to leave time for processing
+      const startTime = Date.now();
+
+      while (page < MAX_PAGES && Date.now() - startTime < MAX_TIME) {
+        try {
+          const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, {
+            limit: 100,
+            sort_order: 'DESC',
+            query: {
+              filter: {
+                state_filter: { states: ['COMPLETED'] },
+                date_time_filter: {
+                  closed_at: { start_at: beginTime, end_at: endTime },
+                },
+              },
             },
-          },
-        },
-        ...(cursor && { cursor }),
-      }, {
-        headers: {
-          Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 10000,
-      });
+            ...(cursor && { cursor }),
+          }, {
+            headers: {
+              Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 8000,
+          });
 
-      const orders = response.data.orders || [];
-      allOrders.push(...orders);
+          const orders = response.data.orders || [];
+          allOrders.push(...orders);
 
-      cursor = response.data.cursor;
-      page += 1;
-      if (!cursor) break;
-    }
+          cursor = response.data.cursor;
+          page += 1;
+          if (!cursor) break;
+        } catch (axiosErr) {
+          console.warn(`Axios error on page ${page}: ${axiosErr.message}. Stopping pagination.`);
+          break;
+        }
+      }
 
-    console.log(`📦 Fetched ${allOrders.length} orders`);
+      console.log(`📦 Fetched ${allOrders.length} orders in ${Math.round(Date.now() - startTime)}ms`);
 
     // Aggregate by product name
     const productData = {};
@@ -3335,27 +3348,27 @@ app.get('/api/bakery-margins', async (req, res) => {
         : 0,
     };
 
-    const dataRange = `${beginTime} to ${endTime}`;
-    const response_data = {
-      success: true,
-      top20,
-      summary,
-      dataRange,
-      ordersProcessed: allOrders.length,
-      unmatchedProducts: Array.from(unmatchedProducts),
-      generatedAt: new Date().toISOString(),
-    };
+      const dataRange = `${beginTime} to ${endTime}`;
+      return {
+        success: true,
+        top20,
+        summary,
+        dataRange,
+        ordersProcessed: allOrders.length,
+        unmatchedProducts: Array.from(unmatchedProducts),
+        generatedAt: new Date().toISOString(),
+        ...(unmatchedProducts.size > 0 && {
+          warning: `${unmatchedProducts.size} products couldn't be matched to dashboard products`,
+        }),
+      };
+    })();
 
-    if (unmatchedProducts.size > 0) {
-      console.log(`⚠️  Unmatched Square products (${unmatchedProducts.size}):`, Array.from(unmatchedProducts).slice(0, 5).join(', '));
-      response_data.warning = `${unmatchedProducts.size} products couldn't be matched to dashboard products`;
-    }
-
+    const response_data = await Promise.race([fetchPromise, timeoutPromise]);
     cacheManager.set(cacheKey, response_data, MARGINS_CACHE_TTL);
     res.json(response_data);
   } catch (err) {
     console.error('Bakery margins fetch error:', err.message);
-    res.status(500).json({ error: 'Failed to fetch bakery margins', message: err.message });
+    res.status(500).json({ error: 'Failed to fetch bakery margins', message: err.message, timeout: err.message.includes('timeout') });
   }
 });
 
