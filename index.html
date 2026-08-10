@@ -698,7 +698,12 @@
           setPeriodSource(dashData.periodSource || '');
           // Group biweekly periods by month for Prime Cost dashboard
           const monthlyData = {};
-          dashData.periodData.forEach(w => {
+          const sortedPeriods = [...(dashData.periodData || [])].sort((a, b) => {
+            const dateA = new Date(a.startDate + 'T00:00');
+            const dateB = new Date(b.startDate + 'T00:00');
+            return dateA - dateB;
+          });
+          sortedPeriods.forEach(w => {
             if (!w.startDate) return;
             const date = new Date(w.startDate + 'T00:00');
             const monthKey = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
