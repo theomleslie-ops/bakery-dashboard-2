@@ -2387,11 +2387,16 @@ const PRODUCT_MARGINS = {
 
 app.get('/api/product-margins', async (req, res) => {
   try {
-    const cacheKey = 'product_margins_with_qty';
-    const cached = cacheManager.get(cacheKey);
-    if (cached) return res.json({ ...cached, cached: true });
+    console.log('📦 /api/product-margins called');
 
-    // Fetch 12 months of Square data to get quantity sold for each product
+    if (!process.env.SQUARE_ACCESS_TOKEN) {
+      console.log('❌ No SQUARE_ACCESS_TOKEN, returning hardcoded data');
+      return res.json(PRODUCT_MARGINS);
+    }
+
+    // Always recalculate (no cache for now to ensure fresh data)
+    console.log('📊 Fetching 12 months of Square data...');
+
     const now = new Date();
     const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
     const beginTime = oneYearAgo.toISOString();
@@ -2401,6 +2406,7 @@ app.get('/api/product-margins', async (req, res) => {
     const productQuantity = {};
     let cursor = null;
     let page = 0;
+    let totalOrders = 0;
 
     while (page < 500) {
       try {
@@ -2425,6 +2431,9 @@ app.get('/api/product-margins', async (req, res) => {
         });
 
         const orders = response.data.orders || [];
+        totalOrders += orders.length;
+        console.log(`  Page ${page}: ${orders.length} orders`);
+
         for (const order of orders) {
           for (const lineItem of order.line_items || []) {
             const squareName = (lineItem.name || '').trim();
@@ -2438,10 +2447,13 @@ app.get('/api/product-margins', async (req, res) => {
         page += 1;
         if (!cursor) break;
       } catch (err) {
-        console.warn(`Error fetching Square data page ${page}: ${err.message}. Stopping pagination.`);
+        console.warn(`❌ Error fetching Square data page ${page}: ${err.message}`);
         break;
       }
     }
+
+    console.log(`✅ Fetched ${totalOrders} total orders, ${Object.keys(productQuantity).length} unique products`);
+    console.log('📝 Sample products in Square:', Object.keys(productQuantity).slice(0, 5));
 
     // Merge quantity data with product margins
     const productsWithQty = PRODUCT_MARGINS.products.map(p => {
@@ -2452,6 +2464,7 @@ app.get('/api/product-margins', async (req, res) => {
         p.name.toLowerCase().includes(sq.toLowerCase())
       );
       const qty = squareName ? productQuantity[squareName] : 0;
+      if (qty > 0) console.log(`  ${p.name} => ${squareName || 'NO MATCH'}: ${qty}`);
       return {
         ...p,
         quantity: qty,
@@ -2463,11 +2476,12 @@ app.get('/api/product-margins', async (req, res) => {
       cached: false,
     };
 
-    cacheManager.set(cacheKey, response_data, 4 * 60 * 60 * 1000); // Cache for 4 hours
+    console.log(`🎉 Returning ${productsWithQty.length} products with quantities`);
     res.json(response_data);
   } catch (err) {
-    console.error('Product margins fetch error:', err.message);
+    console.error('❌ Product margins fetch error:', err.message);
     // Fallback to hardcoded without quantities
+    console.log('⚠️  Falling back to hardcoded data');
     res.json(PRODUCT_MARGINS);
   }
 });
