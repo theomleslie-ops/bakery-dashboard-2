@@ -2385,8 +2385,91 @@ const PRODUCT_MARGINS = {
   ]
 };
 
-app.get('/api/product-margins', (req, res) => {
-  res.json(PRODUCT_MARGINS);
+app.get('/api/product-margins', async (req, res) => {
+  try {
+    const cacheKey = 'product_margins_with_qty';
+    const cached = cacheManager.get(cacheKey);
+    if (cached) return res.json({ ...cached, cached: true });
+
+    // Fetch 12 months of Square data to get quantity sold for each product
+    const now = new Date();
+    const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const beginTime = oneYearAgo.toISOString();
+    const endTime = now.toISOString();
+
+    // Aggregate quantity by product from Square
+    const productQuantity = {};
+    let cursor = null;
+    let page = 0;
+
+    while (page < 500) {
+      try {
+        const response = await axios.post(`https://connect.squareup.com/v2/orders/search`, {
+          limit: 100,
+          sort_order: 'DESC',
+          query: {
+            filter: {
+              state_filter: { states: ['COMPLETED'] },
+              date_time_filter: {
+                closed_at: { start_at: beginTime, end_at: endTime },
+              },
+            },
+          },
+          ...(cursor && { cursor }),
+        }, {
+          headers: {
+            Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 8000,
+        });
+
+        const orders = response.data.orders || [];
+        for (const order of orders) {
+          for (const lineItem of order.line_items || []) {
+            const squareName = (lineItem.name || '').trim();
+            if (!squareName) continue;
+            const qty = parseFloat(lineItem.quantity || 0);
+            productQuantity[squareName] = (productQuantity[squareName] || 0) + qty;
+          }
+        }
+
+        cursor = response.data.cursor;
+        page += 1;
+        if (!cursor) break;
+      } catch (err) {
+        console.warn(`Error fetching Square data page ${page}: ${err.message}. Stopping pagination.`);
+        break;
+      }
+    }
+
+    // Merge quantity data with product margins
+    const productsWithQty = PRODUCT_MARGINS.products.map(p => {
+      // Try to match product name to Square name
+      const squareName = Object.keys(productQuantity).find(sq =>
+        sq.toLowerCase() === p.name.toLowerCase() ||
+        sq.toLowerCase().includes(p.name.toLowerCase()) ||
+        p.name.toLowerCase().includes(sq.toLowerCase())
+      );
+      const qty = squareName ? productQuantity[squareName] : 0;
+      return {
+        ...p,
+        quantity: qty,
+      };
+    });
+
+    const response_data = {
+      products: productsWithQty,
+      cached: false,
+    };
+
+    cacheManager.set(cacheKey, response_data, 4 * 60 * 60 * 1000); // Cache for 4 hours
+    res.json(response_data);
+  } catch (err) {
+    console.error('Product margins fetch error:', err.message);
+    // Fallback to hardcoded without quantities
+    res.json(PRODUCT_MARGINS);
+  }
 });
 
 // Raw uploaded production rows, for inspection. GET /api/production?location=ARC (omit for all locations).
@@ -3003,197 +3086,6 @@ app.get('/api/debug/overrides', (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
-  }
-});
-
-// Main product margins endpoint - uses LIVE data from QB, Google Sheets, and Square
-app.get('/api/product-margins', async (req, res) => {
-  try {
-    // Clear any caching - force fresh calculation every time
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
-
-    console.log('📊 Calculating LIVE product margins from QB + Google Sheets + Square...');
-    const startTime = Date.now();
-
-    // Step 1: Fetch live Square orders for all time windows, no caching
-    console.log('  Step 1: Fetching LIVE Square orders for each time window...');
-    const windows = [
-      { name: '1 week', days: 7 },
-      { name: '2 weeks', days: 14 },
-      { name: '2 months', days: 60 },
-      { name: '6 months', days: 180 },
-      { name: '1 year', days: 365 },
-      { name: '3 years', days: 1095 },
-      { name: '5 years', days: 1825 },
-    ];
-
-    let windowsData = {};
-    let squareFetchedAt = null;
-
-    try {
-      if (!process.env.SQUARE_ACCESS_TOKEN) {
-        throw new Error('SQUARE_ACCESS_TOKEN not configured');
-      }
-
-      for (const window of windows) {
-        const beginTime = new Date(Date.now() - window.days * 24 * 60 * 60 * 1000).toISOString();
-        const endTime = new Date().toISOString();
-        const windowOrders = [];
-
-        // Fetch from all locations for this time window
-        for (const location of WASTE_LOCATIONS) {
-          let cursor = null;
-          let page = 0;
-          const MAX_PAGES = 100;
-
-          try {
-            while (page < MAX_PAGES) {
-              const req = {
-                location_ids: [location.squareLocationId],
-                limit: 250,
-                sort_order: 'DESC',
-                query: {
-                  filter: {
-                    state_filter: { states: ['COMPLETED'] },
-                    date_time_filter: {
-                      closed_at: {
-                        start_at: beginTime,
-                        end_at: endTime,
-                      },
-                    },
-                  },
-                },
-              };
-              if (cursor) req.query.cursor = cursor;
-
-              const res = await axios.post(`https://connect.squareup.com/v2/orders/search`, req, {
-                headers: {
-                  Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
-                  'Content-Type': 'application/json',
-                },
-                timeout: 10000,
-              });
-
-              const orders = res.data.orders || [];
-              for (const order of orders) {
-                for (const line of order.line_items || []) {
-                  windowOrders.push({
-                    itemName: line.name || 'Unknown',
-                    quantity: line.quantity ? parseInt(line.quantity) : 1,
-                    grossSales: Math.round((line.gross_sales_money?.amount || 0) / 100 * 100) / 100,
-                  });
-                }
-              }
-
-              cursor = res.data.cursor;
-              page++;
-              if (!cursor) break;
-            }
-          } catch (e) {
-            if (e.response?.status !== 429) {
-              console.warn(`    ⚠️  Location ${location.name}: ${e.message}`);
-            }
-          }
-        }
-
-        // Aggregate this window's data by item name
-        const itemMap = {};
-        for (const order of windowOrders) {
-          if (!itemMap[order.itemName]) {
-            itemMap[order.itemName] = { quantity: 0, revenue: 0 };
-          }
-          itemMap[order.itemName].quantity += order.quantity;
-          itemMap[order.itemName].revenue += order.grossSales;
-        }
-
-        windowsData[window.name] = itemMap;
-        console.log(`    ✓ ${window.name}: ${windowOrders.length} line items, ${Object.keys(itemMap).length} unique items`);
-      }
-
-      squareFetchedAt = new Date().toISOString();
-    } catch (e) {
-      console.error('❌ Square fetch error:', e.message);
-      return res.status(500).json({ error: 'Failed to fetch Square data', details: e.message });
-    }
-
-    // Step 2: Calculate costs using live QB + Google Sheets pipeline (for latest data only)
-    console.log('  Step 2: Calculating costs from QB bills + Google Sheets recipes...');
-    let productCostMap = {};
-
-    try {
-      const { main: calculateMargins } = require('./pipeline/calculate-margins');
-      // Pass current 1-year data to calculate margins
-      const currentYearData = Object.entries(windowsData['1 year'] || {}).map(([name, data]) => ({
-        product: name,
-        units: data.quantity,
-        price: data.quantity > 0 ? data.revenue / data.quantity : 0,
-      }));
-
-      const result = await calculateMargins({ squareSalesData: currentYearData });
-      const marginProducts = result.products || [];
-
-      for (const p of marginProducts) {
-        const productKey = (p.product || p.recipe || '').toLowerCase();
-        productCostMap[productKey] = p.cost_per_unit || p.costPerUnit || 0;
-      }
-
-      console.log(`    ✓ Calculated costs for ${marginProducts.length} products`);
-    } catch (e) {
-      console.warn(`    ⚠️  Cost calculation failed: ${e.message}`);
-    }
-
-    // Step 3: Transform results into time-window format for UI
-    console.log('  Step 3: Formatting results by time window...');
-
-    const result = {};
-
-    for (const windowName in windowsData) {
-      const windowItems = windowsData[windowName];
-
-      // Convert item sales to product list with margins
-      const productList = Object.entries(windowItems).map(([name, data]) => {
-        const cost = productCostMap[(name || '').toLowerCase()] || 0;
-        const revenue = data.revenue;
-        const marginPerUnit = cost;
-
-        return {
-          name: name,
-          revenue: Math.round(revenue * 100) / 100,
-          quantity: Math.round(data.quantity * 100) / 100,
-          avgPrice: data.quantity > 0 ? Math.round((revenue / data.quantity) * 100) / 100 : 0,
-          cogs: Math.round(cost * 100) / 100,
-          margin$: Math.round(marginPerUnit * 100) / 100,
-          marginPct: revenue > 0 ? Math.round(((revenue - (data.quantity * cost)) / revenue * 100) * 10) / 10 : 0,
-          status: (revenue - (data.quantity * cost)) < 0 ? 'error-negative-margin' : (cost > 0 ? 'costed' : 'needs-cost'),
-        };
-      });
-
-      // Rank by revenue and get top 20
-      const ranked = productList
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 20);
-
-      result[windowName] = {
-        fetchedAt: squareFetchedAt,
-        top20: ranked,
-      };
-    }
-
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`✅ Margin calculation complete in ${elapsed}s`);
-
-    res.json({
-      generatedAt: new Date().toISOString(),
-      dataSource: 'LIVE (QB + Google Sheets + Square)',
-      squareFetchedAt: squareFetchedAt,
-      calculationMs: Date.now() - startTime,
-      windows: result,
-      coverage: marginCoverage,
-      summary: marginSummary,
-    });
-  } catch (e) {
-    console.error('❌ Product margins error:', e.message, e.stack);
-    res.status(500).json({ error: e.message, dataSource: 'LIVE' });
   }
 });
 
