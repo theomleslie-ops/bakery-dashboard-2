@@ -698,25 +698,25 @@
           setPeriodSource(dashData.periodSource || '');
           // Use cached monthly financial data for Prime Cost (ensures revenue matches uploaded files)
           const monthlyFinancial = dashData.monthlyData || [];
-          const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const monthToNum = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
 
           let combined = monthlyFinancial
             .filter(m => m.revenue > 0)
             .map(m => {
-              const date = new Date(m.year, m.month - 1, 1);
+              const monthNum = monthToNum[m.month] || 0;
+              const date = new Date(m.year, monthNum - 1, 1);
               let labor = m.labor;
 
               // Monthly labor overrides (QB API not returning correct values)
-              if (m.month === 7 && m.year === 2026) {
+              if (m.month === 'Jul' && m.year === 2026) {
                 labor = 291994.64; // Verified from QB report
               }
 
-              const monthName = monthNames[m.month] || 'Unknown';
               const foodPercent = (m.cogs / m.revenue) * 100;
               const laborPercent = (labor / m.revenue) * 100;
               return {
-                label: monthName,
-                fullLabel: monthName + ' ' + m.year,
+                label: m.month,
+                fullLabel: m.month + ' ' + m.year,
                 dateObj: date,
                 revenue: m.revenue,
                 foodPercent,
