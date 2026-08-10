@@ -2453,6 +2453,11 @@ app.get('/api/product-margins', async (req, res) => {
         if (!cursor) break;
       } catch (err) {
         console.warn(`❌ Error fetching Square data page ${page}: ${err.message}`);
+        if (err.response?.status === 400) {
+          console.warn(`   Status: 400 Bad Request - Details:`, JSON.stringify(err.response?.data).substring(0, 200));
+        } else if (err.response?.status === 401) {
+          console.warn(`   Status: 401 Unauthorized - Check SQUARE_ACCESS_TOKEN`);
+        }
         break;
       }
     }
