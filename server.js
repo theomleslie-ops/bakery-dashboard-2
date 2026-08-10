@@ -2370,7 +2370,18 @@ const PRODUCT_MARGINS = {
     {name: "Breakfast Bar", cogs: 1.61, squarePrice: 7.5, margin: 0.7853333333},
     {name: "WW Round", cogs: 0.86, squarePrice: 12, margin: 0.9283333333},
     {name: "WW PC", cogs: 0.3866666667, squarePrice: 6, margin: 0.9355555556},
-    {name: "Mini Banana Bread", cogs: 0.45, squarePrice: 7, margin: 0.9357142857}
+    {name: "Mini Banana Bread", cogs: 0.45, squarePrice: 7, margin: 0.9357142857},
+    {name: "Plain PDM", cogs: 1.03, squarePrice: 13, margin: 0.9207692308},
+    {name: "Plain Rye", cogs: 0.96, squarePrice: 13, margin: 0.9261538462},
+    {name: "Sesame Round", cogs: 0.98, squarePrice: 13, margin: 0.9246153846},
+    {name: "Sesame PC", cogs: 0.47, squarePrice: 6.5, margin: 0.9276923077},
+    {name: "Raisin Walnut Round", cogs: 0.89, squarePrice: 7, margin: 0.8728571429},
+    {name: "Raisin Walnut PC", cogs: 1.84, squarePrice: 14, margin: 0.8685714286},
+    {name: "Whole Wheat Seeded Round", cogs: 1.09, squarePrice: 13, margin: 0.9161538462},
+    {name: "WW Seeded PC", cogs: 0.4766666667, squarePrice: 6.5, margin: 0.9266666667},
+    {name: "Lemon Currant Scone", cogs: 0.57, squarePrice: 6, margin: 0.905},
+    {name: "Chocolate Chips Scone", cogs: 0.75, squarePrice: 6, margin: 0.875},
+    {name: "Berries and Cream Scone No Compote", cogs: 0.5, squarePrice: 7, margin: 0.9285714286}
   ]
 };
 
