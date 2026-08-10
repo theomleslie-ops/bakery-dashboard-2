@@ -2408,6 +2408,12 @@ app.get('/api/product-margins', async (req, res) => {
     let page = 0;
     let totalOrders = 0;
 
+    // Get all location IDs for the filter
+    const allLocationIds = [
+      ...WASTE_STORE_LOCATIONS.map(l => l.squareLocationId),
+      ...WASTE_MARKET_LOCATIONS.map(l => l.squareLocationId),
+    ];
+
     while (page < 500) {
       try {
         const requestBody = {
@@ -2416,6 +2422,7 @@ app.get('/api/product-margins', async (req, res) => {
           query: {
             filter: {
               state_filter: { states: ['COMPLETED'] },
+              location_ids: allLocationIds,
               date_time_filter: {
                 closed_at: { start_at: beginTime, end_at: endTime },
               },
