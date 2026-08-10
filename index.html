@@ -701,7 +701,7 @@
           dashData.periodData.forEach(w => {
             if (!w.startDate) return;
             const date = new Date(w.startDate + 'T00:00');
-            const monthKey = date.getFullYear() + '-' + String(date.getMonth()).padStart(2, '0');
+            const monthKey = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
             const monthName = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getMonth()];
 
             if (!monthlyData[monthKey]) {
