@@ -2678,13 +2678,17 @@ app.get('/eula', (req, res) => {
 // Pre-warms market performance cache on startup and daily at 1 AM UTC, so deployments don't stall.
 
 const refreshSquareMarketCache = async () => {
+  console.log(`🔄 Square market cache refresh triggered`);
   try {
     const token = process.env.SQUARE_ACCESS_TOKEN;
+    console.log(`   Token configured: ${!!token}`);
+
     if (!token || token === 'your_square_token_here') {
       console.log(`⏸️  Square market cache refresh skipped: Square API not configured`);
       return;
     }
 
+    console.log(`   Fetching market performance data...`);
     const startDow = await fetchWorkweekStartDow();
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
@@ -2694,6 +2698,7 @@ const refreshSquareMarketCache = async () => {
     console.log(`✅ Square market performance cache warmed (${oneYearAgo} to ${currentWeekStart})`);
   } catch (err) {
     console.error(`❌ Square cache refresh failed:`, err.message);
+    console.error(`   Stack:`, err.stack?.split('\n')[1]);
   }
 };
 
