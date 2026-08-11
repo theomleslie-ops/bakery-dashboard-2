@@ -2200,17 +2200,19 @@ app.get('/api/market-performance', async (req, res) => {
     const startDow = await fetchWorkweekStartDow();
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
+    // Exclude the current incomplete week - only show complete weeks
+    const lastCompleteWeekStart = addDays(currentWeekStart, -7);
     // Allow up to 5 years of data (260 weeks)
     const effectiveWeekCount = Math.min(weekCount, 260);
-    const rangeStart = addDays(currentWeekStart, -7 * (effectiveWeekCount - 1));
+    const rangeStart = addDays(lastCompleteWeekStart, -7 * (effectiveWeekCount - 1));
 
     const weekStarts = [];
-    for (let d = rangeStart; d <= currentWeekStart; d = addDays(d, 7)) weekStarts.push(d);
+    for (let d = rangeStart; d <= lastCompleteWeekStart; d = addDays(d, 7)) weekStarts.push(d);
 
-    console.log(`📅 /api/market-performance fetching dates: ${rangeStart} to ${currentWeekStart} (${weekStarts.length} weeks)`);
+    console.log(`📅 /api/market-performance fetching dates: ${rangeStart} to ${lastCompleteWeekStart} (${weekStarts.length} weeks)`);
 
     const revenueByMarket = await Promise.race([
-      getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow),
+      getMarketWeeklyRevenue(rangeStart, lastCompleteWeekStart, startDow),
       timeoutPromise
     ]);
 
@@ -2222,7 +2224,7 @@ app.get('/api/market-performance', async (req, res) => {
     console.log(`📊 Returning ${markets.length} markets: ${markets.map(m => m.name).join(', ')}`);
     console.log(`   Week dates: ${weekStarts.join(', ')}`);
 
-    const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: currentWeekStart };
+    const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: lastCompleteWeekStart };
     cacheManager.set(cacheKey, response, 4 * 60 * 60 * 1000); // Cache for 4 hours
     res.json(response);
   } catch (err) {
@@ -2251,15 +2253,17 @@ app.get('/api/store-locations-performance', async (req, res) => {
     const startDow = await fetchWorkweekStartDow();
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
+    // Exclude the current incomplete week - only show complete weeks
+    const lastCompleteWeekStart = addDays(currentWeekStart, -7);
     // Allow up to 5 years of data (260 weeks)
     const effectiveWeekCount = Math.min(weekCount, 260);
-    const rangeStart = addDays(currentWeekStart, -7 * (effectiveWeekCount - 1));
+    const rangeStart = addDays(lastCompleteWeekStart, -7 * (effectiveWeekCount - 1));
 
     const weekStarts = [];
-    for (let d = rangeStart; d <= currentWeekStart; d = addDays(d, 7)) weekStarts.push(d);
+    for (let d = rangeStart; d <= lastCompleteWeekStart; d = addDays(d, 7)) weekStarts.push(d);
 
     const revenueByMarket = await Promise.race([
-      getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow),
+      getMarketWeeklyRevenue(rangeStart, lastCompleteWeekStart, startDow),
       timeoutPromise
     ]);
 
@@ -2272,7 +2276,7 @@ app.get('/api/store-locations-performance', async (req, res) => {
       .map((loc) => ({ name: loc.name, revenue: weekStarts.map((ws) => round2((revenueByMarket[loc.name] || {})[ws] || 0)) }))
       .sort((a, b) => b.revenue.reduce((s, v) => s + v, 0) - a.revenue.reduce((s, v) => s + v, 0));
 
-    const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: currentWeekStart };
+    const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: lastCompleteWeekStart };
     cacheManager.set(cacheKey, response, 4 * 60 * 60 * 1000); // Cache for 4 hours
     res.json(response);
   } catch (err) {
