@@ -1613,7 +1613,12 @@
       const [windowWeeks, setWindowWeeks] = useState(26);
       const [offsetWeeks, setOffsetWeeks] = useState(0);
 
-      useEffect(() => { fetchData(); }, []);
+      useEffect(() => {
+        fetchData();
+        // Auto-refresh every 30 minutes to pick up new weeks from Square cache updates
+        const interval = setInterval(fetchData, 30 * 60 * 1000);
+        return () => clearInterval(interval);
+      }, []);
       const fetchData = async () => {
         try {
           setStatus('loading');
@@ -1711,7 +1716,12 @@
       const [windowWeeks, setWindowWeeks] = useState(26);
       const [offsetWeeks, setOffsetWeeks] = useState(0);
 
-      useEffect(() => { fetchData(); }, []);
+      useEffect(() => {
+        fetchData();
+        // Auto-refresh every 30 minutes to pick up new weeks from Square cache updates
+        const interval = setInterval(fetchData, 30 * 60 * 1000);
+        return () => clearInterval(interval);
+      }, []);
       const fetchData = async () => {
         try {
           setStatus('loading');
