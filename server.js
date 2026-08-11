@@ -2207,6 +2207,8 @@ app.get('/api/market-performance', async (req, res) => {
     const weekStarts = [];
     for (let d = rangeStart; d <= currentWeekStart; d = addDays(d, 7)) weekStarts.push(d);
 
+    console.log(`📅 /api/market-performance fetching dates: ${rangeStart} to ${currentWeekStart} (${weekStarts.length} weeks)`);
+
     const revenueByMarket = await Promise.race([
       getMarketWeeklyRevenue(rangeStart, currentWeekStart, startDow),
       timeoutPromise
@@ -2216,6 +2218,9 @@ app.get('/api/market-performance', async (req, res) => {
       .map((loc) => ({ name: loc.name, revenue: weekStarts.map((ws) => round2((revenueByMarket[loc.name] || {})[ws] || 0)) }))
       .filter((m) => m.revenue.some((v) => v > 0) || ['506 Retail', 'State St'].includes(m.name))
       .sort((a, b) => b.revenue.reduce((s, v) => s + v, 0) - a.revenue.reduce((s, v) => s + v, 0));
+
+    console.log(`📊 Returning ${markets.length} markets: ${markets.map(m => m.name).join(', ')}`);
+    console.log(`   Week dates: ${weekStarts.join(', ')}`);
 
     const response = { success: true, weekStarts, markets, rangeStart, rangeEnd: currentWeekStart };
     cacheManager.set(cacheKey, response, 4 * 60 * 60 * 1000); // Cache for 4 hours
