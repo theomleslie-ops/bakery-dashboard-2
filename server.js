@@ -2695,6 +2695,12 @@ const refreshSquareMarketCache = async () => {
     const oneYearAgo = addDays(currentWeekStart, -52 * 7);
 
     await getMarketWeeklyRevenue(oneYearAgo, currentWeekStart, startDow);
+
+    // Clear API endpoint caches so new data is served immediately
+    cacheManager.delete('market_perf_52');
+    cacheManager.delete('market_perf_156');
+    cacheManager.delete('store_perf_260');
+
     console.log(`✅ Square market performance cache warmed (${oneYearAgo} to ${currentWeekStart})`);
   } catch (err) {
     console.error(`❌ Square cache refresh failed:`, err.message);
