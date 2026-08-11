@@ -1628,16 +1628,6 @@
           if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
           let weekStarts = result.weekStarts || [];
           let markets = result.markets || [];
-          if (weekStarts.length > 1 && markets.length > 0) {
-            const lastWeekIdx = weekStarts.length - 1;
-            const lastWeekTotal = markets.reduce((sum, m) => sum + (m.revenue[lastWeekIdx] || 0), 0);
-            const prevWeekIdx = lastWeekIdx - 1;
-            const prevWeekTotal = markets.reduce((sum, m) => sum + (m.revenue[prevWeekIdx] || 0), 0);
-            if (prevWeekTotal > 0 && lastWeekTotal < prevWeekTotal * 0.6) {
-              weekStarts = weekStarts.slice(0, -1);
-              markets = markets.map(m => ({ ...m, revenue: m.revenue.slice(0, -1) }));
-            }
-          }
           markets = markets.filter(m => !INACTIVE_MARKETS.includes(m.name));
           setAllWeekStarts(weekStarts);
           setAllMarkets(markets);
@@ -1731,16 +1721,6 @@
           if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
           let weekStarts = result.weekStarts || [];
           let markets = result.markets || [];
-          if (weekStarts.length > 1 && markets.length > 0) {
-            const lastWeekIdx = weekStarts.length - 1;
-            const lastWeekTotal = markets.reduce((sum, m) => sum + (m.revenue[lastWeekIdx] || 0), 0);
-            const prevWeekIdx = lastWeekIdx - 1;
-            const prevWeekTotal = markets.reduce((sum, m) => sum + (m.revenue[prevWeekIdx] || 0), 0);
-            if (prevWeekTotal > 0 && lastWeekTotal < prevWeekTotal * 0.6) {
-              weekStarts = weekStarts.slice(0, -1);
-              markets = markets.map(m => ({ ...m, revenue: m.revenue.slice(0, -1) }));
-            }
-          }
           setAllWeekStarts(weekStarts);
           setAllMarkets(markets);
           setSelected(new Set(markets.map(m => m.name)));
