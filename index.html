@@ -1661,7 +1661,14 @@
       };
       const totalRevenue = (m) => m.revenue.reduce((s, v) => s + v, 0);
       const visibleSeries = markets.filter(m => selected.has(m.name));
-      const rangeLabel = weekStarts.length ? `${fmtWeekLabelFull(weekStarts[0])} – ${fmtWeekLabelFull(weekStarts[weekStarts.length - 1])}` : '';
+      const rangeLabel = weekStarts.length ? (() => {
+        const startStr = weekStarts[0];
+        const lastWeekStart = weekStarts[weekStarts.length - 1];
+        // Week ends on Sunday, 6 days after Monday start
+        const [y, m, d] = lastWeekStart.split('-').map(Number);
+        const lastWeekEnd = new Date(y, m - 1, d + 6).toISOString().slice(0, 10);
+        return `${fmtWeekLabelFull(startStr)} – ${fmtWeekLabelFull(lastWeekEnd)}`;
+      })() : '';
 
       return (
         <div className="container">
@@ -1750,7 +1757,14 @@
       };
       const totalRevenue = (m) => m.revenue.reduce((s, v) => s + v, 0);
       const visibleSeries = markets.filter(m => selected.has(m.name));
-      const rangeLabel = weekStarts.length ? `${fmtWeekLabelFull(weekStarts[0])} – ${fmtWeekLabelFull(weekStarts[weekStarts.length - 1])}` : '';
+      const rangeLabel = weekStarts.length ? (() => {
+        const startStr = weekStarts[0];
+        const lastWeekStart = weekStarts[weekStarts.length - 1];
+        // Week ends on Sunday, 6 days after Monday start
+        const [y, m, d] = lastWeekStart.split('-').map(Number);
+        const lastWeekEnd = new Date(y, m - 1, d + 6).toISOString().slice(0, 10);
+        return `${fmtWeekLabelFull(startStr)} – ${fmtWeekLabelFull(lastWeekEnd)}`;
+      })() : '';
 
       return (
         <div className="container">
