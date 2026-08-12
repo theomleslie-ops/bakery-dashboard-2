@@ -2651,7 +2651,7 @@ app.get('/overtime', (req, res) => {
   res.sendFile('overtime.html', { root: __dirname });
 });
 
-// Public Market Performance Dashboard (no auth required)
+// Public Market Performance Dashboard (no auth required, full features)
 app.get('/public-market-performance', (req, res) => {
   const html = `<!doctype html>
 <html>
@@ -2665,19 +2665,19 @@ app.get('/public-market-performance', (req, res) => {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background: #faf9f7; color: #2c2416; }
-    .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+    .container { max-width: 100%; margin: 0; padding: 20px 40px; }
     header { text-align: center; margin-bottom: 30px; }
     h1 { color: #6b4423; font-size: 28px; margin-bottom: 8px; }
     .subtitle { color: #8b6c57; font-size: 14px; }
     .loading { text-align: center; padding: 40px; color: #8b6c57; }
     .error { background: #fee; border: 1px solid #fcc; color: #c00; padding: 12px; border-radius: 4px; margin-bottom: 20px; }
-    .chart-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .chart-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-right: 0; transition: margin-right 0.2s ease; }
     .chart-title { font-weight: 600; color: #6b4423; margin-bottom: 20px; font-size: 16px; }
-    .controls { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
-    .view-toggle { display: flex; gap: 8px; }
+    .controls { display: flex; gap: 20px; margin-bottom: 20px; }
     button { padding: 8px 12px; border: 1px solid #d4b5a0; background: white; color: #6b4423; border-radius: 4px; cursor: pointer; font-size: 14px; }
-    button.active { background: #6b4423; color: white; border-color: #6b4423; }
-    button:hover:not(.active) { background: #f5f1ed; }
+    button:hover:not(:disabled) { background: #f5f1ed; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    select { padding: 4px; font-size: 12px; border: 1px solid #d4b5a0; border-radius: 4px; }
     svg { width: 100%; height: auto; }
   </style>
 </head>
@@ -2688,6 +2688,11 @@ app.get('/public-market-performance', (req, res) => {
 
     const FOCUS_MARKETS = ['506 Retail', 'State St', 'SMA FRI', 'LA Farmers THU', 'DALY CITY THU', 'MV SUN', 'Alum Rock Village (Sun)', 'INNER SUNSET SUN', 'DIVISADERO SUN', 'FM SF SUN'];
     const MARKET_TOP_N_OPTIONS = [5, 8, 10, 15, 20, 25];
+
+    const fmtWeekLabel = (dateStr) => {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    };
 
     const fmtMoneyShort = (v) => {
       if (Math.abs(v) >= 1000) return \`$\${Math.round(v / 1000).toLocaleString()}k\`;
@@ -2718,33 +2723,31 @@ app.get('/public-market-performance', (req, res) => {
 
       return (
         <div ref={menuRef} style={{ position: 'relative', display: 'inline-block', zIndex: 100 }}>
-          <button onClick={() => setOpen(o => !o)} style={{ padding: '8px 12px', border: '1px solid #d4b5a0', background: 'white', color: '#6b4423', borderRadius: '4px', cursor: 'pointer', fontSize: '14px' }}>
-            Select Markets ({selected.size}) {open ? '▴' : '▾'}
-          </button>
+          <button onClick={() => setOpen(o => !o)}>Select Markets ({selected.size}) {open ? '▴' : '▾'}</button>
           {open && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', maxHeight: '60vh', overflowY: 'auto', background: 'white', border: '1px solid #d4b5a0', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 1000, padding: '10px', width: '380px', maxWidth: '90vw' }}>
+            <div style={{ position: 'fixed', top: '50%', right: '20px', transform: 'translateY(-50%)', maxHeight: '80vh', overflowY: 'auto', background: 'white', border: '1px solid #d4b5a0', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 1000, padding: '10px', width: '360px' }}>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid #d4b5a0' }}>
-                <button onClick={() => { setSelected(new Set(markets.map(m => m.name))); }} style={{ padding: '6px 10px', fontSize: '12px', background: '#f5f1ed', border: '1px solid #d4b5a0', borderRadius: '4px', cursor: 'pointer' }}>Select All</button>
-                <button onClick={() => { setSelected(new Set()); }} style={{ padding: '6px 10px', fontSize: '12px', background: '#f5f1ed', border: '1px solid #d4b5a0', borderRadius: '4px', cursor: 'pointer' }}>Select None</button>
+                <button onClick={() => { setSelected(new Set(markets.map(m => m.name))); }} style={{ padding: '6px 10px', fontSize: '12px' }}>All</button>
+                <button onClick={() => { setSelected(new Set()); }} style={{ padding: '6px 10px', fontSize: '12px' }}>None</button>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#6b4423' }}>
-                  Top <select value={topN} onChange={(e) => { const n = parseInt(e.target.value, 10); setTopN(n); setBottomN(null); setSelected(new Set(markets.slice(0, n).map(m => m.name))); }} style={{ padding: '4px', fontSize: '12px' }}>
+                  Top <select value={topN} onChange={(e) => { const n = parseInt(e.target.value, 10); setTopN(n); setBottomN(null); setSelected(new Set(markets.slice(0, n).map(m => m.name))); }}>
                     {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#6b4423' }}>
-                  Bottom <select value={bottomN || ''} onChange={(e) => { const n = e.target.value ? parseInt(e.target.value, 10) : null; setBottomN(n); setTopN(8); if (n) setSelected(new Set(markets.slice(-n).map(m => m.name))); }} style={{ padding: '4px', fontSize: '12px' }}>
-                    <option value="">None</option>
+                  Bot <select value={bottomN || ''} onChange={(e) => { const n = e.target.value ? parseInt(e.target.value, 10) : null; setBottomN(n); setTopN(8); if (n) setSelected(new Set(markets.slice(-n).map(m => m.name))); }}>
+                    <option value="">—</option>
                     {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </label>
-                <button onClick={() => { setTopN(8); setBottomN(null); setSelected(new Set(FOCUS_MARKETS.filter(f => markets.some(m => m.name === f)))); }} style={{ padding: '6px 10px', fontSize: '12px', background: '#f5f1ed', border: '1px solid #d4b5a0', borderRadius: '4px', cursor: 'pointer' }}>Focus Markets</button>
+                <button onClick={() => { setTopN(8); setBottomN(null); setSelected(new Set(FOCUS_MARKETS.filter(f => markets.some(m => m.name === f)))); }} style={{ padding: '6px 10px', fontSize: '12px' }}>Focus</button>
               </div>
               {markets.map(m => (
-                <label key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer', fontSize: '13px', color: '#6b4423' }}>
-                  <input type="checkbox" checked={selected.has(m.name)} onChange={() => toggle(m.name)} />
+                <label key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px', cursor: 'pointer', fontSize: '13px', color: '#6b4423', borderRadius: '4px' }} onMouseEnter={(e) => e.target.closest('label').style.background = '#f5f1ed'} onMouseLeave={(e) => e.target.closest('label').style.background = 'transparent'}>
+                  <input type="checkbox" checked={selected.has(m.name)} onChange={() => toggle(m.name)} style={{ cursor: 'pointer' }} />
                   <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: colorOf(m.name), flexShrink: 0 }}></span>
                   <span style={{ flex: 1 }}>{m.name}</span>
-                  <span style={{ color: '#8b6c57' }}>{fmtMoneyShort(totalRevenue(m))}</span>
+                  <span style={{ color: '#8b6c57', fontSize: '12px' }}>{fmtMoneyShort(totalRevenue(m))}</span>
                 </label>
               ))}
             </div>
@@ -2753,12 +2756,86 @@ app.get('/public-market-performance', (req, res) => {
       );
     }
 
+    function MarketLineChart({ weekStarts, series, colorOf }) {
+      const [hoverIndex, setHoverIndex] = useState(null);
+      const chartHeight = 400;
+      const plotLeft = 60, plotRight = 960, plotTop = 20, plotBottom = chartHeight + 20;
+      const n = weekStarts.length || 1;
+      const xPos = (i) => plotLeft + ((plotRight - plotLeft) * i) / Math.max(n - 1, 1);
+      const maxVal = Math.max(1, ...series.flatMap(s => s.revenue));
+      const chartMax = maxVal * 1.1;
+      const getY = (val) => plotBottom - (val / chartMax) * (plotBottom - plotTop);
+      const labelStride = Math.max(1, Math.ceil(n / 16));
+
+      const handleMove = (e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const scale = 1000 / rect.width;
+        const svgX = (e.clientX - rect.left) * scale;
+        const idx = Math.round(((svgX - plotLeft) / (plotRight - plotLeft)) * (n - 1));
+        setHoverIndex(Math.min(Math.max(idx, 0), n - 1));
+      };
+
+      return (
+        <svg width="100%" height="500" viewBox="0 0 1000 500" style={{ overflow: 'visible' }} onMouseMove={handleMove} onMouseLeave={() => setHoverIndex(null)}>
+          <line x1={plotLeft} y1={plotBottom} x2={plotRight} y2={plotBottom} stroke="#ccc" strokeWidth="2" />
+          <line x1={plotLeft} y1={plotTop} x2={plotLeft} y2={plotBottom} stroke="#ccc" strokeWidth="2" />
+          {[0, 1, 2, 3, 4, 5].map(i => {
+            const val = (i * chartMax) / 5;
+            const y = plotBottom - (i * (plotBottom - plotTop)) / 5;
+            return (
+              <g key={\`grid\${i}\`}>
+                <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="#e5e5e5" strokeWidth="1" />
+                <text x={plotLeft - 10} y={y + 4} textAnchor="end" fontSize="11" fill="#8b6c57">\${(val / 1000).toFixed(0)}k</text>
+              </g>
+            );
+          })}
+          {weekStarts.map((ws, i) => (i % labelStride === 0) && (
+            <text key={\`xlabel\${i}\`} x={xPos(i)} y={plotBottom + 20} textAnchor="middle" fontSize="11" fill="#6b4423" fontWeight="600">{fmtWeekLabel(ws)}</text>
+          ))}
+          {series.map(s => (
+            <polyline key={s.name} points={s.revenue.map((v, i) => \`\${xPos(i)},\${getY(v)}\`).join(' ')}
+              fill="none" stroke={colorOf(s.name)} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+          ))}
+          {n <= 14 && series.map(s => s.revenue.map((v, i) => (
+            <circle key={\`\${s.name}-\${i}\`} cx={xPos(i)} cy={getY(v)} r="3" fill={colorOf(s.name)} />
+          )))}
+          {hoverIndex !== null && (
+            <line x1={xPos(hoverIndex)} y1={plotTop} x2={xPos(hoverIndex)} y2={plotBottom} stroke="#ddd" strokeWidth="1" strokeDasharray="3" />
+          )}
+          {hoverIndex !== null && (() => {
+            const rows = series.map(s => ({ name: s.name, value: s.revenue[hoverIndex], color: colorOf(s.name) })).sort((a, b) => b.value - a.value);
+            const shown = rows.slice(0, 12);
+            const cx = xPos(hoverIndex);
+            const tooltipWidth = 220;
+            const tooltipHeight = 30 + shown.length * 18 + (rows.length > 12 ? 18 : 0);
+            const tooltipX = cx < 500 ? cx + 12 : cx - tooltipWidth - 12;
+            const tooltipY = 30;
+            return (
+              <g>
+                <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="white" stroke="#d4b5a0" strokeWidth="1" rx="6" />
+                <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="#6b4423">week of {fmtWeekLabel(weekStarts[hoverIndex])}</text>
+                {shown.map((r, i) => (
+                  <g key={r.name}>
+                    <line x1={tooltipX + 10} y1={tooltipY + 34 + i * 18} x2={tooltipX + 24} y2={tooltipY + 34 + i * 18} stroke={r.color} strokeWidth="3" />
+                    <text x={tooltipX + 30} y={tooltipY + 38 + i * 18} fontSize="11" fill="#8b6c57">{r.name}: <tspan fontWeight="700" fill="#6b4423">\${r.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</tspan></text>
+                  </g>
+                ))}
+                {rows.length > 12 && (
+                  <text x={tooltipX + 10} y={tooltipY + 34 + shown.length * 18} fontSize="10" fill="#bbb">+{rows.length - 12} more</text>
+                )}
+              </g>
+            );
+          })()}
+        </svg>
+      );
+    }
+
     function MarketPerformanceDashboard() {
-      const [markets, setMarkets] = useState([]);
+      const [allMarkets, setAllMarkets] = useState([]);
+      const [allWeekStarts, setAllWeekStarts] = useState([]);
       const [selected, setSelected] = useState(new Set());
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
-      const [weekStarts, setWeekStarts] = useState([]);
       const [menuOpen, setMenuOpen] = useState(false);
 
       useEffect(() => {
@@ -2774,8 +2851,8 @@ app.get('/public-market-performance', (req, res) => {
           const response = await fetch(\`\${baseUrl}/api/market-performance\`);
           const result = await response.json();
           if (result.error) { setError(result.error); setStatus('error'); return; }
-          setWeekStarts(result.weekStarts || []);
-          setMarkets(result.markets || []);
+          setAllWeekStarts(result.weekStarts || []);
+          setAllMarkets(result.markets || []);
           setSelected(new Set((result.markets || []).slice(0, 8).map(m => m.name)));
           setStatus('ready');
         } catch (err) {
@@ -2784,18 +2861,14 @@ app.get('/public-market-performance', (req, res) => {
         }
       };
 
-      const fmtWeekLabel = (dateStr) => {
-        const [y, m, d] = dateStr.split('-').map(Number);
-        return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-      };
-
-      const visibleMarkets = markets.filter(m => selected.has(m.name));
       const colorOf = (name) => {
-        const colors = ['#2a78d6', '#ff9500', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#6366f1'];
-        return colors[markets.findIndex(m => m.name === name) % colors.length];
+        const idx = allMarkets.findIndex(m => m.name === name);
+        const colors = ['#2a78d6', '#ff9500', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6', '#f97316', '#8b5cf6', '#06b6d4'];
+        return colors[idx >= 0 ? idx : 0];
       };
 
       const totalRevenue = (m) => m.revenue.reduce((s, v) => s + v, 0);
+      const visibleMarkets = allMarkets.filter(m => selected.has(m.name)).map(m => ({ name: m.name, revenue: m.revenue }));
 
       if (status === 'loading') return <div className="container"><div className="loading">Loading market data…</div></div>;
       if (status === 'error') return <div className="container"><div className="error">{error}</div></div>;
@@ -2807,43 +2880,16 @@ app.get('/public-market-performance', (req, res) => {
             <p className="subtitle">Weekly revenue by farmers market location</p>
           </header>
           <div className="controls">
-            <MarketSelectMenu markets={markets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} open={menuOpen} setOpen={setMenuOpen} />
+            {status === 'ready' && (
+              <MarketSelectMenu markets={allMarkets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} open={menuOpen} setOpen={setMenuOpen} />
+            )}
           </div>
-          <div className="chart-container">
-            <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
-            <svg viewBox="0 0 1200 400" preserveAspectRatio="xMidYMid meet" style={{ minHeight: '400px' }}>
-              <defs>
-                {markets.map(m => (
-                  <linearGradient key={m.name} id={\`grad-\${m.name}\`} x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor={colorOf(m.name)} stopOpacity="0.7" />
-                    <stop offset="100%" stopColor={colorOf(m.name)} stopOpacity="0.3" />
-                  </linearGradient>
-                ))}
-              </defs>
-              <line x1="60" y1="350" x2="1150" y2="350" stroke="#ddd" strokeWidth="1" />
-              {weekStarts.map((week, i) => {
-                const x = 60 + (i / (weekStarts.length - 1 || 1)) * 1090;
-                return (
-                  <g key={i}>
-                    <line x1={x} y1="350" x2={x} y2="360" stroke="#ccc" strokeWidth="1" />
-                    {i % Math.max(1, Math.floor(weekStarts.length / 8)) === 0 && (
-                      <text x={x} y="375" textAnchor="middle" fontSize="12" fill="#8b6c57">{fmtWeekLabel(week)}</text>
-                    )}
-                  </g>
-                );
-              })}
-              {visibleMarkets.map(m => {
-                const maxRev = Math.max(...visibleMarkets.flatMap(m => m.revenue)) || 1;
-                return (
-                  <polyline key={m.name} points={m.revenue.map((rev, i) => {
-                    const x = 60 + (i / (weekStarts.length - 1 || 1)) * 1090;
-                    const y = 350 - (rev / maxRev) * 300;
-                    return \`\${x},\${y}\`;
-                  }).join(' ')} fill="none" stroke={colorOf(m.name)} strokeWidth="2.5" strokeLinecap="round" />
-                );
-              })}
-            </svg>
-          </div>
+          {status === 'ready' && (
+            <div className="chart-container" style={{ marginRight: menuOpen ? '380px' : '0px' }}>
+              <div className="chart-title">Weekly Revenue by Market ({selected.size} of {allMarkets.length} selected)</div>
+              <MarketLineChart weekStarts={allWeekStarts} series={visibleMarkets} colorOf={colorOf} />
+            </div>
+          )}
         </div>
       );
     }
