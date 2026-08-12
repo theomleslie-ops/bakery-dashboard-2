@@ -227,17 +227,22 @@
             try {
                 // Load QB P&L weekly data
                 const qbRes = await fetch(`${API_BASE}/api/pl/weekly/summary`);
+                if (!qbRes.ok) {
+                    throw new Error(`HTTP ${qbRes.status}: ${qbRes.statusText}`);
+                }
                 const qbData = await qbRes.json();
+                console.log('QB P&L Response:', qbData);
 
-                if (qbData.success || qbData.weeks) {
+                if (qbData.weeks > 0 || qbData.success) {
                     document.getElementById('qb-status').textContent = '✅ Connected';
                     displayQBData(qbData);
                 } else {
-                    document.getElementById('qb-status').textContent = '❌ Error';
-                    showError(`QB P&L: ${qbData.error || 'No data'}`);
+                    document.getElementById('qb-status').textContent = '⚠️ No Data';
+                    showError(`QB P&L: No data available (weeks: ${qbData.weeks})`);
                 }
             } catch (err) {
                 document.getElementById('qb-status').textContent = '❌ Error';
+                console.error('QB P&L Error:', err);
                 showError(`QB P&L: ${err.message}`);
             }
         }
@@ -259,17 +264,33 @@
 
         function displayQBData(data) {
             const div = document.getElementById('qb-data');
+
+            console.log('displayQBData called with:', { weeks: data.weeks, totals: data.totals, margins: data.margins });
+
             if (!data.weeks || data.weeks === 0) {
-                div.innerHTML = '<p>No QB P&L data available</p>';
+                div.innerHTML = `
+                    <p>No QB P&L data available</p>
+                    <details style="font-size: 0.8rem; color: var(--text-light); margin-top: 1rem;">
+                        <summary>Debug Info</summary>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </details>
+                `;
                 return;
             }
 
             const totals = data.totals || {};
             const margins = data.margins || {};
-            const revenue = totals.revenue ? `$${totals.revenue.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0';
-            const cogs = totals.cogs ? `$${totals.cogs.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0';
-            const operations = totals.operations ? `$${totals.operations.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0';
-            const netIncome = totals.netIncome ? `$${totals.netIncome.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0';
+
+            // Format numbers safely
+            const formatMoney = (val) => {
+                if (typeof val !== 'number' || isNaN(val)) return '$0';
+                return `$${val.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+            };
+
+            const revenue = formatMoney(totals.revenue);
+            const cogs = formatMoney(totals.cogs);
+            const operations = formatMoney(totals.operations);
+            const netIncome = formatMoney(totals.netIncome);
 
             div.innerHTML = `
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
