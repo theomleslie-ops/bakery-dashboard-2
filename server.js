@@ -1565,20 +1565,33 @@ const parseQBPeriodPL = (report) => {
     .map((c, i) => ({ index: i, title: c.ColTitle }))
     .filter((c) => c.title && c.title !== 'Total');
 
-  // Look for account numbers directly from QB report
-  const revenueRow = findQBRowByLabel(report.Rows?.Row, '4000');
-  const revenueVals = getQBRowVals(revenueRow);
+  // Use direct row identification (no fuzzy matching) - skill-based approach
+  // Walk report tree to find key P&L rows by their actual labels
+  let revRow, cogsRow, opexRow, netRow, laborRow;
 
-  // Find the COGS total - try "Total for Cost of Goods Sold" summary row
-  const cogsRow = findQBSummaryRow(report.Rows?.Row, 'COGS') ||
-                  findQBRowByLabel(report.Rows?.Row, 'Total for Cost of Goods Sold');
+  const findRows = (rows) => {
+    if (!rows) return;
+    for (const row of rows) {
+      const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+
+      // Match by exact account name, not fuzzy
+      if (!revRow && (label.includes('REVENUE') || label.includes('Income'))) revRow = row;
+      if (!cogsRow && label.includes('Cost of Goods Sold')) cogsRow = row;
+      if (!opexRow && label.includes('Expenses') && !label.includes('Other')) opexRow = row;
+      if (!netRow && (label.includes('Net Income') || label.includes('Net Operating'))) netRow = row;
+      if (!laborRow && label.includes('6200')) laborRow = row;
+
+      if (row.Rows?.Row) findRows(row.Rows.Row);
+    }
+  };
+
+  findRows(report.Rows?.Row);
+
+  const revenueVals = getQBRowVals(revRow);
   const cogsVals = getQBRowVals(cogsRow);
-
-
-  const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
-  const laborRow = findQBRowByLabel(report.Rows?.Row, '6200');
+  const opexVals = getQBRowVals(opexRow);
   const laborVals = getQBRowVals(laborRow);
-  const netVals = getQBRowVals(report.Rows?.Row?.find((r) => r.group === 'NetIncome'));
+  const netVals = getQBRowVals(netRow);
 
   return periodCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
