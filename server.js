@@ -1568,8 +1568,26 @@ const parseQBPeriodPL = (report) => {
     .filter((c) => c.title && c.title !== 'Total');
 
   const revenueVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Income'));
-  const cogsVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'COGS'));
+  const cogsRow = findQBSummaryRow(report.Rows?.Row, 'COGS');
+  const cogsVals = getQBRowVals(cogsRow);
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
+
+  // Debug logging for COGS
+  if (!cogsRow) {
+    console.warn('⚠️  COGS row not found in QB report');
+    const allGroups = [];
+    const walkGroups = (rows) => {
+      if (!rows) return;
+      for (const row of rows) {
+        if (row.group) allGroups.push(row.group);
+        if (row.Rows?.Row) walkGroups(row.Rows.Row);
+      }
+    };
+    if (report.Rows?.Row) walkGroups(report.Rows.Row);
+    console.warn('  Available groups:', [...new Set(allGroups)].join(', '));
+  } else {
+    console.log('✓ COGS values found:', cogsVals.slice(0, 3).map(v => `$${v.toFixed(0)}`).join(', '));
+  }
   // Match the labor/payroll row - try account 6200 (LABOR/PAYROLL EXPENSES) in this order:
   // 1. Total for 6200 LABOR/PAYROLL - summary total with all sub-items
   // 2. Just 6200 - the account total
