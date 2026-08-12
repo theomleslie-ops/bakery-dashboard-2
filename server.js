@@ -1675,60 +1675,41 @@ const loadQBWeeklySnapshot = () => {
 };
 const saveQBWeeklySnapshot = (snapshot) => saveData(QB_WEEKLY_SNAPSHOT_FILE, snapshot);
 
-// Fetch QB P&L data week-by-week (one week at a time, skill pattern)
-// Each call returns single metrics for that week
-const fetchQBWeeklyRows = async (startDate, endDateExclusive) => {
-  const rows = {};
-  let current = startDate;
+// Fetch QB P&L for ONE specific week - ONLY ONE WEEK, NO COMBINATION
+const fetchSingleWeek = async (weekStart, weekEnd) => {
+  try {
+    // Call QB API for this week only
+    const report = await fetchQBWeekData(weekStart, weekEnd);
 
-  while (current < endDateExclusive) {
-    const weekEnd = addDays(current, 6); // Sunday
-    const fetchEnd = Math.min(weekEnd, addDays(endDateExclusive, -1));
+    // Identify row IDs (cached after first call)
+    const rowMap = identifyRowIds(report);
 
-    try {
-      // Fetch QB data for this ONE week
-      const report = await fetchQBWeekData(current, fetchEnd);
+    // Extract metrics for THIS WEEK ONLY
+    const metrics = extractWeekMetrics(report, rowMap);
 
-      // Identify row IDs (cached after first call)
-      const rowMap = identifyRowIds(report);
-
-      // Extract metrics for this week
-      const metrics = extractWeekMetrics(report, rowMap);
-
-      // Store week data
-      rows[current] = {
-        label: `${new Date(current).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-        fullLabel: `${new Date(current).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(fetchEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-        revenue: metrics.revenue || 0,
-        cogs: metrics.cogs || 0,
-        opex: metrics.operations || 0,
-        labor: 0,
-        pl: metrics.net_income || 0,
-      };
-
-      console.log(`✓ Week ${current}:`, rows[current]);
-    } catch (err) {
-      console.error(`✗ Failed to fetch week ${current}:`, err.message);
-      rows[current] = {
-        label: new Date(current).toLocaleDateString(),
-        fullLabel: new Date(current).toLocaleDateString(),
-        revenue: 0, cogs: 0, opex: 0, labor: 0, pl: 0
-      };
-    }
-
-    current = addDays(current, 7);
+    // Return single week object
+    return {
+      label: `${new Date(weekStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      fullLabel: `${new Date(weekStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(weekEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      revenue: metrics.revenue || 0,
+      cogs: metrics.cogs || 0,
+      opex: metrics.operations || 0,
+      labor: 0,
+      pl: metrics.net_income || 0,
+    };
+  } catch (err) {
+    console.error(`✗ Failed to fetch week ${weekStart} to ${weekEnd}:`, err.message);
+    return {
+      label: new Date(weekStart).toLocaleDateString(),
+      fullLabel: new Date(weekStart).toLocaleDateString(),
+      revenue: 0, cogs: 0, opex: 0, labor: 0, pl: 0
+    };
   }
-
-  return rows;
 };
 
-// Get real per-week QuickBooks P&L totals for [rangeStart, rangeEndInclusive] (both Sundays),
-// backfilling from QuickBooks into the on-disk snapshot only for weeks not already cached, and
-// refreshing the most recent 2 weeks live if QB is connected. If QB is not connected, serves from cache.
-// Returns array of {row, date} objects to preserve week correspondence for pairing.
+// Fetch each week INDIVIDUALLY - one QB call per week, NO combining
 const getQBWeeklyRows = async (rangeStart, rangeEndInclusive) => {
   const snapshot = loadQBWeeklySnapshot();
-  const earliestCached = Object.keys(snapshot.weeks).sort()[0];
 
   // Only try to fetch from QB if connected
   const isQBConnected = () => {
@@ -1736,13 +1717,21 @@ const getQBWeeklyRows = async (rangeStart, rangeEndInclusive) => {
   };
 
   if (isQBConnected()) {
-    if (!earliestCached || rangeStart < earliestCached) {
-      const backfillEnd = earliestCached && earliestCached > rangeStart ? earliestCached : addDays(rangeEndInclusive, 7);
-      Object.assign(snapshot.weeks, await fetchQBWeeklyRows(rangeStart, backfillEnd));
-    }
+    // Fetch EACH WEEK individually - one at a time
+    let current = rangeStart;
+    while (current <= rangeEndInclusive) {
+      const weekEnd = addDays(current, 6);
 
-    const liveStart = addDays(rangeEndInclusive, -7);
-    Object.assign(snapshot.weeks, await fetchQBWeeklyRows(liveStart, addDays(rangeEndInclusive, 7)));
+      // Skip if already cached
+      if (!snapshot.weeks[current]) {
+        // FETCH THIS WEEK ONLY
+        const weekData = await fetchSingleWeek(current, weekEnd);
+        snapshot.weeks[current] = weekData;
+        console.log(`✓ Fetched week ${current}:`, weekData);
+      }
+
+      current = addDays(current, 7);
+    }
 
     saveQBWeeklySnapshot(snapshot);
   }
