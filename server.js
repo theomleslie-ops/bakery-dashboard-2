@@ -1598,26 +1598,22 @@ const parseQBPeriodPL = (report) => {
 
   findRows(report.Rows?.Row);
 
-  // Debug: Dump ALL row labels to find what's actually in QB response
-  const allLabels = [];
-  const walkAllRows = (rows) => {
-    if (!rows) return;
-    for (const row of rows) {
-      const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-      if (label && label.length > 0) {
-        allLabels.push(label);
-      }
-      if (row.Rows?.Row) walkAllRows(row.Rows.Row);
-    }
-  };
-  walkAllRows(report.Rows?.Row);
+  // Debug: Check if found rows have Summary data
+  if (revRow) {
+    console.log('\n🔍 Revenue row structure:');
+    console.log('  Has Summary?', !!revRow.Summary);
+    console.log('  Has Summary.ColData?', !!revRow.Summary?.ColData);
+    console.log('  Summary.ColData length:', revRow.Summary?.ColData?.length || 0);
+    console.log('  First 3 values:', revRow.Summary?.ColData?.slice(0, 3)?.map(c => c.value) || []);
+  }
 
-  console.log('\n🔍 QB Row Parsing Debug:');
-  console.log('  ALL row labels:', allLabels.filter(l => l.includes('5') || l.includes('6') || l.includes('Total') || l.includes('Income')));
-  console.log('  Revenue row found:', !!revRow, revRow?.Header?.ColData?.[0]?.value);
-  console.log('  COGS row found:', !!cogsRow, cogsRow?.Header?.ColData?.[0]?.value);
-  console.log('  OpEx row found:', !!opexRow, opexRow?.Header?.ColData?.[0]?.value);
-  console.log('  Net Income row found:', !!netRow, netRow?.Header?.ColData?.[0]?.value);
+  if (cogsRow) {
+    console.log('\n🔍 COGS row structure:');
+    console.log('  Has Summary?', !!cogsRow.Summary);
+    console.log('  Has Summary.ColData?', !!cogsRow.Summary?.ColData);
+    console.log('  Summary.ColData length:', cogsRow.Summary?.ColData?.length || 0);
+    console.log('  First 3 values:', cogsRow.Summary?.ColData?.slice(0, 3)?.map(c => c.value) || []);
+  }
 
   const revenueVals = getQBRowVals(revRow);
   const cogsVals = getQBRowVals(cogsRow);
@@ -1625,10 +1621,10 @@ const parseQBPeriodPL = (report) => {
   const laborVals = getQBRowVals(laborRow);
   const netVals = getQBRowVals(netRow);
 
+  console.log('\n📊 Extracted values:');
   console.log('  Revenue values:', revenueVals.slice(0, 3));
   console.log('  COGS values:', cogsVals.slice(0, 3));
   console.log('  OpEx values:', opexVals.slice(0, 3));
-  console.log('');
 
   return periodCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
