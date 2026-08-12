@@ -2694,7 +2694,11 @@ app.get('/public-market-performance', (req, res) => {
       const [weekStarts, setWeekStarts] = useState([]);
       const [viewMode, setViewMode] = useState('dollars');
 
-      useEffect(() => { fetchData(); }, []);
+      useEffect(() => {
+        fetchData();
+        const interval = setInterval(fetchData, 5 * 60 * 1000);
+        return () => clearInterval(interval);
+      }, []);
 
       const fetchData = async () => {
         try {
