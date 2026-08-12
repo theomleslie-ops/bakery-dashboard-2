@@ -1566,7 +1566,7 @@ const parseQBPeriodPL = (report) => {
     .filter((c) => c.title && c.title !== 'Total');
 
   // Use direct row identification (no fuzzy matching) - skill-based approach
-  // Walk report tree to find key P&L rows by their actual labels
+  // Find TOTAL rows within sections, not just the headers
   let revRow, cogsRow, opexRow, netRow, laborRow;
 
   const findRows = (rows) => {
@@ -1574,12 +1574,21 @@ const parseQBPeriodPL = (report) => {
     for (const row of rows) {
       const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
 
-      // Match by exact account name, not fuzzy
-      if (!revRow && (label.includes('REVENUE') || label.includes('Income'))) revRow = row;
-      if (!cogsRow && label.includes('Cost of Goods Sold')) cogsRow = row;
-      if (!opexRow && label.includes('Expenses') && !label.includes('Other')) opexRow = row;
-      if (!netRow && (label.includes('Net Income') || label.includes('Net Operating'))) netRow = row;
-      if (!laborRow && label.includes('6200')) laborRow = row;
+      // Look for specific total/summary rows with values, not just headers
+      if (!revRow && label.includes('Total for Income')) revRow = row;
+      else if (!revRow && label.includes('4000') && label.includes('REVENUE')) revRow = row;
+
+      if (!cogsRow && label.includes('Total for 5000')) cogsRow = row;
+      else if (!cogsRow && label.includes('Total for Cost of Goods Sold')) cogsRow = row;
+
+      if (!opexRow && label.includes('Total for Expenses') && !label.includes('Other')) opexRow = row;
+      else if (!opexRow && label.includes('Total for 6000')) opexRow = row;
+
+      if (!netRow && label.includes('Total for Net Income')) netRow = row;
+      else if (!netRow && label.includes('Net Income')) netRow = row;
+
+      if (!laborRow && label.includes('Total for 6200')) laborRow = row;
+      else if (!laborRow && label.includes('6200') && label.includes('LABOR')) laborRow = row;
 
       if (row.Rows?.Row) findRows(row.Rows.Row);
     }
