@@ -144,7 +144,7 @@
         const cogs = scaled(d, 'cogs');
         const opex = scaled(d, 'opex');
         const pl = scaled(d, 'pl');
-        return { month: d.month, revenue, cogs, opex, pl };
+        return { month: d.month, dateRange: d.dateRange, revenue, cogs, opex, pl };
       });
 
       // Independent line chart: each line scales independently
@@ -213,19 +213,19 @@
                 const p = points[hoveredMonth];
                 const cx = xPos(hoveredMonth);
                 const tooltipWidth = 220;
-                const tooltipHeight = 110;
+                const tooltipHeight = 128;
                 const tooltipX = cx < 400 ? cx + 12 : cx - tooltipWidth - 12;
                 const tooltipY = 30;
                 const format = viewMode === 'percent' ? formatPercentPrecise : formatDollarsPrecise;
                 return (
                   <g key={`tooltip${hoveredMonth}`}>
                     <line x1={cx} y1="50" x2={cx} y2={50 + chartHeight} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
-                    <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
-                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{p.month}</text>
+                    <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight + 18} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
+                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{p.dateRange || p.month}</text>
                     <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">Revenue: {format(p.revenue)}</text>
                     <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">COGS: {format(p.cogs)}</text>
                     <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fill="var(--chart-ink-secondary)">OpEx: {format(p.opex)}</text>
-                    <text x={tooltipX + 10} y={tooltipY + 90} fontSize="11" fill="var(--chart-ink-secondary)" fontWeight="600">{p.pl >= 0 ? 'Profit' : 'Loss'}: {format(Math.abs(p.pl))}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 108} fontSize="11" fill="var(--chart-ink-secondary)" fontWeight="600">{p.pl >= 0 ? 'Profit' : 'Loss'}: {format(Math.abs(p.pl))}</text>
                   </g>
                 );
               })()
@@ -281,7 +281,14 @@
           const response = await fetch(`${baseUrl}/api/dashboard?weeks=${limitedWeeks}`);
           const result = await response.json();
           const filtered = filterIncompleteLastPeriod(result.periodData || []);
-          setData(filtered.map(w => ({ ...w, month: w.label })));
+          setData(filtered.map(w => {
+            const startDate = w.startDate || w.label;
+            const [y, m, d] = startDate.split('-').map(Number);
+            const endDate = new Date(y, m - 1, d + 6);
+            const endStr = endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            const startStr = new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            return { ...w, month: w.label, startDate: startDate, dateRange: `${startStr} – ${endStr}` };
+          }));
           setPeriodSource(result.periodSource || '');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
