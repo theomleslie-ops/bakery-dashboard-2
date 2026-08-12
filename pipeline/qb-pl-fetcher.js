@@ -67,7 +67,7 @@ class QBPLFetcher {
 
     // Debug: log response structure
     console.log('  QB response keys:', Object.keys(report).slice(0, 10).join(', '));
-    if (report.Rows) console.log('  Rows type:', typeof report.Rows, 'is array:', Array.isArray(report.Rows));
+    if (report.Rows) console.log('  Rows type:', typeof report.Rows, 'Rows keys:', Object.keys(report.Rows || {}).slice(0, 5).join(', '));
 
     // Handle both nested (MCP) and flat (REST API) response formats
     let rows = [];
@@ -78,16 +78,24 @@ class QBPLFetcher {
     } else if (Array.isArray(report.Rows)) {
       // QB REST API format - Rows array
       rows = report.Rows;
-      console.log('  Using REST API format, found', rows.length, 'rows');
+      console.log('  Using REST API format (array), found', rows.length, 'rows');
     } else if (report.Rows && typeof report.Rows === 'object') {
-      // QB might return Rows as an object with row data
-      console.warn('  Rows is object, not array. Type:', typeof report.Rows);
-      rows = [];
+      // QB returns Rows as an object with a Row array inside
+      if (Array.isArray(report.Rows.Row)) {
+        rows = report.Rows.Row;
+        console.log('  Using REST API format (Rows.Row array), found', rows.length, 'rows');
+      } else if (report.Rows.Rows && Array.isArray(report.Rows.Rows)) {
+        rows = report.Rows.Rows;
+        console.log('  Using REST API format (Rows.Rows array), found', rows.length, 'rows');
+      } else {
+        console.warn('  Rows is object but no Row/Rows array found. Keys:', Object.keys(report.Rows));
+        rows = [];
+      }
     } else {
       console.error('Unexpected QB response structure:');
       console.error('  Keys:', Object.keys(report));
       console.error('  Rows value:', typeof report.Rows, report.Rows?.constructor?.name);
-      throw new Error('Cannot parse QB P&L response: Rows not found or not an array');
+      throw new Error('Cannot parse QB P&L response: Rows not found');
     }
 
     if (!rows.length) {
@@ -139,15 +147,18 @@ class QBPLFetcher {
       rows = qbResponse.reportData.data.rows;
     } else if (Array.isArray(qbResponse.Rows)) {
       rows = qbResponse.Rows;
-    } else if (qbResponse.Rows) {
-      console.warn('Rows exists but is not an array:', typeof qbResponse.Rows);
-      rows = [];
+    } else if (qbResponse.Rows && typeof qbResponse.Rows === 'object') {
+      // QB returns Rows as an object with a Row array inside
+      if (Array.isArray(qbResponse.Rows.Row)) {
+        rows = qbResponse.Rows.Row;
+      } else if (qbResponse.Rows.Rows && Array.isArray(qbResponse.Rows.Rows)) {
+        rows = qbResponse.Rows.Rows;
+      }
     }
 
     const rowsById = {};
 
     if (!Array.isArray(rows)) {
-      console.warn('Cannot extract metrics: rows is not iterable');
       return { revenue: 0, cogs: 0, operations: 0, netIncome: 0 };
     }
 
