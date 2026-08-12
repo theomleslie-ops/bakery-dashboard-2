@@ -2813,7 +2813,7 @@ app.get('/public-market-performance', (req, res) => {
             return (
               <g>
                 <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="white" stroke="#d4b5a0" strokeWidth="1" rx="6" />
-                <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="#6b4423">week of {fmtWeekLabel(weekStarts[hoverIndex])}</text>
+                <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="#6b4423">Week of {fmtWeekLabel(weekStarts[hoverIndex])}</text>
                 {shown.map((r, i) => (
                   <g key={r.name}>
                     <line x1={tooltipX + 10} y1={tooltipY + 34 + i * 18} x2={tooltipX + 24} y2={tooltipY + 34 + i * 18} stroke={r.color} strokeWidth="3" />
