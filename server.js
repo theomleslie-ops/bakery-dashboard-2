@@ -1552,77 +1552,79 @@ const findQBRowByLabel = (rows, labelSubstring) => {
   return null;
 };
 
-// Skill pattern: Row ID mapper with caching
-class QBRowMapper {
-  constructor() {
-    this.rowMap = null;
-  }
+// Skill pattern: Identify row IDs (Step 1)
+let cachedRowMap = null;
 
-  identifyRowIds(response) {
-    if (this.rowMap) return this.rowMap;
+const identifyRowIds = (response) => {
+  if (cachedRowMap) return cachedRowMap;
 
-    const rows = response.reportData?.data?.rows || [];
-    this.rowMap = {};
+  const rows = response.reportData?.data?.rows || [];
+  const rowMap = {};
 
-    for (const row of rows) {
-      const metadata = row.metadata || {};
-      const accountName = row.cells?.[0]?.value || '';
-      const rowId = metadata.id;
-
-      if (accountName.includes('Income') && !this.rowMap.revenue) {
-        this.rowMap.revenue = rowId;
-      } else if (accountName.includes('Cost of Goods Sold') && !this.rowMap.cogs) {
-        this.rowMap.cogs = rowId;
-      } else if (accountName.includes('Expenses') && !accountName.includes('Other') && !this.rowMap.opex) {
-        this.rowMap.opex = rowId;
-      } else if (accountName.includes('Net Income') && !this.rowMap.net) {
-        this.rowMap.net = rowId;
-      } else if (accountName.includes('LABOR') && !this.rowMap.labor) {
-        this.rowMap.labor = rowId;
+  for (const row of rows) {
+    const metadata = row.metadata || {};
+    if (!metadata.type || (metadata.type !== 'GROUP' && metadata.type !== 'SUMMARY')) {
+      if (!Array.isArray(metadata.type) || (!metadata.type.includes('GROUP') && !metadata.type.includes('SUMMARY'))) {
+        continue;
       }
     }
 
-    console.log('\n✓ QB Row IDs identified:', this.rowMap);
-    return this.rowMap;
+    const accountName = row.cells?.[0]?.value || '';
+    const rowId = metadata.id;
+
+    // Match exactly like the skill
+    if (accountName.includes('Income')) {
+      rowMap.revenue = rowId;
+    } else if (accountName.includes('Cost of Goods Sold')) {
+      rowMap.cogs = rowId;
+    } else if (accountName.includes('Expenses') && !accountName.includes('Other')) {
+      rowMap.operations = rowId;
+    } else if (accountName.includes('Net Income')) {
+      rowMap.net_income = rowId;
+    }
   }
 
-  extractMetrics(response, rowMap) {
-    const rows = response.reportData?.data?.rows || [];
-    const rowsById = {};
+  cachedRowMap = rowMap;
+  console.log('\n📍 Row IDs identified:', rowMap);
+  return rowMap;
+};
 
-    for (const row of rows) {
-      rowsById[row.metadata?.id] = row;
-    }
+// Skill pattern: Extract metrics (Step 2)
+const extractPLMetrics = (response, rowMap) => {
+  const rows = response.reportData?.data?.rows || [];
 
-    const metrics = {};
-    for (const [key, rowId] of Object.entries(rowMap)) {
-      if (rowId && rowsById[rowId]) {
-        metrics[key] = rowsById[rowId].cells?.[1]?.value || 0;
-      } else {
-        metrics[key] = 0;
-      }
-    }
-
-    return metrics;
+  // Create lookup by row ID
+  const rowsById = {};
+  for (const row of rows) {
+    rowsById[row.metadata?.id] = row;
   }
-}
 
-const qbRowMapper = new QBRowMapper();
+  // Extract values using direct row ID lookup
+  const metrics = {};
+  for (const [key, rowId] of Object.entries(rowMap)) {
+    if (rowId && rowsById[rowId]) {
+      const row = rowsById[rowId];
+      // cells[1] contains the total amount
+      metrics[key] = row.cells?.[1]?.value || 0;
+    }
+  }
 
-// Skill pattern: Extract P&L metrics using direct row ID lookups (no fuzzy matching)
+  console.log('  Metrics:', metrics);
+  return metrics;
+};
+
+// Skill pattern: Parse QB Period P&L
 const parseQBPeriodPL = (response) => {
   const columns = response.Columns?.Column || [];
   const periodCols = columns
     .map((c, i) => ({ index: i, title: c.ColTitle }))
     .filter((c) => c.title && c.title !== 'Total');
 
-  // Identify row IDs once, cache for reuse
-  const rowMap = qbRowMapper.identifyRowIds(response);
+  // Step 1: Identify row IDs
+  const rowMap = identifyRowIds(response);
 
-  // Extract metrics using skill pattern: direct row ID lookup
-  const metrics = qbRowMapper.extractMetrics(response, rowMap);
-
-  console.log('\n📊 Extracted metrics:', metrics);
+  // Step 2: Extract metrics
+  const metrics = extractPLMetrics(response, rowMap);
 
   return periodCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
@@ -1633,9 +1635,9 @@ const parseQBPeriodPL = (response) => {
       fullLabel: isBareMonth ? MONTH_NAMES[monthIdx] : col.title,
       revenue: metrics.revenue || 0,
       cogs: metrics.cogs || 0,
-      opex: metrics.opex || 0,
-      labor: metrics.labor || 0,
-      pl: metrics.net || 0,
+      opex: metrics.operations || 0,
+      labor: 0,
+      pl: metrics.net_income || 0,
     };
   });
 };
