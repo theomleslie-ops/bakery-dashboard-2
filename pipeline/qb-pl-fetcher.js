@@ -106,7 +106,15 @@ class QBPLFetcher {
 
     this.rowMap = {};
 
-    for (const row of rows) {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
+      // Debug: log actual row structure for first 2 rows
+      if (i < 2) {
+        console.log(`  Row ${i}: ${JSON.stringify(row).substring(0, 150)}`);
+        console.log(`    Keys: ${Object.keys(row).join(', ')}`);
+      }
+
       // Handle both row formats - QB REST API uses different structure
       let accountName, rowId, rowType;
 
@@ -115,6 +123,8 @@ class QBPLFetcher {
         accountName = row.cells[0].value;
       } else if (row.ColData && Array.isArray(row.ColData) && row.ColData[0]) {
         accountName = row.ColData[0].value;
+      } else if (row.Header && row.Header.ColData && Array.isArray(row.Header.ColData)) {
+        accountName = row.Header.ColData[0].value;
       }
 
       // Try different property paths for row ID
@@ -123,14 +133,9 @@ class QBPLFetcher {
       // Try different property paths for row type
       rowType = row.metadata?.type || row.type || [];
 
-      if (!accountName) continue;
+      console.log(`  Row ${i}: accountName="${accountName}", rowId="${rowId}"`);
 
-      // Debug: log first few rows to understand structure
-      if (Object.keys(this.rowMap).length === 0 && rows.indexOf(row) < 3) {
-        console.log(`  Sample row: accountName="${accountName}", rowId="${rowId}", rowType="${rowType}"`);
-        console.log(`    Row keys: ${Object.keys(row).slice(0, 8).join(', ')}`);
-        if (row.ColData) console.log(`    ColData[0]="${row.ColData[0]?.value}", ColData[1]="${row.ColData[1]?.value}"`);
-      }
+      if (!accountName) continue;
 
       // Only look at top-level summary rows
       if (Array.isArray(rowType) && !rowType.includes('GROUP') && !rowType.includes('SUMMARY')) {
