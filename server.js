@@ -1471,7 +1471,6 @@ app.post('/api/google/disconnect', (req, res) => {
 
 // Fetch a Profit & Loss report from QuickBooks, broken into periods (Week or Month) for a date range
 const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Week') => {
-  // Skill pattern: Use QB Report API with new response format (reportData.data.rows)
   console.log(`Fetching QB P&L: ${startDate} to ${endDate} (${summarizeColumnBy})`);
   const tokens = await getValidQBAccessToken();
   const response = await axios.get(
@@ -1481,7 +1480,42 @@ const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Wee
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
     }
   );
-  return response.data;
+
+  // Convert to skill format: reportData.data.rows with metadata.id and cells[1].value
+  const qbReport = response.data;
+  const rows = [];
+  let rowId = 0;
+
+  const walkRows = (rowsArray) => {
+    if (!rowsArray) return;
+    for (const row of rowsArray) {
+      const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+      const values = row.Summary?.ColData || row.Header?.ColData || [];
+
+      if (label && values.length > 0) {
+        rowId++;
+        rows.push({
+          metadata: {
+            id: String(rowId),
+            type: row.Summary ? ['SUMMARY'] : ['GROUP']
+          },
+          cells: [
+            { name: 'ACCOUNT_NAME', value: label },
+            { name: 'TOTAL_AMOUNT', value: values[0]?.value || 0 }
+          ]
+        });
+      }
+
+      if (row.Rows?.Row) walkRows(row.Rows.Row);
+    }
+  };
+
+  walkRows(qbReport.Rows?.Row);
+
+  return {
+    ...qbReport,
+    reportData: { data: { rows } }
+  };
 };
 
 const MONTH_SHORTS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1518,87 +1552,77 @@ const findQBRowByLabel = (rows, labelSubstring) => {
   return null;
 };
 
-// QB Fetcher: Identify row IDs by walking the entire tree once
+// Skill pattern: Row ID mapper with caching
 class QBRowMapper {
   constructor() {
     this.rowMap = null;
   }
 
-  identifyRows(response) {
+  identifyRowIds(response) {
     if (this.rowMap) return this.rowMap;
 
+    const rows = response.reportData?.data?.rows || [];
     this.rowMap = {};
-    const allRows = [];
 
-    // Walk entire tree and collect all rows with Summary data
-    const walkRows = (rowsArray) => {
-      if (!rowsArray) return;
-      for (const row of rowsArray) {
-        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        if (row.Summary?.ColData && label) {
-          allRows.push({ label, row });
-        }
-        if (row.Rows?.Row) walkRows(row.Rows.Row);
-      }
-    };
+    for (const row of rows) {
+      const metadata = row.metadata || {};
+      const accountName = row.cells?.[0]?.value || '';
+      const rowId = metadata.id;
 
-    walkRows(response.Rows?.Row);
-
-    // Match by account name - skill pattern
-    for (const { label, row } of allRows) {
-      if (!this.rowMap.revenue && label.includes('Income')) {
-        this.rowMap.revenue = row;
-      }
-      if (!this.rowMap.cogs && label.includes('Cost of Goods Sold')) {
-        this.rowMap.cogs = row;
-      }
-      if (!this.rowMap.opex && label.includes('Expenses') && !label.includes('Other')) {
-        this.rowMap.opex = row;
-      }
-      if (!this.rowMap.net && label.includes('Net Income')) {
-        this.rowMap.net = row;
-      }
-      if (!this.rowMap.labor && label.includes('LABOR')) {
-        this.rowMap.labor = row;
+      if (accountName.includes('Income') && !this.rowMap.revenue) {
+        this.rowMap.revenue = rowId;
+      } else if (accountName.includes('Cost of Goods Sold') && !this.rowMap.cogs) {
+        this.rowMap.cogs = rowId;
+      } else if (accountName.includes('Expenses') && !accountName.includes('Other') && !this.rowMap.opex) {
+        this.rowMap.opex = rowId;
+      } else if (accountName.includes('Net Income') && !this.rowMap.net) {
+        this.rowMap.net = rowId;
+      } else if (accountName.includes('LABOR') && !this.rowMap.labor) {
+        this.rowMap.labor = rowId;
       }
     }
 
-    console.log('\n📊 QB Row Map identified:');
-    console.log('  Revenue:', this.rowMap.revenue?.Header?.ColData?.[0]?.value || 'NOT FOUND');
-    console.log('  COGS:', this.rowMap.cogs?.Header?.ColData?.[0]?.value || 'NOT FOUND');
-    console.log('  OpEx:', this.rowMap.opex?.Header?.ColData?.[0]?.value || 'NOT FOUND');
-    console.log('  Net:', this.rowMap.net?.Header?.ColData?.[0]?.value || 'NOT FOUND');
-    console.log('  Labor:', this.rowMap.labor?.Header?.ColData?.[0]?.value || 'NOT FOUND');
-
+    console.log('\n✓ QB Row IDs identified:', this.rowMap);
     return this.rowMap;
   }
 
-  extractMetrics(response) {
-    const rowMap = this.identifyRows(response);
+  extractMetrics(response, rowMap) {
+    const rows = response.reportData?.data?.rows || [];
+    const rowsById = {};
 
-    const getVals = (row) => row?.Summary?.ColData?.map(c => parseFloat(c.value) || 0) || [];
+    for (const row of rows) {
+      rowsById[row.metadata?.id] = row;
+    }
 
-    return {
-      revenue: getVals(rowMap.revenue),
-      cogs: getVals(rowMap.cogs),
-      opex: getVals(rowMap.opex),
-      net: getVals(rowMap.net),
-      labor: getVals(rowMap.labor)
-    };
+    const metrics = {};
+    for (const [key, rowId] of Object.entries(rowMap)) {
+      if (rowId && rowsById[rowId]) {
+        metrics[key] = rowsById[rowId].cells?.[1]?.value || 0;
+      } else {
+        metrics[key] = 0;
+      }
+    }
+
+    return metrics;
   }
 }
 
 const qbRowMapper = new QBRowMapper();
 
-// Skill pattern: Extract P&L metrics using direct row ID matching
+// Skill pattern: Extract P&L metrics using direct row ID lookups (no fuzzy matching)
 const parseQBPeriodPL = (response) => {
   const columns = response.Columns?.Column || [];
   const periodCols = columns
     .map((c, i) => ({ index: i, title: c.ColTitle }))
     .filter((c) => c.title && c.title !== 'Total');
 
-  // Extract all metrics at once using cached row map
-  const metrics = qbRowMapper.extractMetrics(response);
+  // Identify row IDs once, cache for reuse
+  const rowMap = qbRowMapper.identifyRowIds(response);
+
+  // Extract metrics using skill pattern: direct row ID lookup
+  const metrics = qbRowMapper.extractMetrics(response, rowMap);
+
+  console.log('\n📊 Extracted metrics:', metrics);
 
   return periodCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
@@ -1607,11 +1631,11 @@ const parseQBPeriodPL = (response) => {
     return {
       label: isBareMonth ? MONTH_SHORTS[monthIdx] : (shortLabelMatch ? shortLabelMatch[1] : col.title),
       fullLabel: isBareMonth ? MONTH_NAMES[monthIdx] : col.title,
-      revenue: metrics.revenue[col.index] || 0,
-      cogs: metrics.cogs[col.index] || 0,
-      opex: metrics.opex[col.index] || 0,
-      labor: metrics.labor[col.index] || 0,
-      pl: metrics.net[col.index] || 0,
+      revenue: metrics.revenue || 0,
+      cogs: metrics.cogs || 0,
+      opex: metrics.opex || 0,
+      labor: metrics.labor || 0,
+      pl: metrics.net || 0,
     };
   });
 };
