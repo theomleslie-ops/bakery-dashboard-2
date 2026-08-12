@@ -1931,6 +1931,11 @@ app.get('/api/dashboard', async (req, res) => {
 
       periodData = weeklyRows.map(({ row, date }) => ({ ...row, startDate: date }));
 
+      console.log('📊 /api/dashboard - Weekly data:');
+      periodData.forEach((p, i) => {
+        console.log(`  Week ${i}: ${p.startDate} - Revenue: $${Math.round(p.revenue)}, COGS: $${Math.round(p.cogs)}, OpEx: $${Math.round(p.opex)}, P&L: $${Math.round(p.pl)}`);
+      });
+
       periodSource = 'QuickBooks (cached + live, weekly)';
     } catch (err) {
       if (err.code !== 'QB_NOT_CONNECTED') {
