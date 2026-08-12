@@ -1574,6 +1574,14 @@ const parseQBPeriodPL = (report) => {
                   findQBRowByLabel(report.Rows?.Row, 'Total for Cost of Goods Sold');
   const cogsVals = getQBRowVals(cogsRow);
 
+  console.log('🔍 COGS Search:');
+  console.log('  Row found:', !!cogsRow);
+  if (cogsRow) {
+    const label = cogsRow.Header?.ColData?.[0]?.value || cogsRow.ColData?.[0]?.value || 'NO LABEL';
+    console.log('  Label:', label);
+    console.log('  Values (first 3):', cogsVals.slice(0, 3));
+  }
+
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
   const laborRow = findQBRowByLabel(report.Rows?.Row, '6200');
   const laborVals = getQBRowVals(laborRow);
