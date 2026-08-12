@@ -65,17 +65,35 @@ class QBPLFetcher {
       today.toISOString().split('T')[0]
     );
 
+    // Debug: log response structure
+    console.log('  QB response keys:', Object.keys(report).slice(0, 10).join(', '));
+    if (report.Rows) console.log('  Rows type:', typeof report.Rows, 'is array:', Array.isArray(report.Rows));
+
     // Handle both nested (MCP) and flat (REST API) response formats
-    let rows;
-    if (report.reportData?.data?.rows) {
+    let rows = [];
+    if (report.reportData?.data?.rows && Array.isArray(report.reportData.data.rows)) {
       // MCP response format
       rows = report.reportData.data.rows;
-    } else if (report.Rows) {
-      // QB REST API format
+      console.log('  Using MCP format, found', rows.length, 'rows');
+    } else if (Array.isArray(report.Rows)) {
+      // QB REST API format - Rows array
       rows = report.Rows;
+      console.log('  Using REST API format, found', rows.length, 'rows');
+    } else if (report.Rows && typeof report.Rows === 'object') {
+      // QB might return Rows as an object with row data
+      console.warn('  Rows is object, not array. Type:', typeof report.Rows);
+      rows = [];
     } else {
-      console.error('Unexpected QB response structure:', Object.keys(report));
-      throw new Error('Cannot parse QB P&L response: unknown format');
+      console.error('Unexpected QB response structure:');
+      console.error('  Keys:', Object.keys(report));
+      console.error('  Rows value:', typeof report.Rows, report.Rows?.constructor?.name);
+      throw new Error('Cannot parse QB P&L response: Rows not found or not an array');
+    }
+
+    if (!rows.length) {
+      console.warn('⚠️  No rows found in QB response');
+      this.rowMap = { revenue: null, cogs: null, operations: null, netIncome: null };
+      return this.rowMap;
     }
 
     this.rowMap = {};
@@ -116,17 +134,22 @@ class QBPLFetcher {
    */
   extractMetrics(qbResponse) {
     // Handle both nested (MCP) and flat (REST API) response formats
-    let rows;
-    if (qbResponse.reportData?.data?.rows) {
+    let rows = [];
+    if (qbResponse.reportData?.data?.rows && Array.isArray(qbResponse.reportData.data.rows)) {
       rows = qbResponse.reportData.data.rows;
-    } else if (qbResponse.Rows) {
+    } else if (Array.isArray(qbResponse.Rows)) {
       rows = qbResponse.Rows;
-    } else {
-      console.warn('Cannot extract metrics: unknown response format');
-      return { revenue: 0, cogs: 0, operations: 0, netIncome: 0 };
+    } else if (qbResponse.Rows) {
+      console.warn('Rows exists but is not an array:', typeof qbResponse.Rows);
+      rows = [];
     }
 
     const rowsById = {};
+
+    if (!Array.isArray(rows)) {
+      console.warn('Cannot extract metrics: rows is not iterable');
+      return { revenue: 0, cogs: 0, operations: 0, netIncome: 0 };
+    }
 
     for (const row of rows) {
       const rowId = row.metadata?.id || row.id || row.Row?.[0]?.id;
