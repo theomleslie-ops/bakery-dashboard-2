@@ -2684,7 +2684,74 @@ app.get('/public-market-performance', (req, res) => {
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
+
+    const FOCUS_MARKETS = ['506 Retail', 'State St', 'SMA FRI', 'LA Farmers THU', 'DALY CITY THU', 'MV SUN', 'Alum Rock Village (Sun)', 'INNER SUNSET SUN', 'DIVISADERO SUN', 'FM SF SUN'];
+    const MARKET_TOP_N_OPTIONS = [5, 8, 10, 15, 20, 25];
+
+    const fmtMoneyShort = (v) => {
+      if (Math.abs(v) >= 1000) return \`$\${Math.round(v / 1000).toLocaleString()}k\`;
+      return \`$\${Math.round(v).toLocaleString()}\`;
+    };
+
+    function MarketSelectMenu({ markets, selected, setSelected, colorOf, totalRevenue, open, setOpen }) {
+      const [topN, setTopN] = useState(8);
+      const [bottomN, setBottomN] = useState(null);
+      const menuRef = useRef(null);
+
+      useEffect(() => {
+        const handleClickOutside = (e) => {
+          if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+      }, [setOpen]);
+
+      const toggle = (name) => {
+        setSelected(prev => {
+          const next = new Set(prev);
+          if (next.has(name)) next.delete(name);
+          else next.add(name);
+          return next;
+        });
+      };
+
+      return (
+        <div ref={menuRef} style={{ position: 'relative', display: 'inline-block', zIndex: 100 }}>
+          <button onClick={() => setOpen(o => !o)} style={{ padding: '8px 12px', border: '1px solid #d4b5a0', background: 'white', color: '#6b4423', borderRadius: '4px', cursor: 'pointer', fontSize: '14px' }}>
+            Select Markets ({selected.size}) {open ? '▴' : '▾'}
+          </button>
+          {open && (
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', maxHeight: '60vh', overflowY: 'auto', background: 'white', border: '1px solid #d4b5a0', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 1000, padding: '10px', width: '380px', maxWidth: '90vw' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid #d4b5a0' }}>
+                <button onClick={() => { setSelected(new Set(markets.map(m => m.name))); }} style={{ padding: '6px 10px', fontSize: '12px', background: '#f5f1ed', border: '1px solid #d4b5a0', borderRadius: '4px', cursor: 'pointer' }}>Select All</button>
+                <button onClick={() => { setSelected(new Set()); }} style={{ padding: '6px 10px', fontSize: '12px', background: '#f5f1ed', border: '1px solid #d4b5a0', borderRadius: '4px', cursor: 'pointer' }}>Select None</button>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#6b4423' }}>
+                  Top <select value={topN} onChange={(e) => { const n = parseInt(e.target.value, 10); setTopN(n); setBottomN(null); setSelected(new Set(markets.slice(0, n).map(m => m.name))); }} style={{ padding: '4px', fontSize: '12px' }}>
+                    {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#6b4423' }}>
+                  Bottom <select value={bottomN || ''} onChange={(e) => { const n = e.target.value ? parseInt(e.target.value, 10) : null; setBottomN(n); setTopN(8); if (n) setSelected(new Set(markets.slice(-n).map(m => m.name))); }} style={{ padding: '4px', fontSize: '12px' }}>
+                    <option value="">None</option>
+                    {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+                <button onClick={() => { setTopN(8); setBottomN(null); setSelected(new Set(FOCUS_MARKETS.filter(f => markets.some(m => m.name === f)))); }} style={{ padding: '6px 10px', fontSize: '12px', background: '#f5f1ed', border: '1px solid #d4b5a0', borderRadius: '4px', cursor: 'pointer' }}>Focus Markets</button>
+              </div>
+              {markets.map(m => (
+                <label key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer', fontSize: '13px', color: '#6b4423' }}>
+                  <input type="checkbox" checked={selected.has(m.name)} onChange={() => toggle(m.name)} />
+                  <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: colorOf(m.name), flexShrink: 0 }}></span>
+                  <span style={{ flex: 1 }}>{m.name}</span>
+                  <span style={{ color: '#8b6c57' }}>{fmtMoneyShort(totalRevenue(m))}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
 
     function MarketPerformanceDashboard() {
       const [markets, setMarkets] = useState([]);
@@ -2692,7 +2759,7 @@ app.get('/public-market-performance', (req, res) => {
       const [status, setStatus] = useState('loading');
       const [error, setError] = useState('');
       const [weekStarts, setWeekStarts] = useState([]);
-      const [viewMode, setViewMode] = useState('dollars');
+      const [menuOpen, setMenuOpen] = useState(false);
 
       useEffect(() => {
         fetchData();
@@ -2709,7 +2776,7 @@ app.get('/public-market-performance', (req, res) => {
           if (result.error) { setError(result.error); setStatus('error'); return; }
           setWeekStarts(result.weekStarts || []);
           setMarkets(result.markets || []);
-          setSelected(new Set((result.markets || []).map(m => m.name)));
+          setSelected(new Set((result.markets || []).slice(0, 8).map(m => m.name)));
           setStatus('ready');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
@@ -2722,13 +2789,13 @@ app.get('/public-market-performance', (req, res) => {
         return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
       };
 
-      const fmtMoney = (v) => \`$\${v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}\`;
-
       const visibleMarkets = markets.filter(m => selected.has(m.name));
       const colorOf = (name) => {
         const colors = ['#2a78d6', '#ff9500', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#6366f1'];
         return colors[markets.findIndex(m => m.name === name) % colors.length];
       };
+
+      const totalRevenue = (m) => m.revenue.reduce((s, v) => s + v, 0);
 
       if (status === 'loading') return <div className="container"><div className="loading">Loading market data…</div></div>;
       if (status === 'error') return <div className="container"><div className="error">{error}</div></div>;
@@ -2740,23 +2807,7 @@ app.get('/public-market-performance', (req, res) => {
             <p className="subtitle">Weekly revenue by farmers market location</p>
           </header>
           <div className="controls">
-            <div style={{ flex: 1, minWidth: '200px' }}>
-              <strong style={{ fontSize: '12px', color: '#8b6c57', textTransform: 'uppercase' }}>Markets ({selected.size} of {markets.length})</strong>
-              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {markets.map(m => (
-                  <label key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '14px' }}>
-                    <input type="checkbox" checked={selected.has(m.name)} onChange={(e) => {
-                      const newSelected = new Set(selected);
-                      if (e.target.checked) newSelected.add(m.name);
-                      else newSelected.delete(m.name);
-                      setSelected(newSelected);
-                    }} style={{ cursor: 'pointer' }} />
-                    <span style={{ color: colorOf(m.name), fontWeight: 500 }}>●</span>
-                    <span>{m.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+            <MarketSelectMenu markets={markets} selected={selected} setSelected={setSelected} colorOf={colorOf} totalRevenue={totalRevenue} open={menuOpen} setOpen={setMenuOpen} />
           </div>
           <div className="chart-container">
             <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
