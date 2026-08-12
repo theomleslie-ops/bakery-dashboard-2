@@ -1573,6 +1573,12 @@ const parseQBPeriodPL = (report) => {
   const cogsRow = findQBRowByLabel(report.Rows?.Row, 'Total for 5000');
   const cogsVals = getQBRowVals(cogsRow);
 
+  if (!cogsRow) {
+    console.warn('⚠️ "Total for 5000" NOT found in QB report');
+  } else {
+    console.log('✓ "Total for 5000" found, values:', cogsVals.slice(0, 3));
+  }
+
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
   const laborRow = findQBRowByLabel(report.Rows?.Row, '6200');
   const laborVals = getQBRowVals(laborRow);
