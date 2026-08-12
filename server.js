@@ -1567,10 +1567,13 @@ const parseQBPeriodPL = (report) => {
     .map((c, i) => ({ index: i, title: c.ColTitle }))
     .filter((c) => c.title && c.title !== 'Total');
 
-  const revenueVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Income'));
-  // Look for COGS account number 5000
+  // Look for account numbers directly from QB report
+  const revenueRow = findQBRowByLabel(report.Rows?.Row, '4000');
+  const revenueVals = getQBRowVals(revenueRow);
+
   const cogsRow = findQBRowByLabel(report.Rows?.Row, '5000');
   const cogsVals = getQBRowVals(cogsRow);
+
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
   // Match the labor/payroll row - try account 6200 (LABOR/PAYROLL EXPENSES) in this order:
   // 1. Total for 6200 LABOR/PAYROLL - summary total with all sub-items
