@@ -12,11 +12,9 @@ require('dotenv').config();
 const qbClient = require('./pipeline/qb-client');
 const qbCache = require('./pipeline/qb-cache');
 const claudeMCP = require('./pipeline/claude-mcp');
-const marginSchedulerModule = require('./pipeline/margin-scheduler');
 const ingredientSchedulerModule = require('./pipeline/ingredient-scheduler');
 const { fetchProductionData } = require('./pipeline/google-drive-production');
 
-let marginScheduler = null;
 let ingredientScheduler = null;
 let composioConnectors = null;
 
@@ -3663,22 +3661,6 @@ app.get('/api/calculate-margins', async (req, res) => {
   }
 });
 
-// Margin scheduler status
-app.get('/api/margin-scheduler/status', (req, res) => {
-  if (!marginScheduler) {
-    return res.status(503).json({
-      error: 'Scheduler not initialized',
-      message: 'Margin scheduler is still starting up',
-    });
-  }
-  const status = marginScheduler.getStatus();
-  res.json({
-    scheduler: 'margin-calculator',
-    schedule: 'Daily at 6 AM UTC, plus immediate run on startup',
-    status,
-  });
-});
-
 // Extract and display ingredient costs from QB bills
 app.get('/api/ingredient-costs', (req, res) => {
   try {
@@ -4301,10 +4283,6 @@ const server = app.listen(PORT, async () => {
       }
     }, 2000); // Wait 2 seconds for QB cache to initialize
   }
-
-  // Initialize automated margin calculation scheduler
-  // Runs daily at 6 AM UTC, with immediate run on startup
-  marginScheduler = marginSchedulerModule.start();
 
   // Initialize ingredient cost extraction scheduler
   // Runs on startup to populate cache (takes time, runs in background)
