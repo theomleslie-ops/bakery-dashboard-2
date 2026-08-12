@@ -1543,17 +1543,43 @@ const parseQBPeriodPL = (response) => {
   console.log('\n🔍 Rows with Summary data:');
   rowsWithSummary.forEach(({ label }) => console.log(`  - ${label}`));
 
-  // Match rows by label
+  // Match rows by label - look for specific pattern like "4000 REVENUE", "Total for 5000", etc.
   const rowMap = {};
   rowsWithSummary.forEach(({ label, row }) => {
-    if (!rowMap.revenue && label === 'Income') rowMap.revenue = row;
-    if (!rowMap.cogs && label.includes('Cost of Goods')) rowMap.cogs = row;
-    if (!rowMap.opex && label.includes('Expenses')) rowMap.opex = row;
-    if (!rowMap.net && label.includes('Net Income')) rowMap.net = row;
-    if (!rowMap.labor && label.includes('LABOR')) rowMap.labor = row;
+    // Revenue: either "Income" group header or "4000" rows
+    if (!rowMap.revenue && (label === 'Income' || label.includes('4000'))) {
+      rowMap.revenue = row;
+      console.log(`  ✓ Revenue row: "${label}"`);
+    }
+    // COGS: either "Cost of Goods Sold" header or "5000" rows, but prefer total rows
+    if (!rowMap.cogs && (label.includes('Cost of Goods') || label.includes('5000') || label.includes('Total for 5000'))) {
+      rowMap.cogs = row;
+      console.log(`  ✓ COGS row: "${label}"`);
+    }
+    // OpEx/Expenses: "6000" rows or "Expenses" header, but NOT "LABOR"
+    if (!rowMap.opex && (label.includes('6000') || label.includes('Expenses')) && !label.includes('LABOR')) {
+      rowMap.opex = row;
+      console.log(`  ✓ OpEx row: "${label}"`);
+    }
+    // Net Income
+    if (!rowMap.net && label.includes('Net Income')) {
+      rowMap.net = row;
+      console.log(`  ✓ Net row: "${label}"`);
+    }
+    // Labor
+    if (!rowMap.labor && label.includes('LABOR')) {
+      rowMap.labor = row;
+      console.log(`  ✓ Labor row: "${label}"`);
+    }
   });
 
   const getVals = (row) => row?.Summary?.ColData?.map(c => parseFloat(c.value) || 0) || [];
+
+  console.log('\n📊 QB Values extracted:');
+  console.log('  Revenue:', getVals(rowMap.revenue).slice(0, 3));
+  console.log('  COGS:', getVals(rowMap.cogs).slice(0, 3));
+  console.log('  OpEx:', getVals(rowMap.opex).slice(0, 3));
+  console.log('  Net:', getVals(rowMap.net).slice(0, 3));
 
   return periodCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
