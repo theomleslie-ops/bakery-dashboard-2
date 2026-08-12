@@ -1575,67 +1575,8 @@ const parseQBPeriodPL = (report) => {
   const cogsVals = getQBRowVals(cogsRow);
 
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
-  // Match the labor/payroll row - try account 6200 (LABOR/PAYROLL EXPENSES) in this order:
-  // 1. Total for 6200 LABOR/PAYROLL - summary total with all sub-items
-  // 2. Just 6200 - the account total
-  // 3. LABOR/PAYROLL - fallback by account name
-  // Search for labor/payroll row with multiple strategies
-  const labor6200Total = findQBRowByLabel(report.Rows?.Row, 'Total for 6200');
-  const labor6200 = findQBRowByLabel(report.Rows?.Row, '6200');
-  const laborPayroll = findQBRowByLabel(report.Rows?.Row, 'LABOR');
-  const laborPayroll2 = findQBRowByLabel(report.Rows?.Row, 'PAYROLL');
-
-  // Try summing sub-accounts if main account not found (6145, 6204, 6206, 6500, 6560)
-  let laborVals = getQBRowVals(labor6200Total) || getQBRowVals(labor6200) || getQBRowVals(laborPayroll) || getQBRowVals(laborPayroll2);
-
-  if (!laborVals || laborVals.length === 0) {
-    // Try summing payroll sub-accounts
-    const sub6145 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6145'));
-    const sub6204 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6204'));
-    const sub6206 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6206'));
-    const sub6500 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6500'));
-    const sub6560 = getQBRowVals(findQBRowByLabel(report.Rows?.Row, '6560'));
-
-    const hasAnySub = (sub6145?.length > 0) || (sub6204?.length > 0) || (sub6206?.length > 0) || (sub6500?.length > 0) || (sub6560?.length > 0);
-
-    if (hasAnySub && periodCols.length > 0) {
-      // Sum sub-accounts for each period
-      laborVals = periodCols.map(col => {
-        const sum = (sub6145?.[col.index] || 0) + (sub6204?.[col.index] || 0) +
-                    (sub6206?.[col.index] || 0) + (sub6500?.[col.index] || 0) + (sub6560?.[col.index] || 0);
-        return sum;
-      });
-      console.log('📊 Labor summed from sub-accounts: 6145=' + (sub6145?.length || 0) + ' items, 6204=' + (sub6204?.length || 0) + ' items, 6206=' + (sub6206?.length || 0) + ' items');
-    } else {
-      console.warn('⚠️  No payroll sub-accounts found (6145, 6204, 6206, 6500, 6560)');
-    }
-  }
-
-  if (!laborVals || laborVals.length === 0) {
-    console.warn('⚠️  Labor/payroll row not found in QB report');
-    console.warn('  Searched for: "Total for 6200", "6200", "LABOR", "PAYROLL"');
-
-    // Debug: dump all row labels and account codes
-    const allLabels = [];
-    const allAccounts = [];
-    const walkRows = (rows) => {
-      if (!rows) return;
-      for (const row of rows) {
-        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        if (label) {
-          allLabels.push(label.substring(0, 80));
-          const acctMatch = label.match(/^\d+/);
-          if (acctMatch) allAccounts.push(acctMatch[0]);
-        }
-        if (row.Rows?.Row) walkRows(row.Rows.Row);
-      }
-    };
-    if (report.Rows?.Row) walkRows(report.Rows.Row);
-    console.warn('  Available rows:', allLabels.join(' | '));
-    console.warn('  Account codes found:', [...new Set(allAccounts)].sort().join(', '));
-  } else {
-    console.log('✓ Labor values found:', laborVals.slice(0, 3).map(v => `$${v.toFixed(0)}`).join(', '));
-  }
+  const laborRow = findQBRowByLabel(report.Rows?.Row, '6200');
+  const laborVals = getQBRowVals(laborRow);
   const netVals = getQBRowVals(report.Rows?.Row?.find((r) => r.group === 'NetIncome'));
 
   return periodCols.map((col) => {
