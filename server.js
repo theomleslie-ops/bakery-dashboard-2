@@ -1493,6 +1493,132 @@ app.get('/api/quickbooks/expenses', async (req, res) => {
   }
 });
 
+// ============= P&L WEEKLY ENDPOINTS =============
+
+const QBPLFetcher = require('./pipeline/qb-pl-fetcher');
+const PLStore = require('./pipeline/qb-pl-store');
+const { refreshPLData } = require('./pipeline/qb-pl-refresh');
+
+let plFetcher = null;
+let plStore = new PLStore();
+
+// Initialize P&L fetcher with QB client
+function initPLFetcher() {
+  plFetcher = new QBPLFetcher(qbClient);
+}
+
+// GET /api/pl/weekly - Retrieve stored weekly P&L data
+app.get('/api/pl/weekly', async (req, res) => {
+  try {
+    const data = await plStore.getAllData();
+    res.json({
+      success: true,
+      weeks: data.weeks.length,
+      data: data.weeks,
+      lastUpdated: data.lastUpdated,
+      source: 'Stored weekly P&L data'
+    });
+  } catch (error) {
+    console.error('P&L fetch error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/pl/weekly/summary - Get P&L summary (totals + stats)
+app.get('/api/pl/weekly/summary', async (req, res) => {
+  try {
+    const data = await plStore.getAllData();
+    if (!data.weeks.length) {
+      return res.json({ error: 'No P&L data available', weeks: 0 });
+    }
+
+    const totals = {
+      revenue: 0,
+      cogs: 0,
+      operations: 0,
+      netIncome: 0
+    };
+
+    for (const week of data.weeks) {
+      if (!week.error) {
+        totals.revenue += week.revenue || 0;
+        totals.cogs += week.cogs || 0;
+        totals.operations += week.operations || 0;
+        totals.netIncome += week.netIncome || 0;
+      }
+    }
+
+    const grossProfit = totals.revenue - totals.cogs;
+    const grossMargin = totals.revenue ? (grossProfit / totals.revenue * 100).toFixed(2) : 0;
+    const netMargin = totals.revenue ? (totals.netIncome / totals.revenue * 100).toFixed(2) : 0;
+
+    res.json({
+      success: true,
+      weeks: data.weeks.filter(w => !w.error).length,
+      totals,
+      margins: {
+        grossProfit,
+        grossMargin: `${grossMargin}%`,
+        netMargin: `${netMargin}%`
+      },
+      lastUpdated: data.lastUpdated
+    });
+  } catch (error) {
+    console.error('P&L summary error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/pl/weekly/refresh - Manually refresh P&L data
+app.post('/api/pl/weekly/refresh', async (req, res) => {
+  try {
+    if (!plFetcher) {
+      initPLFetcher();
+    }
+
+    // Initialize row IDs if not done
+    if (!plFetcher.rowMap) {
+      await plFetcher.identifyRowIds();
+    }
+
+    // Trigger refresh
+    const result = await refreshPLData(qbClient);
+
+    res.json({
+      success: true,
+      message: 'P&L data refreshed successfully',
+      ...result
+    });
+  } catch (error) {
+    console.error('P&L refresh error:', error.message);
+    res.status(500).json({
+      error: 'P&L refresh failed',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/pl/weekly/range - Get P&L data for specific date range
+app.get('/api/pl/weekly/range', async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    if (!start_date || !end_date) {
+      return res.status(400).json({ error: 'Missing start_date or end_date' });
+    }
+
+    const data = await plStore.getDataByRange(start_date, end_date);
+    res.json({
+      success: true,
+      weeks: data.length,
+      data,
+      range: { start: start_date, end: end_date }
+    });
+  } catch (error) {
+    console.error('P&L range query error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ============= AGGREGATION ENDPOINT =============
 
 // Get combined P/L data
@@ -3931,6 +4057,26 @@ const server = app.listen(PORT, async () => {
     console.log('⚠️  QuickBooks not configured');
   }
 
+  // Initialize P&L weekly fetcher
+  if (qbConfigured) {
+    try {
+      initPLFetcher();
+      console.log('✅ P&L Weekly fetcher initialized');
+
+      // Do initial refresh in background (don't wait for it)
+      setTimeout(async () => {
+        try {
+          console.log('🔄 Running initial P&L refresh...');
+          await refreshPLData(qbClient);
+        } catch (err) {
+          console.warn('⚠️  Initial P&L refresh failed (will retry on schedule):', err.message);
+        }
+      }, 2000);
+    } catch (err) {
+      console.warn('⚠️  P&L Weekly fetcher failed to initialize:', err.message);
+    }
+  }
+
   if (qbConfigured) {
     startQBRefreshJobs();
 
@@ -3977,6 +4123,16 @@ const server = app.listen(PORT, async () => {
       } else if (err.code === 'GOOGLE_NOT_CONNECTED') {
         console.error('   → Google Drive not connected, skipping margin rebuild');
       }
+    }
+  });
+
+  // Refresh P&L weekly data every 3 days (Mondays, Thursdays, Sundays at 1am)
+  cron.schedule('0 1 * * 0,3,5', async () => {
+    try {
+      console.log('🔄 P&L weekly refresh scheduled task started');
+      await refreshPLData(qbClient);
+    } catch (err) {
+      console.error('❌ P&L weekly refresh failed:', err.message);
     }
   });
 });
