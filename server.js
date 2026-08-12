@@ -1587,11 +1587,23 @@ const parseQBPeriodPL = (report) => {
 
   findRows(report.Rows?.Row);
 
+  // Debug: show what rows were found and their values
+  console.log('\n🔍 QB Row Parsing Debug:');
+  console.log('  Revenue row found:', !!revRow, revRow?.Header?.ColData?.[0]?.value);
+  console.log('  COGS row found:', !!cogsRow, cogsRow?.Header?.ColData?.[0]?.value);
+  console.log('  OpEx row found:', !!opexRow, opexRow?.Header?.ColData?.[0]?.value);
+  console.log('  Net Income row found:', !!netRow, netRow?.Header?.ColData?.[0]?.value);
+
   const revenueVals = getQBRowVals(revRow);
   const cogsVals = getQBRowVals(cogsRow);
   const opexVals = getQBRowVals(opexRow);
   const laborVals = getQBRowVals(laborRow);
   const netVals = getQBRowVals(netRow);
+
+  console.log('  Revenue values:', revenueVals.slice(0, 3));
+  console.log('  COGS values:', cogsVals.slice(0, 3));
+  console.log('  OpEx values:', opexVals.slice(0, 3));
+  console.log('');
 
   return periodCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
