@@ -1576,7 +1576,21 @@ const parseQBPeriodPL = (report) => {
   const cogsRow = cogsRowTotal || findQBRowByLabel(report.Rows?.Row, '5000');
   const cogsVals = getQBRowVals(cogsRow);
 
-  console.log('🔍 COGS Debug:', cogsRowTotal ? 'Using Total for 5000' : 'Using 5000', 'Values:', cogsVals.slice(0, 5));
+  console.log('\n🔍 COGS EXTRACTION DEBUG:');
+  console.log('  Row found:', cogsRowTotal ? 'Total for 5000' : '5000');
+  if (cogsRow) {
+    const rowLabel = cogsRow.Header?.ColData?.[0]?.value || cogsRow.ColData?.[0]?.value || 'NO LABEL';
+    console.log('  Row label:', rowLabel);
+    console.log('  Row has Summary?', !!cogsRow.Summary);
+    console.log('  Row has Header?', !!cogsRow.Header);
+    const cols = cogsRow.Summary?.ColData || cogsRow.Header?.ColData || [];
+    console.log('  Number of columns:', cols.length);
+    console.log('  Raw column values:', cols.slice(0, 5).map(c => c.value));
+  } else {
+    console.log('  ⚠️  COGS Row NOT FOUND');
+  }
+  console.log('  Extracted cogsVals:', cogsVals.slice(0, 5));
+  console.log('');
 
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
   const laborRow = findQBRowByLabel(report.Rows?.Row, '6200');
