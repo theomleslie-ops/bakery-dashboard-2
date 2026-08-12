@@ -225,20 +225,20 @@
             }
 
             try {
-                // Load QB data
-                const qbRes = await fetch(`${API_BASE}/api/public/quickbooks/overview`);
+                // Load QB P&L weekly data
+                const qbRes = await fetch(`${API_BASE}/api/pl/weekly/summary`);
                 const qbData = await qbRes.json();
 
-                if (qbData.success && qbData.report) {
+                if (qbData.success || qbData.weeks) {
                     document.getElementById('qb-status').textContent = '✅ Connected';
                     displayQBData(qbData);
                 } else {
                     document.getElementById('qb-status').textContent = '❌ Error';
-                    showError(`QB: ${qbData.error || 'Not connected'}`);
+                    showError(`QB P&L: ${qbData.error || 'No data'}`);
                 }
             } catch (err) {
                 document.getElementById('qb-status').textContent = '❌ Error';
-                showError(`QB: ${err.message}`);
+                showError(`QB P&L: ${err.message}`);
             }
         }
 
@@ -259,21 +259,41 @@
 
         function displayQBData(data) {
             const div = document.getElementById('qb-data');
-            if (!data.report) {
-                div.innerHTML = '<p>No QB data available</p>';
+            if (!data.weeks || data.weeks === 0) {
+                div.innerHTML = '<p>No QB P&L data available</p>';
                 return;
             }
 
-            const report = data.report;
-            const rows = report.Rows?.Row || [];
-            const revenue = rows.find(r => r.Summary?.ColData?.[0]?.value === 'Total Income')?.Summary?.ColData?.[1]?.value || 'N/A';
-            const expenses = rows.find(r => r.Summary?.ColData?.[0]?.value === 'Total Expenses')?.Summary?.ColData?.[1]?.value || 'N/A';
+            const totals = data.totals || {};
+            const margins = data.margins || {};
+            const revenue = totals.revenue ? `$${totals.revenue.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0';
+            const cogs = totals.cogs ? `$${totals.cogs.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0';
+            const operations = totals.operations ? `$${totals.operations.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0';
+            const netIncome = totals.netIncome ? `$${totals.netIncome.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0';
 
             div.innerHTML = `
-                <p>📊 P&L Report (Last 30 Days)</p>
-                <p>Revenue: $${revenue}</p>
-                <p>Expenses: $${expenses}</p>
-                <p><small>Cached at: ${data.cachedAt || 'unknown'}</small></p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <div style="padding: 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;">
+                        <div style="color: var(--text-light); font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">REVENUE</div>
+                        <div style="font-size: 1.5rem; font-weight: 600; color: var(--green);">${revenue}</div>
+                    </div>
+                    <div style="padding: 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;">
+                        <div style="color: var(--text-light); font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">COGS</div>
+                        <div style="font-size: 1.5rem; font-weight: 600; color: var(--rust);">${cogs}</div>
+                    </div>
+                    <div style="padding: 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;">
+                        <div style="color: var(--text-light); font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">OPERATIONS</div>
+                        <div style="font-size: 1.5rem; font-weight: 600; color: var(--rust);">${operations}</div>
+                    </div>
+                    <div style="padding: 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;">
+                        <div style="color: var(--text-light); font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">NET INCOME</div>
+                        <div style="font-size: 1.5rem; font-weight: 600; color: ${totals.netIncome >= 0 ? 'var(--green)' : 'var(--rust)'};">${netIncome}</div>
+                    </div>
+                </div>
+                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.9rem; color: var(--text-light);">
+                    <p><strong>${data.weeks}</strong> weeks • Gross Margin: <strong>${margins.grossMargin || 'N/A'}</strong> • Net Margin: <strong>${margins.netMargin || 'N/A'}</strong></p>
+                    <p><small>Last updated: ${new Date(data.lastUpdated).toLocaleString()}</small></p>
+                </div>
             `;
         }
 
