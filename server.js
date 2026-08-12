@@ -1471,7 +1471,7 @@ app.post('/api/google/disconnect', (req, res) => {
 
 // Fetch a Profit & Loss report from QuickBooks, broken into periods (Week or Month) for a date range
 const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Week') => {
-  // Skill pattern: Fetch QB P&L and convert to standard format
+  // Skill pattern: Use QB Report API with new response format (reportData.data.rows)
   console.log(`Fetching QB P&L: ${startDate} to ${endDate} (${summarizeColumnBy})`);
   const tokens = await getValidQBAccessToken();
   const response = await axios.get(
@@ -1481,41 +1481,7 @@ const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Wee
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
     }
   );
-
-  // Convert QB Report format to skill format (reportData.data.rows)
-  const qbReport = response.data;
-  const rows = [];
-
-  // Walk the QB report tree and convert rows to skill format
-  const walkRows = (rowsArray, parentId = null) => {
-    if (!rowsArray) return;
-    for (const row of rowsArray) {
-      const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-      const values = row.Summary?.ColData || row.Header?.ColData || [];
-
-      rows.push({
-        metadata: {
-          id: parentId ? `${parentId}_${label}` : label,
-          type: row.Summary ? ['SUMMARY'] : ['GROUP']
-        },
-        cells: [
-          { name: 'ACCOUNT_NAME', value: label },
-          { name: 'AMOUNT', value: values[0]?.value || 0 }
-        ]
-      });
-
-      if (row.Rows?.Row) walkRows(row.Rows.Row, label);
-    }
-  };
-
-  walkRows(qbReport.Rows?.Row);
-
-  return {
-    ...qbReport,
-    reportData: {
-      data: { rows }
-    }
-  };
+  return response.data;
 };
 
 const MONTH_SHORTS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1552,78 +1518,55 @@ const findQBRowByLabel = (rows, labelSubstring) => {
   return null;
 };
 
-// Skill pattern: Extract metrics using direct row ID matching (no fuzzy matching)
+// Skill pattern: Extract P&L metrics using direct row ID matching
 const parseQBPeriodPL = (response) => {
-  // Step 1: Get columns for periods
   const columns = response.Columns?.Column || [];
   const periodCols = columns
     .map((c, i) => ({ index: i, title: c.ColTitle }))
     .filter((c) => c.title && c.title !== 'Total');
 
-  // Step 2: Build row map from skill pattern (reportData.data.rows format)
-  const rows = response.reportData?.data?.rows || [];
-  const rowMap = {};
-
-  for (const row of rows) {
-    const metadata = row.metadata || {};
-    const accountName = row.cells?.[0]?.value || '';
-
-    // Match by account name exactly as skill does
-    if (accountName.includes('Income') && !rowMap.revenue) {
-      rowMap.revenue = metadata.id;
-    } else if (accountName.includes('Cost of Goods Sold') && !rowMap.cogs) {
-      rowMap.cogs = metadata.id;
-    } else if (accountName.includes('Expense') && !accountName.includes('Other') && !rowMap.opex) {
-      rowMap.opex = metadata.id;
-    } else if (accountName.includes('Net Income') && !rowMap.net) {
-      rowMap.net = metadata.id;
-    } else if (accountName.includes('LABOR') && !rowMap.labor) {
-      rowMap.labor = metadata.id;
-    }
-  }
-
-  // Step 3: Extract values using row IDs and the old QB Report format (falls back to original parsing)
-  const getRowValues = (rowId) => {
-    // First try to find in skill format rows
-    const skillRow = rows.find(r => r.metadata?.id === rowId);
-    if (skillRow?.cells?.[1]?.value) {
-      // Skill format has single value - need to return array for backward compatibility
-      return [skillRow.cells[1].value];
-    }
-
-    // Fallback: parse from original QB Report format
-    const findRow = (rowsArray) => {
-      if (!rowsArray) return null;
-      for (const row of rowsArray) {
+  // Find rows with Summary data (these are the total rows with values)
+  const rowsWithSummary = [];
+  const findRowsWithSummary = (rowsArray) => {
+    if (!rowsArray) return;
+    for (const row of rowsArray) {
+      if (row.Summary?.ColData) {
         const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        if (label === rowId) return row;
-        if (row.Rows?.Row) {
-          const found = findRow(row.Rows.Row);
-          if (found) return found;
-        }
+        rowsWithSummary.push({ label, row });
       }
-      return null;
-    };
-
-    const row = findRow(response.Rows?.Row);
-    return row?.Summary?.ColData?.map(c => parseFloat(c.value) || 0) || [];
+      if (row.Rows?.Row) findRowsWithSummary(row.Rows.Row);
+    }
   };
+  findRowsWithSummary(response.Rows?.Row);
 
-  console.log('\n📊 Row map:', rowMap);
+  // Debug: Show all rows with Summary data
+  console.log('\n🔍 Rows with Summary data:');
+  rowsWithSummary.forEach(({ label }) => console.log(`  - ${label}`));
+
+  // Match rows by label
+  const rowMap = {};
+  rowsWithSummary.forEach(({ label, row }) => {
+    if (!rowMap.revenue && label === 'Income') rowMap.revenue = row;
+    if (!rowMap.cogs && label.includes('Cost of Goods')) rowMap.cogs = row;
+    if (!rowMap.opex && label.includes('Expenses')) rowMap.opex = row;
+    if (!rowMap.net && label.includes('Net Income')) rowMap.net = row;
+    if (!rowMap.labor && label.includes('LABOR')) rowMap.labor = row;
+  });
+
+  const getVals = (row) => row?.Summary?.ColData?.map(c => parseFloat(c.value) || 0) || [];
 
   return periodCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
     const isBareMonth = monthIdx >= 0 && /^[A-Za-z]+$/.test(col.title.trim());
     const shortLabelMatch = col.title.match(/^([A-Za-z]+ \d+)/);
-
     return {
       label: isBareMonth ? MONTH_SHORTS[monthIdx] : (shortLabelMatch ? shortLabelMatch[1] : col.title),
       fullLabel: isBareMonth ? MONTH_NAMES[monthIdx] : col.title,
-      revenue: getRowValues(rowMap.revenue)[col.index] || 0,
-      cogs: getRowValues(rowMap.cogs)[col.index] || 0,
-      opex: getRowValues(rowMap.opex)[col.index] || 0,
-      labor: getRowValues(rowMap.labor)[col.index] || 0,
-      pl: getRowValues(rowMap.net)[col.index] || 0,
+      revenue: getVals(rowMap.revenue)[col.index] || 0,
+      cogs: getVals(rowMap.cogs)[col.index] || 0,
+      opex: getVals(rowMap.opex)[col.index] || 0,
+      labor: getVals(rowMap.labor)[col.index] || 0,
+      pl: getVals(rowMap.net)[col.index] || 0,
     };
   });
 };
