@@ -1568,19 +1568,9 @@ const parseQBPeriodPL = (report) => {
     .filter((c) => c.title && c.title !== 'Total');
 
   const revenueVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Income'));
-  // Look for "Total for Cost of Goods Sold" row specifically
-  const cogsRow = findQBRowByLabel(report.Rows?.Row, 'Total for Cost of Goods Sold');
+  // Look for COGS account number 5000
+  const cogsRow = findQBRowByLabel(report.Rows?.Row, '5000');
   const cogsVals = getQBRowVals(cogsRow);
-
-  console.log('🔍 COGS Debug:');
-  console.log('  cogsRow found:', !!cogsRow);
-  if (cogsRow) {
-    console.log('  cogsRow label:', cogsRow.Header?.ColData?.[0]?.value || cogsRow.ColData?.[0]?.value);
-    console.log('  cogsRow structure:', JSON.stringify(cogsRow).substring(0, 200));
-  }
-  console.log('  cogsVals:', cogsVals.slice(0, 5));
-  console.log('  revenueVals:', revenueVals.slice(0, 5));
-
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
   // Match the labor/payroll row - try account 6200 (LABOR/PAYROLL EXPENSES) in this order:
   // 1. Total for 6200 LABOR/PAYROLL - summary total with all sub-items
