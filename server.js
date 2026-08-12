@@ -1470,18 +1470,19 @@ app.post('/api/google/disconnect', (req, res) => {
 // ============= QUICKBOOKS DATA ENDPOINTS =============
 
 // Fetch a Profit & Loss report from QuickBooks, broken into periods (Week or Month) for a date range
-const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Week') => {
-  console.log(`Fetching QB P&L: ${startDate} to ${endDate} (${summarizeColumnBy})`);
+// Fetch QB P&L for ONE week (returns single value per row, not array)
+const fetchQBWeekData = async (startDate, endDate) => {
+  console.log(`Fetching QB P&L: ${startDate} to ${endDate}`);
   const tokens = await getValidQBAccessToken();
   const response = await axios.get(
     `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/ProfitAndLoss`,
     {
-      params: { start_date: startDate, end_date: endDate, summarize_column_by: summarizeColumnBy },
+      params: { start_date: startDate, end_date: endDate, summarize_column_by: 'Total' },
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
     }
   );
 
-  // Convert to skill format: reportData.data.rows with metadata.id and cells[1].value
+  // Convert QB Report format to skill format: reportData.data.rows
   const qbReport = response.data;
   const rows = [];
   let rowId = 0;
@@ -1494,14 +1495,15 @@ const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Wee
 
       if (label && values.length > 0) {
         rowId++;
+        // For single-week fetch, cells[1].value is the total for that week
         rows.push({
           metadata: {
             id: String(rowId),
-            type: row.Summary ? ['SUMMARY'] : ['GROUP']
+            type: row.Summary ? 'SUMMARY' : 'GROUP'
           },
           cells: [
             { name: 'ACCOUNT_NAME', value: label },
-            { name: 'TOTAL_AMOUNT', value: values[0]?.value || 0 }
+            { name: 'TOTAL_AMOUNT', value: parseFloat(values[0]?.value) || 0 }
           ]
         });
       }
@@ -1563,16 +1565,16 @@ const identifyRowIds = (response) => {
 
   for (const row of rows) {
     const metadata = row.metadata || {};
-    if (!metadata.type || (metadata.type !== 'GROUP' && metadata.type !== 'SUMMARY')) {
-      if (!Array.isArray(metadata.type) || (!metadata.type.includes('GROUP') && !metadata.type.includes('SUMMARY'))) {
-        continue;
-      }
+    const typeStr = Array.isArray(metadata.type) ? metadata.type.join(',') : (metadata.type || '');
+
+    if (!typeStr.includes('GROUP') && !typeStr.includes('SUMMARY')) {
+      continue;
     }
 
     const accountName = row.cells?.[0]?.value || '';
     const rowId = metadata.id;
 
-    // Match exactly like the skill
+    // Match exactly like the skill (using if/elif pattern)
     if (accountName.includes('Income')) {
       rowMap.revenue = rowId;
     } else if (accountName.includes('Cost of Goods Sold')) {
@@ -1585,12 +1587,12 @@ const identifyRowIds = (response) => {
   }
 
   cachedRowMap = rowMap;
-  console.log('\n📍 Row IDs identified:', rowMap);
+  console.log('✓ Row IDs identified:', rowMap);
   return rowMap;
 };
 
-// Skill pattern: Extract metrics (Step 2)
-const extractPLMetrics = (response, rowMap) => {
+// Skill pattern: Extract metrics for ONE week (Step 2)
+const extractWeekMetrics = (response, rowMap) => {
   const rows = response.reportData?.data?.rows || [];
 
   // Create lookup by row ID
@@ -1599,47 +1601,19 @@ const extractPLMetrics = (response, rowMap) => {
     rowsById[row.metadata?.id] = row;
   }
 
-  // Extract values using direct row ID lookup
+  // Extract values using direct row ID lookup (no fuzzy matching)
   const metrics = {};
   for (const [key, rowId] of Object.entries(rowMap)) {
     if (rowId && rowsById[rowId]) {
       const row = rowsById[rowId];
-      // cells[1] contains the total amount
+      // cells[1] contains the total amount for this period
       metrics[key] = row.cells?.[1]?.value || 0;
+    } else {
+      metrics[key] = 0;
     }
   }
 
-  console.log('  Metrics:', metrics);
   return metrics;
-};
-
-// Skill pattern: Parse QB Period P&L
-const parseQBPeriodPL = (response) => {
-  const columns = response.Columns?.Column || [];
-  const periodCols = columns
-    .map((c, i) => ({ index: i, title: c.ColTitle }))
-    .filter((c) => c.title && c.title !== 'Total');
-
-  // Step 1: Identify row IDs
-  const rowMap = identifyRowIds(response);
-
-  // Step 2: Extract metrics
-  const metrics = extractPLMetrics(response, rowMap);
-
-  return periodCols.map((col) => {
-    const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
-    const isBareMonth = monthIdx >= 0 && /^[A-Za-z]+$/.test(col.title.trim());
-    const shortLabelMatch = col.title.match(/^([A-Za-z]+ \d+)/);
-    return {
-      label: isBareMonth ? MONTH_SHORTS[monthIdx] : (shortLabelMatch ? shortLabelMatch[1] : col.title),
-      fullLabel: isBareMonth ? MONTH_NAMES[monthIdx] : col.title,
-      revenue: metrics.revenue || 0,
-      cogs: metrics.cogs || 0,
-      opex: metrics.operations || 0,
-      labor: 0,
-      pl: metrics.net_income || 0,
-    };
-  });
 };
 
 // Pair consecutive real weekly periods into 2-week totals - summed, never averaged. Any odd
@@ -1701,15 +1675,50 @@ const loadQBWeeklySnapshot = () => {
 };
 const saveQBWeeklySnapshot = (snapshot) => saveData(QB_WEEKLY_SNAPSHOT_FILE, snapshot);
 
-// Fetch one QuickBooks weekly report and key each column by its real Sunday start date.
-// `startDate` MUST be a Sunday and `endDateExclusive` MUST be `startDate` plus a whole number of
-// weeks - QuickBooks only returns clean, unpadded weekly columns from a Sunday-aligned start, so
-// the i-th column is reliably `startDate + 7*i` days without needing to parse its title text.
+// Fetch QB P&L data week-by-week (one week at a time, skill pattern)
+// Each call returns single metrics for that week
 const fetchQBWeeklyRows = async (startDate, endDateExclusive) => {
-  const report = await fetchQBProfitAndLoss(startDate, addDays(endDateExclusive, -1), 'Week');
-  const parsed = parseQBPeriodPL(report);
   const rows = {};
-  parsed.forEach((row, i) => { rows[addDays(startDate, 7 * i)] = row; });
+  let current = startDate;
+
+  while (current < endDateExclusive) {
+    const weekEnd = addDays(current, 6); // Sunday
+    const fetchEnd = Math.min(weekEnd, addDays(endDateExclusive, -1));
+
+    try {
+      // Fetch QB data for this ONE week
+      const report = await fetchQBWeekData(current, fetchEnd);
+
+      // Identify row IDs (cached after first call)
+      const rowMap = identifyRowIds(report);
+
+      // Extract metrics for this week
+      const metrics = extractWeekMetrics(report, rowMap);
+
+      // Store week data
+      rows[current] = {
+        label: `${new Date(current).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+        fullLabel: `${new Date(current).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(fetchEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+        revenue: metrics.revenue || 0,
+        cogs: metrics.cogs || 0,
+        opex: metrics.operations || 0,
+        labor: 0,
+        pl: metrics.net_income || 0,
+      };
+
+      console.log(`✓ Week ${current}:`, rows[current]);
+    } catch (err) {
+      console.error(`✗ Failed to fetch week ${current}:`, err.message);
+      rows[current] = {
+        label: new Date(current).toLocaleDateString(),
+        fullLabel: new Date(current).toLocaleDateString(),
+        revenue: 0, cogs: 0, opex: 0, labor: 0, pl: 0
+      };
+    }
+
+    current = addDays(current, 7);
+  }
+
   return rows;
 };
 
