@@ -1569,7 +1569,8 @@ const parseQBPeriodPL = (report) => {
   const revenueRow = findQBRowByLabel(report.Rows?.Row, '4000');
   const revenueVals = getQBRowVals(revenueRow);
 
-  const cogsRow = findQBRowByLabel(report.Rows?.Row, '5000');
+  // Look for "Total for 5000 COST OF GOODS SOLD" (includes all sub-accounts)
+  const cogsRow = findQBRowByLabel(report.Rows?.Row, 'Total for 5000');
   const cogsVals = getQBRowVals(cogsRow);
 
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
