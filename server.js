@@ -1596,8 +1596,22 @@ const parseQBPeriodPL = (report) => {
 
   findRows(report.Rows?.Row);
 
-  // Debug: show what rows were found and their values
+  // Debug: Dump ALL row labels to find what's actually in QB response
+  const allLabels = [];
+  const walkAllRows = (rows) => {
+    if (!rows) return;
+    for (const row of rows) {
+      const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+      if (label && label.length > 0) {
+        allLabels.push(label);
+      }
+      if (row.Rows?.Row) walkAllRows(row.Rows.Row);
+    }
+  };
+  walkAllRows(report.Rows?.Row);
+
   console.log('\n🔍 QB Row Parsing Debug:');
+  console.log('  ALL row labels:', allLabels.filter(l => l.includes('5') || l.includes('6') || l.includes('Total') || l.includes('Income')));
   console.log('  Revenue row found:', !!revRow, revRow?.Header?.ColData?.[0]?.value);
   console.log('  COGS row found:', !!cogsRow, cogsRow?.Header?.ColData?.[0]?.value);
   console.log('  OpEx row found:', !!opexRow, opexRow?.Header?.ColData?.[0]?.value);
