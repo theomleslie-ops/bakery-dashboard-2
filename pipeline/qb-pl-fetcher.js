@@ -1,13 +1,41 @@
 /**
  * QB P&L Weekly Fetcher
  * Fetches profit & loss data week-by-week for past 5 years + rolling
- * Uses MCP connector with robust row ID extraction (no fuzzy matching)
+ * Uses QB REST Reports API with robust row ID extraction (no fuzzy matching)
  */
+
+const axios = require('axios');
 
 class QBPLFetcher {
   constructor(qbClient) {
     this.qbClient = qbClient;
     this.rowMap = null;
+  }
+
+  /**
+   * Fetch P&L report from QB REST API
+   */
+  async fetchPLReport(startDate, endDate) {
+    const tokens = await this.qbClient.getValidTokens();
+    const baseUrl = process.env.QUICKBOOKS_ENVIRONMENT === 'sandbox'
+      ? 'https://sandbox-quickbooks.api.intuit.com'
+      : 'https://quickbooks.api.intuit.com';
+
+    const url = `${baseUrl}/v3/company/${tokens.realmId}/reports/ProfitAndLoss`;
+
+    const response = await axios.get(url, {
+      params: {
+        start_date: startDate,
+        end_date: endDate,
+        minorversion: 70
+      },
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`,
+        Accept: 'application/json'
+      }
+    });
+
+    return response.data;
   }
 
   /**
@@ -20,10 +48,10 @@ class QBPLFetcher {
 
     console.log(`🔍 Identifying QB row IDs for period ${fiveYearsAgo.toISOString().split('T')[0]} to ${today.toISOString().split('T')[0]}`);
 
-    const report = await this.qbClient.profit_loss_quickbooks_account({
-      periodStart: fiveYearsAgo.toISOString().split('T')[0],
-      periodEnd: today.toISOString().split('T')[0]
-    });
+    const report = await this.fetchPLReport(
+      fiveYearsAgo.toISOString().split('T')[0],
+      today.toISOString().split('T')[0]
+    );
 
     const rows = report.reportData.data.rows;
     this.rowMap = {};
@@ -135,10 +163,7 @@ class QBPLFetcher {
 
     for (const week of weeks) {
       try {
-        const report = await this.qbClient.profit_loss_quickbooks_account({
-          periodStart: week.start,
-          periodEnd: week.end
-        });
+        const report = await this.fetchPLReport(week.start, week.end);
 
         const metrics = this.extractMetrics(report);
 
