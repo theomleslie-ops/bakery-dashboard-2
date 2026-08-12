@@ -1571,26 +1571,8 @@ const parseQBPeriodPL = (report) => {
   const revenueRow = findQBRowByLabel(report.Rows?.Row, '4000');
   const revenueVals = getQBRowVals(revenueRow);
 
-  // COGS: try "Total for 5000" first (parent account total), then individual account 5000
-  const cogsRowTotal = findQBRowByLabel(report.Rows?.Row, 'Total for 5000');
-  const cogsRow = cogsRowTotal || findQBRowByLabel(report.Rows?.Row, '5000');
+  const cogsRow = findQBRowByLabel(report.Rows?.Row, '5000');
   const cogsVals = getQBRowVals(cogsRow);
-
-  console.log('\n🔍 COGS EXTRACTION DEBUG:');
-  console.log('  Row found:', cogsRowTotal ? 'Total for 5000' : '5000');
-  if (cogsRow) {
-    const rowLabel = cogsRow.Header?.ColData?.[0]?.value || cogsRow.ColData?.[0]?.value || 'NO LABEL';
-    console.log('  Row label:', rowLabel);
-    console.log('  Row has Summary?', !!cogsRow.Summary);
-    console.log('  Row has Header?', !!cogsRow.Header);
-    const cols = cogsRow.Summary?.ColData || cogsRow.Header?.ColData || [];
-    console.log('  Number of columns:', cols.length);
-    console.log('  Raw column values:', cols.slice(0, 5).map(c => c.value));
-  } else {
-    console.log('  ⚠️  COGS Row NOT FOUND');
-  }
-  console.log('  Extracted cogsVals:', cogsVals.slice(0, 5));
-  console.log('');
 
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
   const laborRow = findQBRowByLabel(report.Rows?.Row, '6200');
@@ -1894,11 +1876,6 @@ app.get('/api/dashboard', async (req, res) => {
       const weeklyRows = await getQBWeeklyRows(rangeStart, weekEndForOffset);
 
       periodData = weeklyRows.map(({ row, date }) => ({ ...row, startDate: date }));
-
-      console.log('📊 /api/dashboard - Weekly data:');
-      periodData.forEach((p, i) => {
-        console.log(`  Week ${i}: ${p.startDate} - Revenue: $${Math.round(p.revenue)}, COGS: $${Math.round(p.cogs)}, OpEx: $${Math.round(p.opex)}, P&L: $${Math.round(p.pl)}`);
-      });
 
       periodSource = 'QuickBooks (cached + live, weekly)';
     } catch (err) {
