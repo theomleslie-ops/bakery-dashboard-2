@@ -23,19 +23,31 @@ class QBPLFetcher {
 
     const url = `${baseUrl}/v3/company/${tokens.realmId}/reports/ProfitAndLoss`;
 
-    const response = await axios.get(url, {
-      params: {
-        start_date: startDate,
-        end_date: endDate,
-        minorversion: 70
-      },
-      headers: {
-        Authorization: `Bearer ${tokens.access_token}`,
-        Accept: 'application/json'
-      }
-    });
+    try {
+      const response = await axios.get(url, {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+          minorversion: 70
+        },
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+          Accept: 'application/json'
+        }
+      });
 
-    return response.data;
+      if (!response.data) {
+        throw new Error('QB API returned empty response');
+      }
+
+      return response.data;
+    } catch (err) {
+      console.error(`QB API error for ${startDate}-${endDate}:`, err.message);
+      if (err.response?.data) {
+        console.error('  Response:', JSON.stringify(err.response.data).substring(0, 200));
+      }
+      throw err;
+    }
   }
 
   /**
@@ -53,16 +65,33 @@ class QBPLFetcher {
       today.toISOString().split('T')[0]
     );
 
-    const rows = report.reportData.data.rows;
+    // Handle both nested (MCP) and flat (REST API) response formats
+    let rows;
+    if (report.reportData?.data?.rows) {
+      // MCP response format
+      rows = report.reportData.data.rows;
+    } else if (report.Rows) {
+      // QB REST API format
+      rows = report.Rows;
+    } else {
+      console.error('Unexpected QB response structure:', Object.keys(report));
+      throw new Error('Cannot parse QB P&L response: unknown format');
+    }
+
     this.rowMap = {};
 
     for (const row of rows) {
-      const accountName = row.cells[0].value;
-      const rowId = row.metadata.id;
-      const rowType = row.metadata.type;
+      // Handle both row formats
+      const accountName = row.cells?.[0]?.value || row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value;
+      const rowId = row.metadata?.id || row.id || row.Row?.[0]?.id;
+      const rowType = row.metadata?.type || row.type || [];
+
+      if (!accountName) continue;
 
       // Only look at GROUP/SUMMARY rows (top-level accounts)
-      if (!rowType.includes('GROUP') && !rowType.includes('SUMMARY')) continue;
+      if (Array.isArray(rowType)) {
+        if (!rowType.includes('GROUP') && !rowType.includes('SUMMARY')) continue;
+      }
 
       if (accountName.includes('Income')) {
         this.rowMap.revenue = rowId;
@@ -86,11 +115,24 @@ class QBPLFetcher {
    * Extract metrics from QB response using row IDs
    */
   extractMetrics(qbResponse) {
-    const rows = qbResponse.reportData.data.rows;
+    // Handle both nested (MCP) and flat (REST API) response formats
+    let rows;
+    if (qbResponse.reportData?.data?.rows) {
+      rows = qbResponse.reportData.data.rows;
+    } else if (qbResponse.Rows) {
+      rows = qbResponse.Rows;
+    } else {
+      console.warn('Cannot extract metrics: unknown response format');
+      return { revenue: 0, cogs: 0, operations: 0, netIncome: 0 };
+    }
+
     const rowsById = {};
 
     for (const row of rows) {
-      rowsById[row.metadata.id] = row;
+      const rowId = row.metadata?.id || row.id || row.Row?.[0]?.id;
+      if (rowId) {
+        rowsById[rowId] = row;
+      }
     }
 
     const metrics = {
@@ -100,17 +142,22 @@ class QBPLFetcher {
       netIncome: 0
     };
 
+    // Extract values, handling both response formats
     if (this.rowMap.revenue && rowsById[this.rowMap.revenue]) {
-      metrics.revenue = rowsById[this.rowMap.revenue].cells[1].value || 0;
+      const row = rowsById[this.rowMap.revenue];
+      metrics.revenue = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
     }
     if (this.rowMap.cogs && rowsById[this.rowMap.cogs]) {
-      metrics.cogs = rowsById[this.rowMap.cogs].cells[1].value || 0;
+      const row = rowsById[this.rowMap.cogs];
+      metrics.cogs = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
     }
     if (this.rowMap.operations && rowsById[this.rowMap.operations]) {
-      metrics.operations = rowsById[this.rowMap.operations].cells[1].value || 0;
+      const row = rowsById[this.rowMap.operations];
+      metrics.operations = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
     }
     if (this.rowMap.netIncome && rowsById[this.rowMap.netIncome]) {
-      metrics.netIncome = rowsById[this.rowMap.netIncome].cells[1].value || 0;
+      const row = rowsById[this.rowMap.netIncome];
+      metrics.netIncome = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
     }
 
     return metrics;
