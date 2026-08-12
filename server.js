@@ -1470,42 +1470,9 @@ app.post('/api/google/disconnect', (req, res) => {
 // ============= QUICKBOOKS DATA ENDPOINTS =============
 
 // Fetch a Profit & Loss report from QuickBooks, broken into periods (Week or Month) for a date range
-const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Month') => {
-  try {
-    // Try Composio first if configured
-    if (process.env.COMPOSIO_API_KEY) {
-      try {
-        console.log('Attempting to fetch QB P&L via Composio...');
-        const client = await composioConnectors.initComposio();
-        const connectionId = await composioConnectors.getQuickBooksConnection();
-        console.log('Got QB connection ID from Composio:', connectionId);
-
-        // Try to use Composio's QB action
-        try {
-          const result = await client.executeAction({
-            connectionId,
-            action: 'quickbooks_get_profit_loss_report',
-            parameters: {
-              start_date: startDate,
-              end_date: endDate,
-              summarize_column_by: summarizeColumnBy,
-            },
-          });
-          console.log('✅ Successfully fetched QB P&L via Composio');
-          return result;
-        } catch (err) {
-          console.warn('Composio QB action failed:', err.message, '- trying direct API...');
-        }
-      } catch (err) {
-        console.warn('Composio connection attempt failed:', err.message, '- falling back to legacy auth');
-      }
-    }
-  } catch (err) {
-    console.warn('Composio path failed:', err.message);
-  }
-
-  // Fallback to legacy token auth
-  console.log('Attempting QB P&L fetch with legacy token auth...');
+const fetchQBProfitAndLoss = async (startDate, endDate, summarizeColumnBy = 'Week') => {
+  // Skill pattern: Use QB Report API with new response format (reportData.data.rows)
+  console.log(`Fetching QB P&L: ${startDate} to ${endDate} (${summarizeColumnBy})`);
   const tokens = await getValidQBAccessToken();
   const response = await axios.get(
     `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/ProfitAndLoss`,
@@ -1551,91 +1518,58 @@ const findQBRowByLabel = (rows, labelSubstring) => {
   return null;
 };
 
-const getQBRowVals = (row) => {
-  const cols = row?.Summary?.ColData || row?.Header?.ColData;
-  return cols?.map((c) => parseFloat(c.value) || 0) || [];
-};
-
-// Convert a QuickBooks ProfitAndLoss report (summarized by Week or Month) into per-period rows.
-// Real dollar figures straight from the ledger for each period - never averaged or estimated
-// from a different granularity.
-const parseQBPeriodPL = (report) => {
-  const columns = report.Columns?.Column || [];
+// Skill pattern: Extract P&L metrics using direct row ID matching
+const parseQBPeriodPL = (response) => {
+  const columns = response.Columns?.Column || [];
   const periodCols = columns
     .map((c, i) => ({ index: i, title: c.ColTitle }))
     .filter((c) => c.title && c.title !== 'Total');
 
-  // Replicate skill pattern: Find summary/total rows for each section
-  let revRow, cogsRow, opexRow, netRow, laborRow;
-
-  const findRows = (rows, depth = 0) => {
-    if (!rows) return;
-    for (const row of rows) {
-      const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-
-      // Check if this row has Summary data (indicates it's a total row with values)
-      const hasSummary = !!row.Summary?.ColData;
-
-      // Revenue: look for "Income" or "4000 REVENUE" that has Summary
-      if (!revRow && (label === 'Income' || label.includes('4000')) && hasSummary) {
-        revRow = row;
+  // Find rows with Summary data (these are the total rows with values)
+  const rowsWithSummary = [];
+  const findRowsWithSummary = (rowsArray) => {
+    if (!rowsArray) return;
+    for (const row of rowsArray) {
+      if (row.Summary?.ColData) {
+        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+        rowsWithSummary.push({ label, row });
       }
-
-      // COGS: look for rows with "5000" or "Cost of Goods" that have Summary
-      if (!cogsRow && (label.includes('5000') || label.includes('Cost of Goods')) && hasSummary) {
-        cogsRow = row;
-      }
-
-      // Operations/Expenses: look for "6000" or "Operations" that have Summary
-      if (!opexRow && (label.includes('6000') || label === 'Operations') && hasSummary) {
-        opexRow = row;
-      }
-
-      // Net Income: look for it with Summary
-      if (!netRow && label.includes('Net Income') && hasSummary) {
-        netRow = row;
-      }
-
-      // Labor: 6200 with Summary
-      if (!laborRow && label.includes('6200') && hasSummary) {
-        laborRow = row;
-      }
-
-      // Recursively search nested rows
-      if (row.Rows?.Row) findRows(row.Rows.Row, depth + 1);
+      if (row.Rows?.Row) findRowsWithSummary(row.Rows.Row);
     }
   };
+  findRowsWithSummary(response.Rows?.Row);
 
-  findRows(report.Rows?.Row);
+  // Debug: Show all rows with Summary data
+  console.log('\n🔍 Rows with Summary data:');
+  rowsWithSummary.forEach(({ label }) => console.log(`  - ${label}`));
 
-  const revenueVals = getQBRowVals(revRow);
-  const cogsVals = getQBRowVals(cogsRow);
-  const opexVals = getQBRowVals(opexRow);
-  const laborVals = getQBRowVals(laborRow);
-  const netVals = getQBRowVals(netRow);
+  // Match rows by label
+  const rowMap = {};
+  rowsWithSummary.forEach(({ label, row }) => {
+    if (!rowMap.revenue && label === 'Income') rowMap.revenue = row;
+    if (!rowMap.cogs && label.includes('Cost of Goods')) rowMap.cogs = row;
+    if (!rowMap.opex && label.includes('Expenses')) rowMap.opex = row;
+    if (!rowMap.net && label.includes('Net Income')) rowMap.net = row;
+    if (!rowMap.labor && label.includes('LABOR')) rowMap.labor = row;
+  });
 
-  console.log('\n📊 QB P&L Parsing Results:');
-  console.log('  Revenue:', revRow?.Header?.ColData?.[0]?.value || 'NOT FOUND', '-', revenueVals.slice(0, 3));
-  console.log('  COGS:', cogsRow?.Header?.ColData?.[0]?.value || 'NOT FOUND', '-', cogsVals.slice(0, 3));
-  console.log('  OpEx:', opexRow?.Header?.ColData?.[0]?.value || 'NOT FOUND', '-', opexVals.slice(0, 3));
-  console.log('  Net:', netRow?.Header?.ColData?.[0]?.value || 'NOT FOUND', '-', netVals.slice(0, 3));
+  const getVals = (row) => row?.Summary?.ColData?.map(c => parseFloat(c.value) || 0) || [];
 
   return periodCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
-    // Monthly columns are titled with the bare month name (e.g. "January"); weekly columns are
-    // titled with a date range (e.g. "Jun 28 - Jul 4, 2026") - only rewrite the former.
     const isBareMonth = monthIdx >= 0 && /^[A-Za-z]+$/.test(col.title.trim());
     const shortLabelMatch = col.title.match(/^([A-Za-z]+ \d+)/);
     return {
       label: isBareMonth ? MONTH_SHORTS[monthIdx] : (shortLabelMatch ? shortLabelMatch[1] : col.title),
       fullLabel: isBareMonth ? MONTH_NAMES[monthIdx] : col.title,
-      revenue: revenueVals[col.index] || 0,
-      cogs: cogsVals[col.index] || 0,
-      opex: opexVals[col.index] || 0,
-      labor: laborVals[col.index] || 0,
-      pl: netVals[col.index] || 0,
+      revenue: getVals(rowMap.revenue)[col.index] || 0,
+      cogs: getVals(rowMap.cogs)[col.index] || 0,
+      opex: getVals(rowMap.opex)[col.index] || 0,
+      labor: getVals(rowMap.labor)[col.index] || 0,
+      pl: getVals(rowMap.net)[col.index] || 0,
     };
   });
+};
 };
 
 // Pair consecutive real weekly periods into 2-week totals - summed, never averaged. Any odd
