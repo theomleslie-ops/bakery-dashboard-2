@@ -1500,7 +1500,10 @@ const PLStore = require('./pipeline/qb-pl-store');
 const { refreshPLData } = require('./pipeline/qb-pl-refresh');
 
 let plFetcher = null;
-let plStore = new PLStore();
+// Use absolute path for P&L data to ensure persistence on Railway
+const PL_DATA_FILE = path.join(DATA_DIR, 'pl-weekly.json');
+let plStore = new PLStore(PL_DATA_FILE);
+console.log(`📁 P&L data file: ${PL_DATA_FILE}`);
 
 // Initialize P&L fetcher with QB client
 function initPLFetcher() {
