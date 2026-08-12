@@ -107,16 +107,34 @@ class QBPLFetcher {
     this.rowMap = {};
 
     for (const row of rows) {
-      // Handle both row formats
-      const accountName = row.cells?.[0]?.value || row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value;
-      const rowId = row.metadata?.id || row.id || row.Row?.[0]?.id;
-      const rowType = row.metadata?.type || row.type || [];
+      // Handle both row formats - QB REST API uses different structure
+      let accountName, rowId, rowType;
+
+      // Try different property paths for account name
+      if (row.cells && Array.isArray(row.cells) && row.cells[0]) {
+        accountName = row.cells[0].value;
+      } else if (row.ColData && Array.isArray(row.ColData) && row.ColData[0]) {
+        accountName = row.ColData[0].value;
+      }
+
+      // Try different property paths for row ID
+      rowId = row.metadata?.id || row.id;
+
+      // Try different property paths for row type
+      rowType = row.metadata?.type || row.type || [];
 
       if (!accountName) continue;
 
-      // Only look at GROUP/SUMMARY rows (top-level accounts)
-      if (Array.isArray(rowType)) {
-        if (!rowType.includes('GROUP') && !rowType.includes('SUMMARY')) continue;
+      // Debug: log first few rows to understand structure
+      if (Object.keys(this.rowMap).length === 0 && rows.indexOf(row) < 3) {
+        console.log(`  Sample row: accountName="${accountName}", rowId="${rowId}", rowType="${rowType}"`);
+        console.log(`    Row keys: ${Object.keys(row).slice(0, 8).join(', ')}`);
+        if (row.ColData) console.log(`    ColData[0]="${row.ColData[0]?.value}", ColData[1]="${row.ColData[1]?.value}"`);
+      }
+
+      // Only look at top-level summary rows
+      if (Array.isArray(rowType) && !rowType.includes('GROUP') && !rowType.includes('SUMMARY')) {
+        continue;
       }
 
       if (accountName.includes('Income')) {
@@ -133,6 +151,9 @@ class QBPLFetcher {
         console.log(`  ✓ Net Income: row ID "${rowId}" (${accountName})`);
       }
     }
+
+    // Log final row map for debugging
+    console.log(`  📊 Row mapping complete: revenue=${this.rowMap.revenue}, cogs=${this.rowMap.cogs}, ops=${this.rowMap.operations}, net=${this.rowMap.netIncome}`);
 
     return this.rowMap;
   }
@@ -176,22 +197,37 @@ class QBPLFetcher {
       netIncome: 0
     };
 
+    // Debug: check if we have row IDs
+    if (!this.rowMap.revenue || !this.rowMap.cogs) {
+      console.warn('⚠️  Missing row IDs in rowMap:', { revenue: this.rowMap.revenue, cogs: this.rowMap.cogs });
+    }
+
     // Extract values, handling both response formats
-    if (this.rowMap.revenue && rowsById[this.rowMap.revenue]) {
+    if (this.rowMap.revenue) {
       const row = rowsById[this.rowMap.revenue];
-      metrics.revenue = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
+      if (row) {
+        metrics.revenue = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
+      } else {
+        console.warn(`⚠️  Revenue row ID "${this.rowMap.revenue}" not found in rowsById. Available IDs: ${Object.keys(rowsById).slice(0, 5).join(', ')}`);
+      }
     }
-    if (this.rowMap.cogs && rowsById[this.rowMap.cogs]) {
+    if (this.rowMap.cogs) {
       const row = rowsById[this.rowMap.cogs];
-      metrics.cogs = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
+      if (row) {
+        metrics.cogs = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
+      }
     }
-    if (this.rowMap.operations && rowsById[this.rowMap.operations]) {
+    if (this.rowMap.operations) {
       const row = rowsById[this.rowMap.operations];
-      metrics.operations = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
+      if (row) {
+        metrics.operations = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
+      }
     }
-    if (this.rowMap.netIncome && rowsById[this.rowMap.netIncome]) {
+    if (this.rowMap.netIncome) {
       const row = rowsById[this.rowMap.netIncome];
-      metrics.netIncome = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
+      if (row) {
+        metrics.netIncome = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
+      }
     }
 
     return metrics;
