@@ -106,54 +106,28 @@ class QBPLFetcher {
 
     this.rowMap = {};
 
+    // QB REST API structure: rows ARE the categories, extract totals directly
+    this.rowMap = { revenue: null, cogs: null, operations: null, netIncome: null };
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-
-      // Debug: log actual row structure for first 2 rows
-      if (i < 2) {
-        console.log(`  Row ${i}: ${JSON.stringify(row).substring(0, 150)}`);
-        console.log(`    Keys: ${Object.keys(row).join(', ')}`);
-      }
-
-      // Handle both row formats - QB REST API uses different structure
-      let accountName, rowId, rowType;
-
-      // Try different property paths for account name
-      if (row.cells && Array.isArray(row.cells) && row.cells[0]) {
-        accountName = row.cells[0].value;
-      } else if (row.ColData && Array.isArray(row.ColData) && row.ColData[0]) {
-        accountName = row.ColData[0].value;
-      } else if (row.Header && row.Header.ColData && Array.isArray(row.Header.ColData)) {
-        accountName = row.Header.ColData[0].value;
-      }
-
-      // Try different property paths for row ID
-      rowId = row.metadata?.id || row.id;
-
-      // Try different property paths for row type
-      rowType = row.metadata?.type || row.type || [];
-
-      console.log(`  Row ${i}: accountName="${accountName}", rowId="${rowId}"`);
+      const accountName = row.Header?.ColData?.[0]?.value;
 
       if (!accountName) continue;
 
-      // Only look at top-level summary rows
-      if (Array.isArray(rowType) && !rowType.includes('GROUP') && !rowType.includes('SUMMARY')) {
-        continue;
-      }
-
-      if (accountName.includes('Income')) {
-        this.rowMap.revenue = rowId;
-        console.log(`  ✓ Revenue: row ID "${rowId}" (${accountName})`);
-      } else if (accountName.includes('Cost of Goods Sold')) {
-        this.rowMap.cogs = rowId;
-        console.log(`  ✓ COGS: row ID "${rowId}" (${accountName})`);
-      } else if (accountName.includes('Expenses') && !accountName.includes('Other')) {
-        this.rowMap.operations = rowId;
-        console.log(`  ✓ Operations: row ID "${rowId}" (${accountName})`);
-      } else if (accountName.includes('Net Income')) {
-        this.rowMap.netIncome = rowId;
-        console.log(`  ✓ Net Income: row ID "${rowId}" (${accountName})`);
+      // Map account names to our categories (no row IDs needed)
+      if (accountName === 'Income') {
+        this.rowMap.revenue = i; // Store index instead of ID
+        console.log(`  ✓ Revenue: index ${i} (${accountName})`);
+      } else if (accountName === 'Cost of Goods Sold') {
+        this.rowMap.cogs = i;
+        console.log(`  ✓ COGS: index ${i} (${accountName})`);
+      } else if (accountName === 'Expenses') {
+        this.rowMap.operations = i;
+        console.log(`  ✓ Operations: index ${i} (${accountName})`);
+      } else if (accountName === 'Net Income') {
+        this.rowMap.netIncome = i;
+        console.log(`  ✓ Net Income: index ${i} (${accountName})`);
       }
     }
 
@@ -164,7 +138,7 @@ class QBPLFetcher {
   }
 
   /**
-   * Extract metrics from QB response using row IDs
+   * Extract metrics from QB response using row indices
    */
   extractMetrics(qbResponse) {
     // Handle both nested (MCP) and flat (REST API) response formats
@@ -182,17 +156,8 @@ class QBPLFetcher {
       }
     }
 
-    const rowsById = {};
-
     if (!Array.isArray(rows)) {
       return { revenue: 0, cogs: 0, operations: 0, netIncome: 0 };
-    }
-
-    for (const row of rows) {
-      const rowId = row.metadata?.id || row.id || row.Row?.[0]?.id;
-      if (rowId) {
-        rowsById[rowId] = row;
-      }
     }
 
     const metrics = {
@@ -202,37 +167,28 @@ class QBPLFetcher {
       netIncome: 0
     };
 
-    // Debug: check if we have row IDs
-    if (!this.rowMap.revenue || !this.rowMap.cogs) {
-      console.warn('⚠️  Missing row IDs in rowMap:', { revenue: this.rowMap.revenue, cogs: this.rowMap.cogs });
+    // Extract values by row index (QB REST API structure)
+    // Each category row has Header.ColData[1].value or Summary with the total
+    if (this.rowMap.revenue !== null && rows[this.rowMap.revenue]) {
+      const row = rows[this.rowMap.revenue];
+      // Try to get total from Header.ColData[1] or Summary
+      metrics.revenue = parseFloat(row.Header?.ColData?.[1]?.value) ||
+                       parseFloat(row.Summary?.ColData?.[1]?.value) || 0;
     }
-
-    // Extract values, handling both response formats
-    if (this.rowMap.revenue) {
-      const row = rowsById[this.rowMap.revenue];
-      if (row) {
-        metrics.revenue = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
-      } else {
-        console.warn(`⚠️  Revenue row ID "${this.rowMap.revenue}" not found in rowsById. Available IDs: ${Object.keys(rowsById).slice(0, 5).join(', ')}`);
-      }
+    if (this.rowMap.cogs !== null && rows[this.rowMap.cogs]) {
+      const row = rows[this.rowMap.cogs];
+      metrics.cogs = parseFloat(row.Header?.ColData?.[1]?.value) ||
+                    parseFloat(row.Summary?.ColData?.[1]?.value) || 0;
     }
-    if (this.rowMap.cogs) {
-      const row = rowsById[this.rowMap.cogs];
-      if (row) {
-        metrics.cogs = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
-      }
+    if (this.rowMap.operations !== null && rows[this.rowMap.operations]) {
+      const row = rows[this.rowMap.operations];
+      metrics.operations = parseFloat(row.Header?.ColData?.[1]?.value) ||
+                          parseFloat(row.Summary?.ColData?.[1]?.value) || 0;
     }
-    if (this.rowMap.operations) {
-      const row = rowsById[this.rowMap.operations];
-      if (row) {
-        metrics.operations = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
-      }
-    }
-    if (this.rowMap.netIncome) {
-      const row = rowsById[this.rowMap.netIncome];
-      if (row) {
-        metrics.netIncome = row.cells?.[1]?.value || row.ColData?.[1]?.value || 0;
-      }
+    if (this.rowMap.netIncome !== null && rows[this.rowMap.netIncome]) {
+      const row = rows[this.rowMap.netIncome];
+      metrics.netIncome = parseFloat(row.Header?.ColData?.[1]?.value) ||
+                         parseFloat(row.Summary?.ColData?.[1]?.value) || 0;
     }
 
     return metrics;
