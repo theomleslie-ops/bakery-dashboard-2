@@ -1875,6 +1875,12 @@ app.get('/api/dashboard', async (req, res) => {
 
       periodData = weeklyRows.map(({ row, date }) => ({ ...row, startDate: date }));
 
+      // Debug: show week 10 (2026-06-28) values
+      const week10 = periodData.find(p => p.startDate === '2026-06-28');
+      if (week10) {
+        console.log('📌 Week 10 (2026-06-28) COGS Debug: $' + Math.round(week10.cogs));
+      }
+
       periodSource = 'QuickBooks (cached + live, weekly)';
     } catch (err) {
       if (err.code !== 'QB_NOT_CONNECTED') {
