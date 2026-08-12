@@ -1571,8 +1571,12 @@ const parseQBPeriodPL = (report) => {
   const revenueRow = findQBRowByLabel(report.Rows?.Row, '4000');
   const revenueVals = getQBRowVals(revenueRow);
 
-  const cogsRow = findQBRowByLabel(report.Rows?.Row, '5000');
+  // COGS: try "Total for 5000" first (parent account total), then individual account 5000
+  const cogsRowTotal = findQBRowByLabel(report.Rows?.Row, 'Total for 5000');
+  const cogsRow = cogsRowTotal || findQBRowByLabel(report.Rows?.Row, '5000');
   const cogsVals = getQBRowVals(cogsRow);
+
+  console.log('🔍 COGS Debug:', cogsRowTotal ? 'Using Total for 5000' : 'Using 5000', 'Values:', cogsVals.slice(0, 5));
 
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
   const laborRow = findQBRowByLabel(report.Rows?.Row, '6200');
