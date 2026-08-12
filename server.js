@@ -1418,6 +1418,9 @@ app.post('/api/google/disconnect', (req, res) => {
 
 // ============= QUICKBOOKS DATA ENDPOINTS =============
 
+const MONTH_SHORTS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 // Get Account Balances from QuickBooks (serves from persistent cache first)
 app.get('/api/quickbooks/accounts', async (req, res) => {
   try {
