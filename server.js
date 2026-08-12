@@ -1878,14 +1878,6 @@ app.get('/api/dashboard', async (req, res) => {
 
       periodData = weeklyRows.map(({ row, date }) => ({ ...row, startDate: date }));
 
-      // Show past 6 months (26 weeks) of P&L data
-      console.log('\n📊 Past 6 Months P&L Data:');
-      const recentWeeks = periodData.slice(-26);
-      recentWeeks.forEach((p, i) => {
-        console.log(`  ${p.startDate}: Rev $${Math.round(p.revenue)} | COGS $${Math.round(p.cogs)} | OpEx $${Math.round(p.opex)} | P&L $${Math.round(p.pl)}`);
-      });
-      console.log('');
-
       periodSource = 'QuickBooks (cached + live, weekly)';
     } catch (err) {
       if (err.code !== 'QB_NOT_CONNECTED') {
