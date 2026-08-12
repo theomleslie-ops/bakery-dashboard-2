@@ -1565,55 +1565,48 @@ const parseQBPeriodPL = (report) => {
     .map((c, i) => ({ index: i, title: c.ColTitle }))
     .filter((c) => c.title && c.title !== 'Total');
 
-  // Use direct row identification (no fuzzy matching) - skill-based approach
-  // Find TOTAL rows within sections, not just the headers
+  // Replicate skill pattern: Find summary/total rows for each section
   let revRow, cogsRow, opexRow, netRow, laborRow;
 
-  const findRows = (rows) => {
+  const findRows = (rows, depth = 0) => {
     if (!rows) return;
     for (const row of rows) {
       const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
 
-      // Look for specific total/summary rows with values, not just headers
-      if (!revRow && label.includes('Total for Income')) revRow = row;
-      else if (!revRow && label.includes('4000') && label.includes('REVENUE')) revRow = row;
+      // Check if this row has Summary data (indicates it's a total row with values)
+      const hasSummary = !!row.Summary?.ColData;
 
-      if (!cogsRow && label.includes('Total for 5000')) cogsRow = row;
-      else if (!cogsRow && label.includes('Total for Cost of Goods Sold')) cogsRow = row;
-      else if (!cogsRow && label.includes('Cost of Goods Sold')) cogsRow = row;
+      // Revenue: look for "Income" or "4000 REVENUE" that has Summary
+      if (!revRow && (label === 'Income' || label.includes('4000')) && hasSummary) {
+        revRow = row;
+      }
 
-      if (!opexRow && label === 'Operations') opexRow = row;
-      else if (!opexRow && label.includes('Total for Operations')) opexRow = row;
-      else if (!opexRow && label.includes('Total for 6000')) opexRow = row;
+      // COGS: look for rows with "5000" or "Cost of Goods" that have Summary
+      if (!cogsRow && (label.includes('5000') || label.includes('Cost of Goods')) && hasSummary) {
+        cogsRow = row;
+      }
 
-      if (!netRow && label.includes('Total for Net Income')) netRow = row;
-      else if (!netRow && label.includes('Net Income')) netRow = row;
+      // Operations/Expenses: look for "6000" or "Operations" that have Summary
+      if (!opexRow && (label.includes('6000') || label === 'Operations') && hasSummary) {
+        opexRow = row;
+      }
 
-      if (!laborRow && label.includes('Total for 6200')) laborRow = row;
-      else if (!laborRow && label.includes('6200') && label.includes('LABOR')) laborRow = row;
+      // Net Income: look for it with Summary
+      if (!netRow && label.includes('Net Income') && hasSummary) {
+        netRow = row;
+      }
 
-      if (row.Rows?.Row) findRows(row.Rows.Row);
+      // Labor: 6200 with Summary
+      if (!laborRow && label.includes('6200') && hasSummary) {
+        laborRow = row;
+      }
+
+      // Recursively search nested rows
+      if (row.Rows?.Row) findRows(row.Rows.Row, depth + 1);
     }
   };
 
   findRows(report.Rows?.Row);
-
-  // Debug: Check if found rows have Summary data
-  if (revRow) {
-    console.log('\n🔍 Revenue row structure:');
-    console.log('  Has Summary?', !!revRow.Summary);
-    console.log('  Has Summary.ColData?', !!revRow.Summary?.ColData);
-    console.log('  Summary.ColData length:', revRow.Summary?.ColData?.length || 0);
-    console.log('  First 3 values:', revRow.Summary?.ColData?.slice(0, 3)?.map(c => c.value) || []);
-  }
-
-  if (cogsRow) {
-    console.log('\n🔍 COGS row structure:');
-    console.log('  Has Summary?', !!cogsRow.Summary);
-    console.log('  Has Summary.ColData?', !!cogsRow.Summary?.ColData);
-    console.log('  Summary.ColData length:', cogsRow.Summary?.ColData?.length || 0);
-    console.log('  First 3 values:', cogsRow.Summary?.ColData?.slice(0, 3)?.map(c => c.value) || []);
-  }
 
   const revenueVals = getQBRowVals(revRow);
   const cogsVals = getQBRowVals(cogsRow);
@@ -1621,10 +1614,11 @@ const parseQBPeriodPL = (report) => {
   const laborVals = getQBRowVals(laborRow);
   const netVals = getQBRowVals(netRow);
 
-  console.log('\n📊 Extracted values:');
-  console.log('  Revenue values:', revenueVals.slice(0, 3));
-  console.log('  COGS values:', cogsVals.slice(0, 3));
-  console.log('  OpEx values:', opexVals.slice(0, 3));
+  console.log('\n📊 QB P&L Parsing Results:');
+  console.log('  Revenue:', revRow?.Header?.ColData?.[0]?.value || 'NOT FOUND', '-', revenueVals.slice(0, 3));
+  console.log('  COGS:', cogsRow?.Header?.ColData?.[0]?.value || 'NOT FOUND', '-', cogsVals.slice(0, 3));
+  console.log('  OpEx:', opexRow?.Header?.ColData?.[0]?.value || 'NOT FOUND', '-', opexVals.slice(0, 3));
+  console.log('  Net:', netRow?.Header?.ColData?.[0]?.value || 'NOT FOUND', '-', netVals.slice(0, 3));
 
   return periodCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
