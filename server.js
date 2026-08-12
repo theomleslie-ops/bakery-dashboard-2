@@ -1574,7 +1574,20 @@ const parseQBPeriodPL = (report) => {
   const cogsVals = getQBRowVals(cogsRow);
 
   if (!cogsRow) {
-    console.warn('⚠️ "Total for 5000" NOT found in QB report');
+    console.warn('⚠️ "Total for 5000" NOT found. Dumping all row labels:');
+    const allRowLabels = [];
+    const walkRows = (rows) => {
+      if (!rows) return;
+      for (const row of rows) {
+        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+        if (label && label.includes('5000')) {
+          allRowLabels.push(label.substring(0, 100));
+        }
+        if (row.Rows?.Row) walkRows(row.Rows.Row);
+      }
+    };
+    if (report.Rows?.Row) walkRows(report.Rows.Row);
+    console.warn('  Rows containing "5000":', allRowLabels);
   } else {
     console.log('✓ "Total for 5000" found, values:', cogsVals.slice(0, 3));
   }
