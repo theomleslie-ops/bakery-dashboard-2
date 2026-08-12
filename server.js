@@ -1915,12 +1915,9 @@ app.get('/api/dashboard', async (req, res) => {
       source: 'Multi-month P/L Statements'
     } : { source: 'No financial data uploaded yet' };
 
-    // 2-week period data comes from real per-week QuickBooks ledger totals summed in pairs, never
-    // averaged or estimated - only available once QuickBooks has been connected. Periods instead
-    // of raw weeks because labor/payroll posts roughly biweekly, so a single-week view is
-    // dominated by whichever week payroll happened to land in. Completed weeks are served from a
-    // disk-persisted snapshot (data/qb-weekly-pl-snapshot.json) instead of re-fetched every time -
-    // only the most recent 2 weeks are ever pulled live.
+    // Weekly data comes from real per-week QuickBooks ledger totals. Completed weeks are served
+    // from a disk-persisted snapshot (data/qb-weekly-pl-snapshot.json) instead of re-fetched
+    // every time - only the most recent 2 weeks are ever pulled live.
     let periodData = [];
     let periodSource = 'QuickBooks not connected';
     try {
@@ -1932,10 +1929,9 @@ app.get('/api/dashboard', async (req, res) => {
       const rangeStart = addDays(weekEndForOffset, -7 * weeksBack);
       const weeklyRows = await getQBWeeklyRows(rangeStart, weekEndForOffset);
 
-      const pairedData = pairIntoBiweekly(weeklyRows);
-      periodData = pairedData;
+      periodData = weeklyRows.map(({ row, date }) => ({ ...row, startDate: date }));
 
-      periodSource = 'QuickBooks (cached + live, every 2 weeks)';
+      periodSource = 'QuickBooks (cached + live, weekly)';
     } catch (err) {
       if (err.code !== 'QB_NOT_CONNECTED') {
         console.error('Weekly QuickBooks P&L fetch failed:', err.response?.data?.fault?.detail?.[0]?.message || err.message);
