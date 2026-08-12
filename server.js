@@ -1569,28 +1569,10 @@ const parseQBPeriodPL = (report) => {
   const revenueRow = findQBRowByLabel(report.Rows?.Row, '4000');
   const revenueVals = getQBRowVals(revenueRow);
 
-  // Look for "Total for 5000 COST OF GOODS SOLD" (includes all sub-accounts)
-  const cogsRow = findQBRowByLabel(report.Rows?.Row, 'Total for 5000');
+  // Find the COGS total - try "Total for Cost of Goods Sold" summary row
+  const cogsRow = findQBSummaryRow(report.Rows?.Row, 'COGS') ||
+                  findQBRowByLabel(report.Rows?.Row, 'Total for Cost of Goods Sold');
   const cogsVals = getQBRowVals(cogsRow);
-
-  if (!cogsRow) {
-    console.warn('⚠️ "Total for 5000" NOT found. Dumping all row labels:');
-    const allRowLabels = [];
-    const walkRows = (rows) => {
-      if (!rows) return;
-      for (const row of rows) {
-        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        if (label && label.includes('5000')) {
-          allRowLabels.push(label.substring(0, 100));
-        }
-        if (row.Rows?.Row) walkRows(row.Rows.Row);
-      }
-    };
-    if (report.Rows?.Row) walkRows(report.Rows.Row);
-    console.warn('  Rows containing "5000":', allRowLabels);
-  } else {
-    console.log('✓ "Total for 5000" found, values:', cogsVals.slice(0, 3));
-  }
 
   const opexVals = getQBRowVals(findQBSummaryRow(report.Rows?.Row, 'Expenses'));
   const laborRow = findQBRowByLabel(report.Rows?.Row, '6200');
