@@ -109,6 +109,14 @@ class QBPLFetcher {
     // QB REST API structure: rows ARE the categories, extract totals directly
     this.rowMap = { revenue: null, cogs: null, operations: null, netIncome: null };
 
+    // Debug: log all account names first
+    console.log('  Available rows:');
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const accountName = row.Header?.ColData?.[0]?.value;
+      console.log(`    [${i}] ${accountName || '(unnamed)'}`);
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const accountName = row.Header?.ColData?.[0]?.value;
@@ -125,7 +133,7 @@ class QBPLFetcher {
       } else if (accountName === 'Expenses') {
         this.rowMap.operations = i;
         console.log(`  ✓ Operations: index ${i} (${accountName})`);
-      } else if (accountName === 'Net Income') {
+      } else if (accountName.includes('Net Income') || accountName.includes('Net')) {
         this.rowMap.netIncome = i;
         console.log(`  ✓ Net Income: index ${i} (${accountName})`);
       }
@@ -189,6 +197,9 @@ class QBPLFetcher {
       const row = rows[this.rowMap.netIncome];
       metrics.netIncome = parseFloat(row.Header?.ColData?.[1]?.value) ||
                          parseFloat(row.Summary?.ColData?.[1]?.value) || 0;
+    } else {
+      // If Net Income row not found, calculate it
+      metrics.netIncome = metrics.revenue - metrics.cogs - metrics.operations;
     }
 
     return metrics;
