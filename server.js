@@ -2651,6 +2651,155 @@ app.get('/overtime', (req, res) => {
   res.sendFile('overtime.html', { root: __dirname });
 });
 
+// Public Market Performance Dashboard (no auth required)
+app.get('/public-market-performance', (req, res) => {
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Market Performance Dashboard</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background: #faf9f7; color: #2c2416; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+    header { text-align: center; margin-bottom: 30px; }
+    h1 { color: #6b4423; font-size: 28px; margin-bottom: 8px; }
+    .subtitle { color: #8b6c57; font-size: 14px; }
+    .loading { text-align: center; padding: 40px; color: #8b6c57; }
+    .error { background: #fee; border: 1px solid #fcc; color: #c00; padding: 12px; border-radius: 4px; margin-bottom: 20px; }
+    .chart-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .chart-title { font-weight: 600; color: #6b4423; margin-bottom: 20px; font-size: 16px; }
+    .controls { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
+    .view-toggle { display: flex; gap: 8px; }
+    button { padding: 8px 12px; border: 1px solid #d4b5a0; background: white; color: #6b4423; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    button.active { background: #6b4423; color: white; border-color: #6b4423; }
+    button:hover:not(.active) { background: #f5f1ed; }
+    svg { width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function MarketPerformanceDashboard() {
+      const [markets, setMarkets] = useState([]);
+      const [selected, setSelected] = useState(new Set());
+      const [status, setStatus] = useState('loading');
+      const [error, setError] = useState('');
+      const [weekStarts, setWeekStarts] = useState([]);
+      const [viewMode, setViewMode] = useState('dollars');
+
+      useEffect(() => { fetchData(); }, []);
+
+      const fetchData = async () => {
+        try {
+          setStatus('loading');
+          const baseUrl = window.location.origin;
+          const response = await fetch(\`\${baseUrl}/api/market-performance\`);
+          const result = await response.json();
+          if (result.error) { setError(result.error); setStatus('error'); return; }
+          setWeekStarts(result.weekStarts || []);
+          setMarkets(result.markets || []);
+          setSelected(new Set((result.markets || []).map(m => m.name)));
+          setStatus('ready');
+        } catch (err) {
+          setError('Failed to load data: ' + err.message);
+          setStatus('error');
+        }
+      };
+
+      const fmtWeekLabel = (dateStr) => {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      };
+
+      const fmtMoney = (v) => \`$\${v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}\`;
+
+      const visibleMarkets = markets.filter(m => selected.has(m.name));
+      const colorOf = (name) => {
+        const colors = ['#2a78d6', '#ff9500', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#6366f1'];
+        return colors[markets.findIndex(m => m.name === name) % colors.length];
+      };
+
+      if (status === 'loading') return <div className="container"><div className="loading">Loading market data…</div></div>;
+      if (status === 'error') return <div className="container"><div className="error">{error}</div></div>;
+
+      return (
+        <div className="container">
+          <header>
+            <h1>📍 Market Performance</h1>
+            <p className="subtitle">Weekly revenue by farmers market location</p>
+          </header>
+          <div className="controls">
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <strong style={{ fontSize: '12px', color: '#8b6c57', textTransform: 'uppercase' }}>Markets ({selected.size} of {markets.length})</strong>
+              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {markets.map(m => (
+                  <label key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '14px' }}>
+                    <input type="checkbox" checked={selected.has(m.name)} onChange={(e) => {
+                      const newSelected = new Set(selected);
+                      if (e.target.checked) newSelected.add(m.name);
+                      else newSelected.delete(m.name);
+                      setSelected(newSelected);
+                    }} style={{ cursor: 'pointer' }} />
+                    <span style={{ color: colorOf(m.name), fontWeight: 500 }}>●</span>
+                    <span>{m.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="chart-container">
+            <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
+            <svg viewBox="0 0 1200 400" preserveAspectRatio="xMidYMid meet" style={{ minHeight: '400px' }}>
+              <defs>
+                {markets.map(m => (
+                  <linearGradient key={m.name} id={\`grad-\${m.name}\`} x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor={colorOf(m.name)} stopOpacity="0.7" />
+                    <stop offset="100%" stopColor={colorOf(m.name)} stopOpacity="0.3" />
+                  </linearGradient>
+                ))}
+              </defs>
+              <line x1="60" y1="350" x2="1150" y2="350" stroke="#ddd" strokeWidth="1" />
+              {weekStarts.map((week, i) => {
+                const x = 60 + (i / (weekStarts.length - 1 || 1)) * 1090;
+                return (
+                  <g key={i}>
+                    <line x1={x} y1="350" x2={x} y2="360" stroke="#ccc" strokeWidth="1" />
+                    {i % Math.max(1, Math.floor(weekStarts.length / 8)) === 0 && (
+                      <text x={x} y="375" textAnchor="middle" fontSize="12" fill="#8b6c57">{fmtWeekLabel(week)}</text>
+                    )}
+                  </g>
+                );
+              })}
+              {visibleMarkets.map(m => {
+                const maxRev = Math.max(...visibleMarkets.flatMap(m => m.revenue)) || 1;
+                return (
+                  <polyline key={m.name} points={m.revenue.map((rev, i) => {
+                    const x = 60 + (i / (weekStarts.length - 1 || 1)) * 1090;
+                    const y = 350 - (rev / maxRev) * 300;
+                    return \`\${x},\${y}\`;
+                  }).join(' ')} fill="none" stroke={colorOf(m.name)} strokeWidth="2.5" strokeLinecap="round" />
+                );
+              })}
+            </svg>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<MarketPerformanceDashboard />);
+  </script>
+</body>
+</html>`;
+  res.type('text/html').send(html);
+});
+
 // ============= LEGAL PAGES (required by Intuit's app settings) =============
 
 app.get('/privacy', (req, res) => {
