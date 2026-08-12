@@ -1518,6 +1518,78 @@ const findQBRowByLabel = (rows, labelSubstring) => {
   return null;
 };
 
+// QB Fetcher: Identify row IDs by walking the entire tree once
+class QBRowMapper {
+  constructor() {
+    this.rowMap = null;
+  }
+
+  identifyRows(response) {
+    if (this.rowMap) return this.rowMap;
+
+    this.rowMap = {};
+    const allRows = [];
+
+    // Walk entire tree and collect all rows with Summary data
+    const walkRows = (rowsArray) => {
+      if (!rowsArray) return;
+      for (const row of rowsArray) {
+        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+        if (row.Summary?.ColData && label) {
+          allRows.push({ label, row });
+        }
+        if (row.Rows?.Row) walkRows(row.Rows.Row);
+      }
+    };
+
+    walkRows(response.Rows?.Row);
+
+    // Match by account name - skill pattern
+    for (const { label, row } of allRows) {
+      if (!this.rowMap.revenue && label.includes('Income')) {
+        this.rowMap.revenue = row;
+      }
+      if (!this.rowMap.cogs && label.includes('Cost of Goods Sold')) {
+        this.rowMap.cogs = row;
+      }
+      if (!this.rowMap.opex && label.includes('Expenses') && !label.includes('Other')) {
+        this.rowMap.opex = row;
+      }
+      if (!this.rowMap.net && label.includes('Net Income')) {
+        this.rowMap.net = row;
+      }
+      if (!this.rowMap.labor && label.includes('LABOR')) {
+        this.rowMap.labor = row;
+      }
+    }
+
+    console.log('\n📊 QB Row Map identified:');
+    console.log('  Revenue:', this.rowMap.revenue?.Header?.ColData?.[0]?.value || 'NOT FOUND');
+    console.log('  COGS:', this.rowMap.cogs?.Header?.ColData?.[0]?.value || 'NOT FOUND');
+    console.log('  OpEx:', this.rowMap.opex?.Header?.ColData?.[0]?.value || 'NOT FOUND');
+    console.log('  Net:', this.rowMap.net?.Header?.ColData?.[0]?.value || 'NOT FOUND');
+    console.log('  Labor:', this.rowMap.labor?.Header?.ColData?.[0]?.value || 'NOT FOUND');
+
+    return this.rowMap;
+  }
+
+  extractMetrics(response) {
+    const rowMap = this.identifyRows(response);
+
+    const getVals = (row) => row?.Summary?.ColData?.map(c => parseFloat(c.value) || 0) || [];
+
+    return {
+      revenue: getVals(rowMap.revenue),
+      cogs: getVals(rowMap.cogs),
+      opex: getVals(rowMap.opex),
+      net: getVals(rowMap.net),
+      labor: getVals(rowMap.labor)
+    };
+  }
+}
+
+const qbRowMapper = new QBRowMapper();
+
 // Skill pattern: Extract P&L metrics using direct row ID matching
 const parseQBPeriodPL = (response) => {
   const columns = response.Columns?.Column || [];
@@ -1525,61 +1597,8 @@ const parseQBPeriodPL = (response) => {
     .map((c, i) => ({ index: i, title: c.ColTitle }))
     .filter((c) => c.title && c.title !== 'Total');
 
-  // Find rows with Summary data (these are the total rows with values)
-  const rowsWithSummary = [];
-  const findRowsWithSummary = (rowsArray) => {
-    if (!rowsArray) return;
-    for (const row of rowsArray) {
-      if (row.Summary?.ColData) {
-        const label = row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
-        rowsWithSummary.push({ label, row });
-      }
-      if (row.Rows?.Row) findRowsWithSummary(row.Rows.Row);
-    }
-  };
-  findRowsWithSummary(response.Rows?.Row);
-
-  // Debug: Show all rows with Summary data
-  console.log('\n🔍 Rows with Summary data:');
-  rowsWithSummary.forEach(({ label }) => console.log(`  - ${label}`));
-
-  // Match rows by label - look for specific pattern like "4000 REVENUE", "Total for 5000", etc.
-  const rowMap = {};
-  rowsWithSummary.forEach(({ label, row }) => {
-    // Revenue: either "Income" group header or "4000" rows
-    if (!rowMap.revenue && (label === 'Income' || label.includes('4000'))) {
-      rowMap.revenue = row;
-      console.log(`  ✓ Revenue row: "${label}"`);
-    }
-    // COGS: either "Cost of Goods Sold" header or "5000" rows, but prefer total rows
-    if (!rowMap.cogs && (label.includes('Cost of Goods') || label.includes('5000') || label.includes('Total for 5000'))) {
-      rowMap.cogs = row;
-      console.log(`  ✓ COGS row: "${label}"`);
-    }
-    // OpEx/Expenses: "6000" rows or "Expenses" header, but NOT "LABOR"
-    if (!rowMap.opex && (label.includes('6000') || label.includes('Expenses')) && !label.includes('LABOR')) {
-      rowMap.opex = row;
-      console.log(`  ✓ OpEx row: "${label}"`);
-    }
-    // Net Income
-    if (!rowMap.net && label.includes('Net Income')) {
-      rowMap.net = row;
-      console.log(`  ✓ Net row: "${label}"`);
-    }
-    // Labor
-    if (!rowMap.labor && label.includes('LABOR')) {
-      rowMap.labor = row;
-      console.log(`  ✓ Labor row: "${label}"`);
-    }
-  });
-
-  const getVals = (row) => row?.Summary?.ColData?.map(c => parseFloat(c.value) || 0) || [];
-
-  console.log('\n📊 QB Values extracted:');
-  console.log('  Revenue:', getVals(rowMap.revenue).slice(0, 3));
-  console.log('  COGS:', getVals(rowMap.cogs).slice(0, 3));
-  console.log('  OpEx:', getVals(rowMap.opex).slice(0, 3));
-  console.log('  Net:', getVals(rowMap.net).slice(0, 3));
+  // Extract all metrics at once using cached row map
+  const metrics = qbRowMapper.extractMetrics(response);
 
   return periodCols.map((col) => {
     const monthIdx = MONTH_NAMES.findIndex((name) => col.title.startsWith(name.slice(0, 3)));
@@ -1588,11 +1607,11 @@ const parseQBPeriodPL = (response) => {
     return {
       label: isBareMonth ? MONTH_SHORTS[monthIdx] : (shortLabelMatch ? shortLabelMatch[1] : col.title),
       fullLabel: isBareMonth ? MONTH_NAMES[monthIdx] : col.title,
-      revenue: getVals(rowMap.revenue)[col.index] || 0,
-      cogs: getVals(rowMap.cogs)[col.index] || 0,
-      opex: getVals(rowMap.opex)[col.index] || 0,
-      labor: getVals(rowMap.labor)[col.index] || 0,
-      pl: getVals(rowMap.net)[col.index] || 0,
+      revenue: metrics.revenue[col.index] || 0,
+      cogs: metrics.cogs[col.index] || 0,
+      opex: metrics.opex[col.index] || 0,
+      labor: metrics.labor[col.index] || 0,
+      pl: metrics.net[col.index] || 0,
     };
   });
 };
