@@ -1580,8 +1580,10 @@ const parseQBPeriodPL = (report) => {
 
       if (!cogsRow && label.includes('Total for 5000')) cogsRow = row;
       else if (!cogsRow && label.includes('Total for Cost of Goods Sold')) cogsRow = row;
+      else if (!cogsRow && label.includes('Cost of Goods Sold')) cogsRow = row;
 
-      if (!opexRow && label.includes('Total for Expenses') && !label.includes('Other')) opexRow = row;
+      if (!opexRow && label === 'Operations') opexRow = row;
+      else if (!opexRow && label.includes('Total for Operations')) opexRow = row;
       else if (!opexRow && label.includes('Total for 6000')) opexRow = row;
 
       if (!netRow && label.includes('Total for Net Income')) netRow = row;
