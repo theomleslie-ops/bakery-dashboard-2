@@ -1570,7 +1570,6 @@ const parseQBPeriodPL = (response) => {
     };
   });
 };
-};
 
 // Pair consecutive real weekly periods into 2-week totals - summed, never averaged. Any odd
 // leftover week is kept as its own lone period at the oldest end of the range, so the most
