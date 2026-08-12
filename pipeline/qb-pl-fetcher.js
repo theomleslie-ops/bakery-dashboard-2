@@ -175,28 +175,61 @@ class QBPLFetcher {
       netIncome: 0
     };
 
+    // Debug: log the actual row structure for revenue (index 0)
+    if (rows[0]) {
+      const debugRow = rows[0];
+      console.log('  DEBUG row[0] structure:', {
+        hasHeader: !!debugRow.Header,
+        headerKeys: Object.keys(debugRow.Header || {}),
+        colData: debugRow.Header?.ColData,
+        hasSummary: !!debugRow.Summary,
+        summaryColData: debugRow.Summary?.ColData,
+        hasRows: !!debugRow.Rows
+      });
+    }
+
     // Extract values by row index (QB REST API structure)
-    // Each category row has Header.ColData[1].value or Summary with the total
+    // QB returns nested structure: each row has Header (category name), Rows (details), and Summary (total)
+    const extractRowValue = (row) => {
+      if (!row) return 0;
+
+      // Try Summary first (should be the total for the category)
+      if (row.Summary?.ColData?.[1]?.value) {
+        const val = parseFloat(row.Summary.ColData[1].value);
+        if (!isNaN(val)) return val;
+      }
+
+      // Try Header second
+      if (row.Header?.ColData?.[1]?.value) {
+        const val = parseFloat(row.Header.ColData[1].value);
+        if (!isNaN(val)) return val;
+      }
+
+      // If row has nested Rows, sum them up
+      if (row.Rows?.Row && Array.isArray(row.Rows.Row)) {
+        let total = 0;
+        for (const subRow of row.Rows.Row) {
+          if (subRow.Summary?.ColData?.[1]?.value) {
+            total += parseFloat(subRow.Summary.ColData[1].value) || 0;
+          }
+        }
+        if (total !== 0) return total;
+      }
+
+      return 0;
+    };
+
     if (this.rowMap.revenue !== null && rows[this.rowMap.revenue]) {
-      const row = rows[this.rowMap.revenue];
-      // Try to get total from Header.ColData[1] or Summary
-      metrics.revenue = parseFloat(row.Header?.ColData?.[1]?.value) ||
-                       parseFloat(row.Summary?.ColData?.[1]?.value) || 0;
+      metrics.revenue = extractRowValue(rows[this.rowMap.revenue]);
     }
     if (this.rowMap.cogs !== null && rows[this.rowMap.cogs]) {
-      const row = rows[this.rowMap.cogs];
-      metrics.cogs = parseFloat(row.Header?.ColData?.[1]?.value) ||
-                    parseFloat(row.Summary?.ColData?.[1]?.value) || 0;
+      metrics.cogs = extractRowValue(rows[this.rowMap.cogs]);
     }
     if (this.rowMap.operations !== null && rows[this.rowMap.operations]) {
-      const row = rows[this.rowMap.operations];
-      metrics.operations = parseFloat(row.Header?.ColData?.[1]?.value) ||
-                          parseFloat(row.Summary?.ColData?.[1]?.value) || 0;
+      metrics.operations = extractRowValue(rows[this.rowMap.operations]);
     }
     if (this.rowMap.netIncome !== null && rows[this.rowMap.netIncome]) {
-      const row = rows[this.rowMap.netIncome];
-      metrics.netIncome = parseFloat(row.Header?.ColData?.[1]?.value) ||
-                         parseFloat(row.Summary?.ColData?.[1]?.value) || 0;
+      metrics.netIncome = extractRowValue(rows[this.rowMap.netIncome]);
     } else {
       // If Net Income row not found, calculate it
       metrics.netIncome = metrics.revenue - metrics.cogs - metrics.operations;
