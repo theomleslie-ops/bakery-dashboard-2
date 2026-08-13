@@ -3778,32 +3778,29 @@ app.get('/api/cash-balance', async (req, res) => {
     today.setHours(0, 0, 0, 0); // Start from beginning of today
     const todayStr = today.toISOString().split('T')[0];
 
-    // Generate daily data going back 365 days (1 year)
-    const days = [];
-    const daysBack = 365;
-    for (let i = daysBack; i >= 0; i--) {
+    // Generate weekly data going back 2 years (104 weeks)
+    const weeks = [];
+    const weeksBack = 104;
+    for (let i = weeksBack; i >= 0; i--) {
       const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      days.push(date.toISOString().split('T')[0]);
+      date.setDate(date.getDate() - (i * 7));
+      weeks.push(date.toISOString().split('T')[0]);
     }
 
-    console.log(`Generating daily cash balance data (${days.length} days)...`);
-    if (days.length > 0) {
-      console.log(`Range: ${days[0]} to ${days[days.length - 1]}`);
+    console.log(`Generating weekly cash balance data (${weeks.length} weeks)...`);
+    if (weeks.length > 0) {
+      console.log(`Range: ${weeks[0]} to ${weeks[weeks.length - 1]}`);
     }
 
-    // Query QB Statement of Cash Flows for each day
+    // Query QB Statement of Cash Flows for each week
     const balances = [];
     let currentCash = 0;
 
-    console.log('Querying QB Statement of Cash Flows for each day...');
-    for (let i = 0; i < days.length; i++) {
-      const dateStr = days[i];
-      const nextDate = new Date(dateStr);
-      nextDate.setDate(nextDate.getDate() + 1);
-      const nextDateStr = nextDate.toISOString().split('T')[0];
+    console.log('Querying QB Statement of Cash Flows for each week...');
+    for (let i = 0; i < weeks.length; i++) {
+      const dateStr = weeks[i];
 
-      // CashFlow fetching - use 1-day ranges for daily data
+      // CashFlow fetching - use weekly ranges
       try {
         const cfRes = await axios.get(
           `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
@@ -3818,14 +3815,13 @@ app.get('/api/cash-balance', async (req, res) => {
           date: dateStr,
           balance: round2(cash),
         });
-        if (i % 30 === 0) console.log(`  ✅ ${dateStr}: $${round2(cash)}`);
+        console.log(`  ✅ ${dateStr}: $${round2(cash)}`);
       } catch (err) {
-        // Skip failed days rather than warn - this is more common with daily granularity
-        if (i % 30 === 0) console.warn(`Failed to fetch CashFlow for ${dateStr}`);
+        console.warn(`Failed to fetch CashFlow for ${dateStr}`);
       }
     }
 
-    console.log(`✅ Fetched ${balances.length} daily cash balances from QB`);
+    console.log(`✅ Fetched ${balances.length} weekly cash balances from QB`);
 
     const response = {
       success: true,
