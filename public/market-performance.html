@@ -173,7 +173,7 @@
         };
         const INACTIVE_MARKETS = ['506 Bakery', 'Applied Mat-pop up', 'Bio Med SF Popup', 'BioMed Popup', 'BLG ON THE AVE POP UP', 'CAMBRIAN WED', 'Commons Popup', 'East Bay UV Popup', 'EMERYVILLE-SAT', 'Halloween Bazaar-Pop up', 'Hidden Villa Popup', 'Intuit Popup', 'INTUITIVE SURGICAL POP UP', 'IRVINE CO-POP UP', 'Irvine Silicon Valley Popup', 'JR Olympics POP UP', 'KAISER PL FRI', 'Keppler\'s Popup', 'Kitchen', 'Lincoln Property Popup', 'LOE POP UP', 'Los Altos Holiday Popup', 'Lumentum-Pop up', 'Lunar New Year Popup', 'Micron Popup', 'MP BM WED', 'MPAEF Schoolhouse Pop Up', 'MT HOUSE-SUN', 'Munchy Fest', 'MV THUR', 'N. CUPERTINO-TUES', 'Netflix Popup', 'Oyster Point PopUp', 'Pet a Palooza Pop Up', 'POP UP', 'PORTOLA ART-POP UP', 'PRC Pop Up', 'Princeton Plaza SAT', 'QUEENS PUMPKIN-POP UP', 'Rivian Holiday PopUp', 'Robin Hood Pop Up', 'Robinhood Popup', 'RWC Bakery', 'SA Edu Pop Up', 'SA THURS', 'SA Xmas Tree Popup', 'SANTA TERESA SAT', 'Saratoga Block Party', 'Saritoga 5K-pop up', 'Saritoga Woods Block Party', 'SKY MEMORIAL-Pop up', 'Springline Popup', 'Stanford Popup', 'SVINTL Popup', 'SVINTL Special Popup', 'Synopsys Pop up', 'Tips Purgatory', 'UTOPIA PRTY MGMT-POP UP', 'VISA HQ'];
 
-        function MarketLineChart({ weekStarts, series, allMarkets }) {
+        function MarketLineChart({ weekStarts, series, colorOf }) {
             const chartHeight = 400;
             const plotLeft = 60, plotRight = 960, plotTop = 20, plotBottom = chartHeight + 20;
             const n = weekStarts.length || 1;
@@ -183,10 +183,6 @@
             const getY = (val) => plotBottom - (val / chartMax) * (plotBottom - plotTop);
             const labelStride = Math.max(1, Math.ceil(n / 16));
             const fmtWeekLabel = (dateStr) => { const [y, m, d] = dateStr.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
-            const colorOfSeries = (name) => {
-                const idx = allMarkets.findIndex(m => m.name === name);
-                return marketColor(idx >= 0 ? idx : 0);
-            };
 
             return (
                 <svg width="100%" height="500" viewBox="0 0 1000 500" style={{ overflow: 'visible' }}>
@@ -207,10 +203,10 @@
                     ))}
                     {series.map(s => (
                         <polyline key={s.name} points={s.revenue.map((v, i) => `${xPos(i)},${getY(v)}`).join(' ')}
-                            fill="none" stroke={colorOfSeries(s.name)} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                            fill="none" stroke={colorOf(s.name)} strokeWidth="2" vectorEffect="non-scaling-stroke" />
                     ))}
                     {n <= 14 && series.map(s => s.revenue.map((v, i) => (
-                        <circle key={`${s.name}-${i}`} cx={xPos(i)} cy={getY(v)} r="3" fill={colorOfSeries(s.name)} />
+                        <circle key={`${s.name}-${i}`} cx={xPos(i)} cy={getY(v)} r="3" fill={colorOf(s.name)} />
                     )))}
                 </svg>
             );
@@ -331,7 +327,10 @@
                                             </button>
                                         ))}
                                     </div>
-                                    <MarketLineChart weekStarts={weekStarts} series={visibleSeries} allMarkets={allMarkets} />
+                                    {allMarkets.length > 0 && <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={(name) => {
+                                        const idx = allMarkets.findIndex(m => m.name === name);
+                                        return MARKET_COLORS[idx >= 0 ? idx % MARKET_COLORS.length : 0];
+                                    }} />}
                                 </div>
                             ) : (
                                 <div className="empty">Select at least one market to view data</div>
