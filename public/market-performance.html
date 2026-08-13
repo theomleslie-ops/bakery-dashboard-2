@@ -309,23 +309,33 @@
                             {visibleSeries.length > 0 ? (
                                 <div style={{ padding: '1rem', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
                                     <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                                        {markets.map(m => (
-                                            <button
-                                                key={m.name}
-                                                onClick={() => {
-                                                    const newSelected = new Set(selected);
-                                                    if (newSelected.has(m.name)) {
-                                                        newSelected.delete(m.name);
-                                                    } else {
-                                                        newSelected.add(m.name);
-                                                    }
-                                                    setSelected(newSelected);
-                                                }}
-                                                style={{ opacity: selected.has(m.name) ? 1 : 0.4 }}
-                                            >
-                                                {m.name}
-                                            </button>
-                                        ))}
+                                        {markets.map(m => {
+                                            const idx = allMarkets.findIndex(x => x.name === m.name);
+                                            const color = MARKET_COLORS[idx >= 0 ? idx % MARKET_COLORS.length : 0];
+                                            return (
+                                                <button
+                                                    key={m.name}
+                                                    onClick={() => {
+                                                        const newSelected = new Set(selected);
+                                                        if (newSelected.has(m.name)) {
+                                                            newSelected.delete(m.name);
+                                                        } else {
+                                                            newSelected.add(m.name);
+                                                        }
+                                                        setSelected(newSelected);
+                                                    }}
+                                                    style={{
+                                                        opacity: selected.has(m.name) ? 1 : 0.4,
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px'
+                                                    }}
+                                                >
+                                                    <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: color, flexShrink: 0 }}></span>
+                                                    {m.name}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                     {allMarkets.length > 0 && <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={(name) => {
                                         const idx = allMarkets.findIndex(m => m.name === name);
