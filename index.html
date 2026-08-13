@@ -1921,7 +1921,7 @@
             </div>
           </div>
           <div className="chart-container">
-            <div className="chart-title">Monthly Cash Balance</div>
+            <div className="chart-title">Daily Cash Balance</div>
             {balances.length > 0 ? (
               <div style={{ position: 'relative' }}>
                 <svg width="100%" height="500" viewBox="0 0 1000 450" style={{ overflow: 'visible' }}>
@@ -1953,44 +1953,23 @@
                   <line x1="60" y1="10" x2="60" y2={chartHeight + 20} stroke="#333" strokeWidth="2" />
                   <line x1="60" y1={chartHeight + 20} x2="950" y2={chartHeight + 20} stroke="#333" strokeWidth="2" />
 
-                  {/* Area under curve */}
-                  {balances.length > 1 && (
-                    <polygon
-                      points={`60,${chartHeight + 20} ${balances.map((b, i) => {
-                        const x = 60 + (i / (balances.length - 1)) * 890;
-                        const y = getY(b.balance);
-                        return `${x},${y}`;
-                      }).join(' ')} 950,${chartHeight + 20}`}
-                      fill="#10b981"
-                      opacity="0.2"
-                    />
-                  )}
-
-                  {/* Line chart */}
-                  <polyline
-                    points={balances.map((b, i) => {
-                      const x = 60 + (i / (balances.length - 1)) * 890;
-                      const y = getY(b.balance);
-                      return `${x},${y}`;
-                    }).join(' ')}
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-
-                  {/* Data points with hover */}
+                  {/* Bar chart */}
                   {balances.map((b, i) => {
-                    const x = 60 + (i / (balances.length - 1)) * 890;
+                    const barWidth = Math.max(1, 890 / balances.length - 1);
+                    const x = 60 + (i / balances.length) * 890;
                     const y = getY(b.balance);
+                    const barHeight = Math.abs(y - centerLine);
+                    const barY = b.balance >= 0 ? y : centerLine;
+                    const color = b.balance >= 0 ? '#10b981' : '#ef4444';
                     return (
-                      <circle
-                        key={`dot${i}`}
-                        cx={x}
-                        cy={y}
-                        r="5"
-                        fill="#10b981"
+                      <rect
+                        key={`bar${i}`}
+                        x={x}
+                        y={barY}
+                        width={barWidth}
+                        height={barHeight}
+                        fill={color}
+                        opacity="0.8"
                         style={{ cursor: 'pointer' }}
                         onMouseEnter={() => setHoveredIndex(i)}
                         onMouseLeave={() => setHoveredIndex(null)}
