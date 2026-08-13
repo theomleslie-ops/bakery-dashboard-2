@@ -155,7 +155,6 @@
       const range = maxVal - minVal || 1;
       const n = data.length || 1;
       const slotWidth = 700 / n;
-      const labelStride = Math.max(1, Math.ceil(n / 16));
       const xPos = (i) => 50 + slotWidth * i + slotWidth / 2;
       const getY = (val) => {
         const safeVal = isNaN(val) ? 0 : val;
