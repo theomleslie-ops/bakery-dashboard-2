@@ -156,7 +156,8 @@
 
       // Independent line chart: each line scales independently
       const allValues = points.flatMap(p => [p.revenue, p.cogs, p.opex, p.pl]);
-      const maxVal = Math.max(...allValues.filter(v => v >= 0), 1);
+      const maxRevenue = Math.max(...points.map(p => p.revenue), 1);
+      const maxVal = maxRevenue * 1.8;
       const minVal = Math.min(...allValues.filter(v => v < 0), 0);
       const chartHeight = 400;
       const range = maxVal - minVal || 1;
