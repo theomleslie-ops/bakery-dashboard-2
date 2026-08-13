@@ -208,7 +208,7 @@
               const val = maxVal - (range * i / 5);
               return (
                 <g key={`grid${i}`}>
-                  <line x1="50" y1={y} x2="750" y2={y} stroke="var(--chart-grid)" strokeWidth="1" />
+                  <line x1="50" y1={y} x2={fillWidth ? 1250 : 750} y2={y} stroke="var(--chart-grid)" strokeWidth="1" />
                   <text x="40" y={y + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{formatAxis(val)}</text>
                 </g>
               );
