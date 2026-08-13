@@ -1716,7 +1716,7 @@
         <div className="container">
           <header>
             <h1>🏪 Performance by Location</h1>
-            <p className="subtitle">Weekly revenue by location{rangeLabel ? ` · ${rangeLabel}` : ''}</p>
+            <p className="subtitle">Weekly net sales by location{rangeLabel ? ` · ${rangeLabel}` : ''}</p>
           </header>
           <div className="controls">
             <div className="timeframe-controls">
@@ -1738,7 +1738,7 @@
           {status === 'empty' && <div className="empty">No market sales data available.</div>}
           {status === 'ready' && (
             <div className="chart-container" style={{ marginRight: menuOpen ? '360px' : '0px', transition: 'margin-right 0.2s ease' }}>
-              <div className="chart-title">Weekly Revenue by Market ({selected.size} of {markets.length} selected)</div>
+              <div className="chart-title">Weekly Net Sales by Market ({selected.size} of {markets.length} selected)</div>
               <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={colorOf} focusMarketsActive={focusMarketsActive} allWeekStarts={allWeekStarts} />
             </div>
           )}
@@ -1765,7 +1765,7 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/store-locations-performance?weeks=260`);
+          const response = await fetch(`${baseUrl}/api/store-locations-performance?weeks=260&netSales=true`);
           const result = await response.json();
           if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
           let weekStarts = result.weekStarts || [];

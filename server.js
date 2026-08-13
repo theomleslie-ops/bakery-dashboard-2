@@ -1807,7 +1807,7 @@ app.get('/api/waste/locations', (req, res) => {
 
 // Fetch gross sales revenue for one location, bucketed by workweek. Same pagination/date-window
 // pattern as fetchSoldQuantities, but summing whole-order revenue instead of per-item quantity.
-const fetchWeeklyRevenueForLocation = async (locationId, startDate, endDateExclusive, startDow) => {
+const fetchWeeklyRevenueForLocation = async (locationId, startDate, endDateExclusive, startDow, useNetSales = false) => {
   const revenueByWeek = {};
   let cursor;
   let page = 0;
@@ -1835,7 +1835,9 @@ const fetchWeeklyRevenueForLocation = async (locationId, startDate, endDateExclu
       const date = squareDateInPacific(order.closed_at);
       if (date < startDate || date >= endDateExclusive) return;
       const weekStart = getWeekStart(date, startDow);
-      const orderRevenue = (order.line_items || []).reduce((sum, li) => sum + (li.gross_sales_money?.amount || 0), 0) / 100;
+      // Use total_money for net sales (includes discounts/refunds), gross_sales_money for gross
+      const moneyField = useNetSales ? 'total_money' : 'gross_sales_money';
+      const orderRevenue = (order.line_items || []).reduce((sum, li) => sum + (li[moneyField]?.amount || 0), 0) / 100;
       revenueByWeek[weekStart] = (revenueByWeek[weekStart] || 0) + orderRevenue;
     });
     cursor = response.data.cursor;
@@ -1876,7 +1878,7 @@ const saveMarketPerfSnapshot = (snapshot) => saveData(MARKET_PERF_SNAPSHOT_FILE,
 // Get real per-week revenue for every market location across [rangeStart, rangeEndInclusive]
 // (both week-start dates), backfilling from Square into the on-disk snapshot only as far back as
 // hasn't already been fetched, and always refreshing the most recent 2 weeks live.
-const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow) => {
+const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow, useNetSales = false) => {
   const snapshot = loadMarketPerfSnapshot();
   const rangeEndExclusive = addDays(rangeEndInclusive, 7);
 
@@ -1886,7 +1888,7 @@ const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow) =
       try {
         return {
           name: loc.name,
-          revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, rangeStart, backfillEnd, startDow),
+          revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, rangeStart, backfillEnd, startDow, useNetSales),
         };
       } catch (err) {
         console.warn(`⚠️ Failed to backfill data for ${loc.name}:`, err.message);
@@ -1904,7 +1906,7 @@ const getMarketWeeklyRevenue = async (rangeStart, rangeEndInclusive, startDow) =
     try {
       return {
         name: loc.name,
-        revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, liveStart, rangeEndExclusive, startDow),
+        revenueByWeek: await fetchWeeklyRevenueForLocation(loc.squareLocationId, liveStart, rangeEndExclusive, startDow, useNetSales),
       };
     } catch (err) {
       console.warn(`⚠️ Failed to fetch live data for ${loc.name}:`, err.message);
@@ -1984,7 +1986,8 @@ app.get('/api/store-locations-performance', async (req, res) => {
   }
 
   const weekCount = Math.min(Math.max(parseInt(req.query.weeks, 10) || 52, 1), 260);
-  const cacheKey = `store_perf_${weekCount}`;
+  const useNetSales = req.query.netSales === 'true';
+  const cacheKey = `store_perf_${weekCount}_${useNetSales ? 'net' : 'gross'}`;
   const cached = cacheManager.get(cacheKey);
   if (cached) return res.json({ ...cached, cached: true });
 
@@ -2007,7 +2010,7 @@ app.get('/api/store-locations-performance', async (req, res) => {
     for (let d = rangeStart; d <= lastCompleteWeekStart; d = addDays(d, 7)) weekStarts.push(d);
 
     const revenueByMarket = await Promise.race([
-      getMarketWeeklyRevenue(rangeStart, lastCompleteWeekStart, startDow),
+      getMarketWeeklyRevenue(rangeStart, lastCompleteWeekStart, startDow, useNetSales),
       timeoutPromise
     ]);
 
