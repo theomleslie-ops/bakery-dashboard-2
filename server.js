@@ -3775,65 +3775,57 @@ app.get('/api/cash-balance', async (req, res) => {
     };
 
     const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start from beginning of today
     const todayStr = today.toISOString().split('T')[0];
 
-    // Generate 60 months (5 years) of monthly data going back from today
-    const months = [];
-    for (let i = 59; i >= 0; i--) {
-      const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const year = date.getFullYear();
-      const month = date.getMonth(); // 0-11
-      const monthName = MONTH_NAMES[month];
-      const monthShort = MONTH_SHORTS[month];
-
-      months.push({
-        year,
-        month: monthShort,
-        name: monthName,
-      });
+    // Generate daily data going back 365 days (1 year)
+    const days = [];
+    const daysBack = 365;
+    for (let i = daysBack; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      days.push(date.toISOString().split('T')[0]);
     }
 
-    console.log(`Generating 5-year cash balance data (60 months)...`);
-    if (months.length > 0) {
-      console.log(`Range: ${months[0].name} ${months[0].year} to ${months[months.length - 1].name} ${months[months.length - 1].year}`);
+    console.log(`Generating daily cash balance data (${days.length} days)...`);
+    if (days.length > 0) {
+      console.log(`Range: ${days[0]} to ${days[days.length - 1]}`);
     }
 
-    // Query QB Statement of Cash Flows for each month
+    // Query QB Statement of Cash Flows for each day
     const balances = [];
     let currentCash = 0;
 
-    console.log('Querying QB Statement of Cash Flows for each month...');
-    for (let i = 0; i < months.length; i++) {
-      const monthData = months[i];
-      const monthIndex = MONTH_NAMES.indexOf(monthData.name);
-      const firstDay = new Date(monthData.year, monthIndex, 1);
-      const lastDay = new Date(monthData.year, monthIndex + 1, 0);
+    console.log('Querying QB Statement of Cash Flows for each day...');
+    for (let i = 0; i < days.length; i++) {
+      const dateStr = days[i];
+      const nextDate = new Date(dateStr);
+      nextDate.setDate(nextDate.getDate() + 1);
+      const nextDateStr = nextDate.toISOString().split('T')[0];
 
-      const startDateStr = firstDay.toISOString().split('T')[0];
-      const endDateStr = lastDay.toISOString().split('T')[0];
-
-      // CashFlow fetching re-enabled (rate limiting issue resolved)
+      // CashFlow fetching - use 1-day ranges for daily data
       try {
         const cfRes = await axios.get(
           `${qbClient.baseUrl()}/v3/company/${tokens.realmId}/reports/CashFlow`,
           {
-            params: { start_date: startDateStr, end_date: endDateStr },
+            params: { start_date: dateStr, end_date: dateStr },
             headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
           }
         );
         const cash = findCashAtEnd(cfRes.data.Rows?.Row) || 0;
         currentCash = cash;
         balances.push({
-          date: endDateStr,
+          date: dateStr,
           balance: round2(cash),
         });
-        console.log(`  ✅ ${endDateStr}: $${round2(cash)}`);
+        if (i % 30 === 0) console.log(`  ✅ ${dateStr}: $${round2(cash)}`);
       } catch (err) {
-        console.warn(`Failed to fetch CashFlow for ${monthData.name} ${monthData.year}: ${err.message}`);
+        // Skip failed days rather than warn - this is more common with daily granularity
+        if (i % 30 === 0) console.warn(`Failed to fetch CashFlow for ${dateStr}`);
       }
     }
 
-    console.log(`✅ Fetched ${balances.length} month-end cash balances from QB`);
+    console.log(`✅ Fetched ${balances.length} daily cash balances from QB`);
 
     const response = {
       success: true,
