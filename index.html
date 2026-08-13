@@ -375,6 +375,7 @@
     const pct = (part, whole) => (whole > 0 ? `${((part / whole) * 100).toFixed(1)}%` : '0%');
     const fmtMonthLabel = (monthKey) => { const [y, m] = monthKey.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }); };
     const fmtWeekLabel = (dateStr) => { const [y, m, d] = dateStr.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
+    const fmtWeekLabelWithYear = (dateStr) => { const [y, m, d] = dateStr.split('-').map(Number); const datePart = new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); return `${datePart} (${y})`; };
     const niceMax = (v) => { if (v <= 0) return 100; const magnitude = Math.pow(10, Math.floor(Math.log10(v))); const residual = v / magnitude; let niceResidual; if (residual <= 1) niceResidual = 1; else if (residual <= 2) niceResidual = 2; else if (residual <= 5) niceResidual = 5; else niceResidual = 10; return niceResidual * magnitude; };
     const BAKERY_FUNCTIONS = new Set(['Baker AM', 'Baker Night', 'Baker PM', 'LSK Cold Line', 'LSK Hot Line', 'LSK Prep Only', 'LSK-Arc BOH', 'Dishwasher/ Porter']);
     const classifyFunction = (name) => { if (BAKERY_FUNCTIONS.has(name)) return 'bakery'; if (/\bbaker\b|\bboh\b|\bprep\b|dishwash|porter|\bline\b|\bkitchen\b/i.test(name)) return 'bakery'; return 'non-bakery'; };
@@ -1564,7 +1565,7 @@
             return (
               <g>
                 <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
-                <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">Week of {fmtWeekLabel(weekStarts[hoverIndex])}</text>
+                <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">Week of {fmtWeekLabelWithYear(weekStarts[hoverIndex])}</text>
                 {shown.map((r, i) => (
                   <g key={r.name}>
                     <line x1={tooltipX + 10} y1={tooltipY + 34 + i * 18} x2={tooltipX + 24} y2={tooltipY + 34 + i * 18} stroke={r.color} strokeWidth="3" />
