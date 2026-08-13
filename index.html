@@ -1674,7 +1674,7 @@
           if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
           let weekStarts = result.weekStarts || [];
           let markets = result.markets || [];
-          markets = markets.filter(m => !INACTIVE_MARKETS.includes(m.name));
+          markets = markets.filter(m => !INACTIVE_MARKETS.some(inactive => inactive.toLowerCase().trim() === m.name.toLowerCase().trim()));
           setAllWeekStarts(weekStarts);
           setAllMarkets(markets);
           setSelected(new Set(markets.slice(0, 8).map(m => m.name)));
