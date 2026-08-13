@@ -288,8 +288,8 @@
           const filtered = filterIncompleteLastPeriod(weeks.map(w => ({
             revenue: w.revenue || 0,
             cogs: w.cogs || 0,
-            operations: w.operations || 0,
-            netIncome: w.netIncome || 0,
+            opex: w.operations || 0,
+            pl: w.netIncome || 0,
             label: w.start,
             startDate: w.start,
             endDate: w.end
