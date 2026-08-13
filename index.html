@@ -281,7 +281,7 @@
           const result = await response.json();
 
           // Convert QB weekly data to dashboard format
-          let weeks = result.weeks || [];
+          let weeks = result.data || [];
           const limitedWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
           weeks = weeks.slice(-limitedWeeks);
 
