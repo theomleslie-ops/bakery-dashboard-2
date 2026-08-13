@@ -284,13 +284,14 @@
 
           // Convert QB weekly data to dashboard format
           let weeks = result.data || [];
-          const today = new Date();
 
-          // Remove weeks that haven't ended yet
-          weeks = weeks.filter(w => {
-            const weekEndDate = new Date(w.end);
-            return weekEndDate < today;
-          });
+          // Remove the last week if it appears incomplete (very low revenue)
+          if (weeks.length > 0) {
+            const lastWeek = weeks[weeks.length - 1];
+            if ((lastWeek.revenue || 0) < 1000) {
+              weeks = weeks.slice(0, -1);
+            }
+          }
 
           const limitedWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
           weeks = weeks.slice(-limitedWeeks);
