@@ -165,6 +165,52 @@
         const { useState, useEffect } = React;
         const root = ReactDOM.createRoot(document.getElementById('root'));
 
+        const MARKET_COLORS = ['#2a78d6', '#ff9500', '#8b5cf6', '#10b981', '#ef4444', '#f59e0b', '#06b6d4', '#ec4899', '#6366f1', '#14b8a6', '#f97316', '#a855f7', '#0ea5e9', '#d946ef', '#84cc16'];
+        const marketColor = (idx) => MARKET_COLORS[idx % MARKET_COLORS.length];
+        const colorOf = (name, markets) => {
+            const idx = markets.findIndex(m => m.name === name);
+            return marketColor(idx >= 0 ? idx : 0);
+        };
+
+        function MarketLineChart({ weekStarts, series }) {
+            const chartHeight = 400;
+            const plotLeft = 60, plotRight = 960, plotTop = 20, plotBottom = chartHeight + 20;
+            const n = weekStarts.length || 1;
+            const xPos = (i) => plotLeft + ((plotRight - plotLeft) * i) / Math.max(n - 1, 1);
+            const maxVal = Math.max(1, ...series.flatMap(s => s.revenue));
+            const chartMax = maxVal * 1.1;
+            const getY = (val) => plotBottom - (val / chartMax) * (plotBottom - plotTop);
+            const labelStride = Math.max(1, Math.ceil(n / 16));
+            const fmtWeekLabel = (dateStr) => { const [y, m, d] = dateStr.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
+
+            return (
+                <svg width="100%" height="500" viewBox="0 0 1000 500" style={{ overflow: 'visible' }}>
+                    <line x1={plotLeft} y1={plotBottom} x2={plotRight} y2={plotBottom} stroke="var(--text)" strokeWidth="2" />
+                    <line x1={plotLeft} y1={plotTop} x2={plotLeft} y2={plotBottom} stroke="var(--text)" strokeWidth="2" />
+                    {[0, 1, 2, 3, 4, 5].map(i => {
+                        const val = (i * chartMax) / 5;
+                        const y = plotBottom - (i * (plotBottom - plotTop)) / 5;
+                        return (
+                            <g key={`grid${i}`}>
+                                <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--border)" strokeWidth="1" />
+                                <text x={plotLeft - 10} y={y + 4} textAnchor="end" fontSize="11" fill="var(--text-light)">${(val / 1000).toFixed(0)}k</text>
+                            </g>
+                        );
+                    })}
+                    {weekStarts.map((ws, i) => (i % labelStride === 0) && (
+                        <text key={`xlabel${i}`} x={xPos(i)} y={plotBottom + 20} textAnchor="middle" fontSize="11" fill="var(--text)" fontWeight="600">{fmtWeekLabel(ws)}</text>
+                    ))}
+                    {series.map(s => (
+                        <polyline key={s.name} points={s.revenue.map((v, i) => `${xPos(i)},${getY(v)}`).join(' ')}
+                            fill="none" stroke={colorOf(s.name, series)} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                    ))}
+                    {n <= 14 && series.map(s => s.revenue.map((v, i) => (
+                        <circle key={`${s.name}-${i}`} cx={xPos(i)} cy={getY(v)} r="3" fill={colorOf(s.name, series)} />
+                    )))}
+                </svg>
+            );
+        }
+
         function MarketPerformance() {
             const [allWeekStarts, setAllWeekStarts] = useState([]);
             const [allMarkets, setAllMarkets] = useState([]);
@@ -259,7 +305,7 @@
                                 Click market names below to show/hide them
                             </p>
                             {visibleSeries.length > 0 ? (
-                                <div style={{ overflowX: 'auto', padding: '1rem', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
+                                <div style={{ padding: '1rem', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
                                     <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
                                         {markets.map(m => (
                                             <button
@@ -279,22 +325,7 @@
                                             </button>
                                         ))}
                                     </div>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                        <thead>
-                                            <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                                                <th style={{ textAlign: 'left', padding: '0.75rem', fontWeight: '600' }}>Market</th>
-                                                <th style={{ textAlign: 'right', padding: '0.75rem', fontWeight: '600' }}>Total Sales</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {visibleSeries.map(m => (
-                                                <tr key={m.name} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                    <td style={{ padding: '0.75rem', textAlign: 'left' }}>{m.name}</td>
-                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>${totalRevenue(m).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                    <MarketLineChart weekStarts={weekStarts} series={visibleSeries} />
                                 </div>
                             ) : (
                                 <div className="empty">Select at least one market to view data</div>
