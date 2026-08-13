@@ -176,6 +176,8 @@
         { label: 'Profit/Loss', color: '#10b981' },
       ];
 
+      const labelStride = Math.max(1, Math.ceil(n / 8));
+
       return (
         <div style={{ width: '100%' }}>
           <div className="chart-legend">
