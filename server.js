@@ -1933,7 +1933,8 @@ app.get('/api/market-performance', async (req, res) => {
   }
 
   const weekCount = Math.min(Math.max(parseInt(req.query.weeks, 10) || 52, 1), 260);
-  const cacheKey = `market_perf_${weekCount}`;
+  const useNetSales = req.query.netSales === 'true';
+  const cacheKey = `market_perf_${weekCount}_${useNetSales ? 'net' : 'gross'}`;
   const cached = cacheManager.get(cacheKey);
   if (cached) return res.json({ ...cached, cached: true });
 
@@ -1958,7 +1959,7 @@ app.get('/api/market-performance', async (req, res) => {
     console.log(`📅 /api/market-performance fetching dates: ${rangeStart} to ${lastCompleteWeekStart} (${weekStarts.length} weeks)`);
 
     const revenueByMarket = await Promise.race([
-      getMarketWeeklyRevenue(rangeStart, lastCompleteWeekStart, startDow),
+      getMarketWeeklyRevenue(rangeStart, lastCompleteWeekStart, startDow, useNetSales),
       timeoutPromise
     ]);
 

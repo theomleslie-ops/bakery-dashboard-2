@@ -1665,7 +1665,7 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/market-performance?weeks=${MARKET_MAX_WEEKS}`);
+          const response = await fetch(`${baseUrl}/api/market-performance?weeks=${MARKET_MAX_WEEKS}&netSales=true`);
           const result = await response.json();
           if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
           let weekStarts = result.weekStarts || [];
