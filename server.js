@@ -2405,8 +2405,7 @@ app.get('/overtime', (req, res) => {
 
 // Public Market Performance Dashboard (no auth required, full features)
 app.get('/public-market-performance', (req, res) => {
-  const html = fs.readFileSync('./public/market-performance.html', 'utf-8');
-  res.type('text/html').send(html);
+  res.sendFile('market-performance.html', { root: path.join(__dirname, 'public') });
 });
 
 // ============= LEGAL PAGES (required by Intuit's app settings) =============
