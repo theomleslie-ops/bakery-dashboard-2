@@ -293,6 +293,16 @@
 
           // Convert QB weekly data to dashboard format
           let weeks = result.data || [];
+
+          // Filter out incomplete weeks (where end date is today or in the future)
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // Reset to midnight for date comparison
+          weeks = weeks.filter(w => {
+            const weekEnd = new Date(w.end);
+            weekEnd.setHours(0, 0, 0, 0);
+            return weekEnd < today; // Only show weeks that ended before today
+          });
+
           const limitedWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
           weeks = weeks.slice(-limitedWeeks);
 
