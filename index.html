@@ -277,21 +277,35 @@
       const fetchData = async () => {
         try {
           const baseUrl = window.location.origin;
-          const limitedWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
-          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${limitedWeeks}`);
+          const response = await fetch(`${baseUrl}/api/pl/weekly/range?start_date=2021-08-12&end_date=2026-08-12`);
           const result = await response.json();
-          const filtered = filterIncompleteLastPeriod(result.periodData || []);
+
+          // Convert QB weekly data to dashboard format
+          let weeks = result.weeks || [];
+          const limitedWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
+          weeks = weeks.slice(-limitedWeeks);
+
+          const filtered = filterIncompleteLastPeriod(weeks.map(w => ({
+            revenue: w.revenue || 0,
+            cogs: w.cogs || 0,
+            operations: w.operations || 0,
+            netIncome: w.netIncome || 0,
+            label: w.start,
+            startDate: w.start,
+            endDate: w.end
+          })));
+
           setData(filtered.map(w => {
-            const startDate = w.startDate || w.label;
+            const startDate = w.startDate;
             const [y, m, d] = startDate.split('-').map(Number);
             const endDate = new Date(y, m - 1, d + 6);
             const endStr = endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
             const startStr = new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
             return { ...w, month: w.label, startDate: startDate, dateRange: `${startStr} – ${endStr}` };
           }));
-          setPeriodSource(result.periodSource || '');
+          setPeriodSource('QuickBooks P&L (weekly)');
         } catch (err) {
-          setError('Failed to load data: ' + err.message);
+          setError('Failed to load P&L data: ' + err.message);
         }
       };
       return (
