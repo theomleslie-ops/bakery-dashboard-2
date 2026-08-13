@@ -163,16 +163,80 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
         const root = ReactDOM.createRoot(document.getElementById('root'));
 
         const MARKET_COLORS = ['#2a78d6', '#ff9500', '#8b5cf6', '#10b981', '#ef4444', '#f59e0b', '#06b6d4', '#ec4899', '#6366f1', '#14b8a6', '#f97316', '#a855f7', '#0ea5e9', '#d946ef', '#84cc16'];
+        const FOCUS_MARKETS = ['506 Retail', 'State St', 'SMA FRI', 'LA Farmers THU', 'DALY CITY THU', 'MV SUN', 'Alum Rock Village (Sun)', 'INNER SUNSET SUN', 'DIVISADERO SUN', 'FM SF SUN'];
+        const MARKET_TOP_N_OPTIONS = [5, 8, 10, 15, 20, 25];
         const marketColor = (idx) => MARKET_COLORS[idx % MARKET_COLORS.length];
         const colorOf = (name, markets) => {
             const idx = markets.findIndex(m => m.name === name);
             return marketColor(idx >= 0 ? idx : 0);
         };
         const INACTIVE_MARKETS = ['506 Bakery', 'Applied Mat-pop up', 'Bio Med SF Popup', 'BioMed Popup', 'BLG ON THE AVE POP UP', 'CAMBRIAN WED', 'Commons Popup', 'East Bay UV Popup', 'EMERYVILLE-SAT', 'Halloween Bazaar-Pop up', 'Hidden Villa Popup', 'Intuit Popup', 'INTUITIVE SURGICAL POP UP', 'IRVINE CO-POP UP', 'Irvine Silicon Valley Popup', 'JR Olympics POP UP', 'KAISER PL FRI', 'Keppler\'s Popup', 'Kitchen', 'Lincoln Property Popup', 'LOE POP UP', 'Los Altos Holiday Popup', 'Lumentum-Pop up', 'Lunar New Year Popup', 'Micron Popup', 'MP BM WED', 'MPAEF Schoolhouse Pop Up', 'MT HOUSE-SUN', 'Munchy Fest', 'MV THUR', 'N. CUPERTINO-TUES', 'Netflix Popup', 'Oyster Point PopUp', 'Pet a Palooza Pop Up', 'POP UP', 'PORTOLA ART-POP UP', 'PRC Pop Up', 'Princeton Plaza SAT', 'QUEENS PUMPKIN-POP UP', 'Rivian Holiday PopUp', 'Robin Hood Pop Up', 'Robinhood Popup', 'RWC Bakery', 'SA Edu Pop Up', 'SA THURS', 'SA Xmas Tree Popup', 'SANTA TERESA SAT', 'Saratoga Block Party', 'Saritoga 5K-pop up', 'Saritoga Woods Block Party', 'SKY MEMORIAL-Pop up', 'Springline Popup', 'Stanford Popup', 'SVINTL Popup', 'SVINTL Special Popup', 'Synopsys Pop up', 'Tips Purgatory', 'UTOPIA PRTY MGMT-POP UP', 'VISA HQ'];
+
+        const fmtMoneyShort = (v) => {
+            if (Math.abs(v) >= 1000) return `$${Math.round(v / 1000).toLocaleString()}k`;
+            return `$${Math.round(v).toLocaleString()}`;
+        };
+
+        function MarketSelectMenu({ markets, selected, setSelected, colorOf, totalRevenue, open, setOpen }) {
+            const [topN, setTopN] = useState(8);
+            const [bottomN, setBottomN] = useState(null);
+            const menuRef = useRef(null);
+
+            useEffect(() => {
+                const handleClickOutside = (e) => {
+                    if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+                };
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, [setOpen]);
+
+            const toggle = (name) => {
+                setSelected(prev => {
+                    const next = new Set(prev);
+                    if (next.has(name)) next.delete(name);
+                    else next.add(name);
+                    return next;
+                });
+            };
+
+            return (
+                <div ref={menuRef} style={{ position: 'relative', display: 'inline-block', zIndex: 100 }}>
+                    <button onClick={() => setOpen(o => !o)}>Select Markets ({selected.size}) {open ? '▴' : '▾'}</button>
+                    {open && (
+                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', maxHeight: '60vh', overflowY: 'auto', background: 'white', border: '1px solid #d4b5a0', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 1000, padding: '10px', width: '380px', maxWidth: '90vw' }}>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid #d4b5a0' }}>
+                                <button onClick={() => { setSelected(new Set(markets.map(m => m.name))); }} style={{ padding: '6px 10px', fontSize: '12px' }}>Select All</button>
+                                <button onClick={() => { setSelected(new Set()); }} style={{ padding: '6px 10px', fontSize: '12px' }}>Select None</button>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#6b4423' }}>
+                                    Top <select value={topN} onChange={(e) => { const n = parseInt(e.target.value, 10); setTopN(n); setBottomN(null); setSelected(new Set(markets.slice(0, n).map(m => m.name))); }} style={{ padding: '4px', fontSize: '12px', border: '1px solid #d4b5a0', borderRadius: '4px' }}>
+                                        {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                                    </select>
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#6b4423' }}>
+                                    Bottom <select value={bottomN || ''} onChange={(e) => { const n = e.target.value ? parseInt(e.target.value, 10) : null; setBottomN(n); setTopN(8); if (n) setSelected(new Set(markets.slice(-n).map(m => m.name))); }} style={{ padding: '4px', fontSize: '12px', border: '1px solid #d4b5a0', borderRadius: '4px' }}>
+                                        <option value="">None</option>
+                                        {MARKET_TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                                    </select>
+                                </label>
+                                <button onClick={() => { setTopN(8); setBottomN(null); setSelected(new Set(FOCUS_MARKETS.filter(f => markets.some(m => m.name === f)))); }} style={{ padding: '6px 10px', fontSize: '12px' }}>Focus</button>
+                            </div>
+                            {markets.map(m => (
+                                <label key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px', cursor: 'pointer', fontSize: '13px', color: '#6b4423', borderRadius: '4px' }} onMouseEnter={(e) => e.target.closest('label').style.background = '#f5f1ed'} onMouseLeave={(e) => e.target.closest('label').style.background = 'transparent'}>
+                                    <input type="checkbox" checked={selected.has(m.name)} onChange={() => toggle(m.name)} style={{ cursor: 'pointer' }} />
+                                    <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: colorOf(m.name, markets), flexShrink: 0 }}></span>
+                                    <span style={{ flex: 1 }}>{m.name}</span>
+                                    <span style={{ color: '#8b6c57', fontSize: '12px' }}>{fmtMoneyShort(totalRevenue(m))}</span>
+                                </label>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
 
         function MarketLineChart({ weekStarts, series, colorOf }) {
             const chartHeight = 400;
@@ -297,47 +361,18 @@
                             </label>
                             <button onClick={goNewer} disabled={status !== 'ready' || clampedOffset <= 0} title="Later">▶</button>
                         </div>
+                        {status === 'ready' && (
+                            <MarketSelectMenu markets={allMarkets} selected={selected} setSelected={setSelected} colorOf={(name) => colorOf(name, allMarkets)} totalRevenue={(m) => m.revenue.reduce((s, v) => s + v, 0)} open={menuOpen} setOpen={setMenuOpen} />
+                        )}
                     </div>
                     {status === 'loading' && <div className="loading">Loading market sales data from Square…</div>}
                     {status === 'error' && <div className="error">{error}</div>}
                     {status === 'empty' && <div className="empty">No market sales data available.</div>}
                     {status === 'ready' && (
                         <div className="chart-container">
-                            <div className="chart-title">Weekly Net Sales by Market ({selected.size} of {markets.length} selected)</div>
-                            <p style={{ fontSize: '0.9rem', color: 'var(--text-light)', marginBottom: '1rem' }}>
-                                Click market names below to show/hide them
-                            </p>
+                            <div className="chart-title">Weekly Net Sales by Market ({selected.size} of {allMarkets.length} selected)</div>
                             {visibleSeries.length > 0 ? (
                                 <div style={{ padding: '1rem', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
-                                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                                        {markets.map(m => {
-                                            const idx = allMarkets.findIndex(x => x.name === m.name);
-                                            const color = MARKET_COLORS[idx >= 0 ? idx % MARKET_COLORS.length : 0];
-                                            return (
-                                                <button
-                                                    key={m.name}
-                                                    onClick={() => {
-                                                        const newSelected = new Set(selected);
-                                                        if (newSelected.has(m.name)) {
-                                                            newSelected.delete(m.name);
-                                                        } else {
-                                                            newSelected.add(m.name);
-                                                        }
-                                                        setSelected(newSelected);
-                                                    }}
-                                                    style={{
-                                                        opacity: selected.has(m.name) ? 1 : 0.4,
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px'
-                                                    }}
-                                                >
-                                                    <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: color, flexShrink: 0 }}></span>
-                                                    {m.name}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
                                     {allMarkets.length > 0 && <MarketLineChart weekStarts={weekStarts} series={visibleSeries} colorOf={(name) => {
                                         const idx = allMarkets.findIndex(m => m.name === name);
                                         return MARKET_COLORS[idx >= 0 ? idx % MARKET_COLORS.length : 0];
