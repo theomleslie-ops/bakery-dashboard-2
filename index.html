@@ -301,8 +301,8 @@
           const today = new Date();
           today.setHours(0, 0, 0, 0); // Reset to midnight for date comparison
           weeks = weeks.filter(w => {
-            const weekEnd = new Date(w.end);
-            weekEnd.setHours(0, 0, 0, 0);
+            const [y, m, d] = w.end.split('-').map(Number);
+            const weekEnd = new Date(y, m - 1, d);
             return weekEnd < today; // Only show weeks that ended before today
           });
 
