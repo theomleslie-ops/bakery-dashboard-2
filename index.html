@@ -2012,7 +2012,7 @@
                       <g key="tooltip">
                         <line x1={x} y1="10" x2={x} y2={chartHeight + 20} stroke="#ddd" strokeWidth="1" strokeDasharray="3" />
                         <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="#fff" stroke="#ccc" strokeWidth="1" rx="4" />
-                        <text x={tooltipX + 10} y={tooltipY + 20} fontSize="12" fontWeight="700" fill="#333">{monthName} {year}</text>
+                        <text x={tooltipX + 10} y={tooltipY + 20} fontSize="12" fontWeight="700" fill="#333">{monthName} {parseInt(day)}, {year}</text>
                         <text x={tooltipX + 10} y={tooltipY + 42} fontSize="11" fill="#666">Balance:</text>
                         <text x={tooltipX + 10} y={tooltipY + 62} fontSize="13" fontWeight="600" fill={b.balance < 0 ? '#ef4444' : '#10b981'}>${b.balance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</text>
                       </g>
