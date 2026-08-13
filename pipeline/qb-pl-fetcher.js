@@ -133,7 +133,7 @@ class QBPLFetcher {
       } else if (accountName === 'Expenses') {
         this.rowMap.operations = i;
         console.log(`  ✓ Operations: index ${i} (${accountName})`);
-      } else if (accountName.includes('Net Income') || accountName.includes('Net')) {
+      } else if (accountName === 'Net Income') {
         this.rowMap.netIncome = i;
         console.log(`  ✓ Net Income: index ${i} (${accountName})`);
       }
