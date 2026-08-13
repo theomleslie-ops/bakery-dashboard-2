@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Performance</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --sand: #F5F1E8;
+            --brown-dark: #3C3227;
+            --brown-light: #8B7355;
+            --rust: #C85A37;
+            --green: #6B9F7F;
+            --bg: #FFFFFF;
+            --bg-alt: #F9F7F3;
+            --text: var(--brown-dark);
+            --text-light: var(--brown-light);
+            --border: #E8E4DC;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #1A1814;
+                --bg-alt: #2A251F;
+                --text: #F5F1E8;
+                --text-light: #B8A89C;
+                --border: #3C3227;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 2px solid var(--border);
+        }
+
+        h1 {
+            font-family: Georgia, serif;
+            font-size: 2.5rem;
+            font-weight: 400;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+
+        .loading, .error, .empty {
+            padding: 2rem;
+            text-align: center;
+            border-radius: 8px;
+            margin: 2rem 0;
+        }
+
+        .loading {
+            background-color: rgba(107, 159, 127, 0.1);
+            border: 1px solid var(--green);
+            color: var(--green);
+        }
+
+        .error {
+            background-color: rgba(214, 69, 69, 0.1);
+            border: 1px solid #D64545;
+            border-radius: 8px;
+            color: #D64545;
+        }
+
+        .empty {
+            background-color: rgba(139, 115, 85, 0.1);
+            border: 1px solid var(--text-light);
+            color: var(--text-light);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .timeframe-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        button {
+            padding: 0.5rem 1rem;
+            background-color: var(--bg-alt);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--text);
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: var(--border);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        select {
+            padding: 0.5rem;
+            background-color: var(--bg-alt);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+
+        .chart-container {
+            background-color: var(--bg-alt);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .chart-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text);
+        }
+
+        svg {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <script>
+        const { useState, useEffect } = React;
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+
+        function MarketPerformance() {
+            const [allWeekStarts, setAllWeekStarts] = useState([]);
+            const [allMarkets, setAllMarkets] = useState([]);
+            const [selected, setSelected] = useState(new Set(['506 Retail', 'State St']));
+            const [status, setStatus] = useState('loading');
+            const [error, setError] = useState('');
+            const [windowWeeks, setWindowWeeks] = useState(26);
+            const [offsetWeeks, setOffsetWeeks] = useState(0);
+            const [menuOpen, setMenuOpen] = useState(false);
+
+            const MARKET_TIMEFRAME_OPTIONS = [
+                { weeks: 8, label: '8 weeks' },
+                { weeks: 26, label: '6 months' },
+                { weeks: 52, label: '1 year' },
+                { weeks: 156, label: '3 years' },
+                { weeks: 260, label: '5 years' },
+            ];
+
+            useEffect(() => {
+                fetchData();
+                const interval = setInterval(fetchData, 30 * 60 * 1000);
+                return () => clearInterval(interval);
+            }, []);
+
+            const fetchData = async () => {
+                try {
+                    setStatus('loading');
+                    const baseUrl = window.location.origin;
+                    const response = await fetch(`${baseUrl}/api/market-performance?weeks=260&netSales=true`);
+                    const result = await response.json();
+                    if (result.error) { setError(result.message || result.error); setStatus('error'); return; }
+                    let weekStarts = result.weekStarts || [];
+                    let markets = result.markets || [];
+                    setAllWeekStarts(weekStarts);
+                    setAllMarkets(markets);
+                    setSelected(new Set(markets.map(m => m.name)));
+                    setStatus(markets.length > 0 ? 'ready' : 'empty');
+                } catch (err) {
+                    setError('Failed to load data: ' + err.message);
+                    setStatus('error');
+                }
+            };
+
+            const total = allWeekStarts.length;
+            const maxOffset = Math.max(0, total - windowWeeks);
+            const clampedOffset = Math.min(offsetWeeks, maxOffset);
+            const end = total - clampedOffset;
+            const start = Math.max(0, end - windowWeeks);
+            const weekStarts = allWeekStarts.slice(start, end);
+            const markets = allMarkets.map(m => ({ name: m.name, revenue: m.revenue.slice(start, end) }));
+
+            const step = windowWeeks;
+            const goOlder = () => setOffsetWeeks(o => Math.min(maxOffset, o + step));
+            const goNewer = () => setOffsetWeeks(o => Math.max(0, o - step));
+            const changeTimeframe = (weeks) => { setWindowWeeks(weeks); setOffsetWeeks(0); };
+
+            const totalRevenue = (m) => m.revenue.reduce((s, v) => s + v, 0);
+            const visibleSeries = markets.filter(m => selected.has(m.name));
+            const rangeLabel = weekStarts.length ? (() => {
+                const startStr = weekStarts[0];
+                const lastWeekStart = weekStarts[weekStarts.length - 1];
+                const [y, m, d] = lastWeekStart.split('-').map(Number);
+                const lastWeekEnd = new Date(y, m - 1, d + 6).toISOString().slice(0, 10);
+                return `${startStr} – ${lastWeekEnd}`;
+            })() : '';
+
+            return (
+                <div className="container">
+                    <header>
+                        <h1>🏪 Market Performance</h1>
+                        <p className="subtitle">Weekly net sales by location{rangeLabel ? ` · ${rangeLabel}` : ''}</p>
+                    </header>
+                    <div className="controls">
+                        <div className="timeframe-controls">
+                            <button onClick={goOlder} disabled={status !== 'ready' || clampedOffset >= maxOffset} title="Earlier">◀</button>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text)' }}>
+                                Show
+                                <select value={windowWeeks} onChange={(e) => changeTimeframe(parseInt(e.target.value, 10))}>
+                                    {MARKET_TIMEFRAME_OPTIONS.map(opt => <option key={opt.weeks} value={opt.weeks}>{opt.label}</option>)}
+                                </select>
+                            </label>
+                            <button onClick={goNewer} disabled={status !== 'ready' || clampedOffset <= 0} title="Later">▶</button>
+                        </div>
+                    </div>
+                    {status === 'loading' && <div className="loading">Loading market sales data from Square…</div>}
+                    {status === 'error' && <div className="error">{error}</div>}
+                    {status === 'empty' && <div className="empty">No market sales data available.</div>}
+                    {status === 'ready' && (
+                        <div className="chart-container">
+                            <div className="chart-title">Weekly Net Sales by Market ({selected.size} of {markets.length} selected)</div>
+                            <p style={{ fontSize: '0.9rem', color: 'var(--text-light)', marginBottom: '1rem' }}>
+                                Click market names below to show/hide them
+                            </p>
+                            {visibleSeries.length > 0 ? (
+                                <div style={{ overflowX: 'auto', padding: '1rem', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
+                                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                                        {markets.map(m => (
+                                            <button
+                                                key={m.name}
+                                                onClick={() => {
+                                                    const newSelected = new Set(selected);
+                                                    if (newSelected.has(m.name)) {
+                                                        newSelected.delete(m.name);
+                                                    } else {
+                                                        newSelected.add(m.name);
+                                                    }
+                                                    setSelected(newSelected);
+                                                }}
+                                                style={{ opacity: selected.has(m.name) ? 1 : 0.4 }}
+                                            >
+                                                {m.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                                                <th style={{ textAlign: 'left', padding: '0.75rem', fontWeight: '600' }}>Market</th>
+                                                <th style={{ textAlign: 'right', padding: '0.75rem', fontWeight: '600' }}>Total Sales</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {visibleSeries.map(m => (
+                                                <tr key={m.name} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'left' }}>{m.name}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>${totalRevenue(m).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="empty">Select at least one market to view data</div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        root.render(<MarketPerformance />);
+    </script>
+</body>
+</html>
