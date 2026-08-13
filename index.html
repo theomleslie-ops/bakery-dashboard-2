@@ -130,6 +130,12 @@
 
     const StackedBarChart = ({ data, viewMode }) => {
       const [hoveredMonth, setHoveredMonth] = React.useState(null);
+      const [visibleMetrics, setVisibleMetrics] = React.useState({ revenue: true, cogs: true, opex: true, pl: true });
+
+      const toggleMetric = (metric) => {
+        setVisibleMetrics(prev => ({ ...prev, [metric]: !prev[metric] }));
+      };
+
       const rawValue = (d, key) => parseFloat(d[key]) || 0;
       const scaled = (d, key) => {
         const raw = rawValue(d, key);
@@ -180,12 +186,16 @@
       return (
         <div style={{ width: '100%' }}>
           <div className="chart-legend">
-            {legendItems.map(item => (
-              <div key={item.label} className="chart-legend-item">
-                <div className="chart-legend-swatch" style={{ backgroundColor: item.color }}></div>
-                <span>{item.label}</span>
-              </div>
-            ))}
+            {legendItems.map(item => {
+              const metricKey = item.label.toLowerCase().replace(/\s+/g, '').replace('/', '');
+              const isVisible = visibleMetrics[metricKey] !== false;
+              return (
+                <div key={item.label} className="chart-legend-item" onClick={() => toggleMetric(metricKey)} style={{ cursor: 'pointer', opacity: isVisible ? 1 : 0.4 }}>
+                  <div className="chart-legend-swatch" style={{ backgroundColor: item.color }}></div>
+                  <span>{item.label}</span>
+                </div>
+              );
+            })}
           </div>
           <svg width="100%" height="550" viewBox="0 0 800 550">
             <line x1="50" y1={zeroY} x2="750" y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
@@ -200,14 +210,14 @@
                 </g>
               );
             })}
-            <polyline points={makePath('revenue')} fill="none" stroke="#2a78d6" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            <polyline points={makePath('cogs')} fill="none" stroke="#ff9500" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            <polyline points={makePath('opex')} fill="none" stroke="#8b5cf6" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            <polyline points={makePath('pl')} fill="none" stroke="#10b981" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            {points.map((p, i) => (<circle key={`rev${i}`} cx={xPos(i)} cy={getY(p.revenue)} r="3" fill="#2a78d6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => (<circle key={`cogs${i}`} cx={xPos(i)} cy={getY(p.cogs)} r="3" fill="#ff9500" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => (<circle key={`opex${i}`} cx={xPos(i)} cy={getY(p.opex)} r="3" fill="#8b5cf6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => (<circle key={`pl${i}`} cx={xPos(i)} cy={getY(p.pl)} r="3" fill="#10b981" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
+            {visibleMetrics.revenue && <polyline points={makePath('revenue')} fill="none" stroke="#2a78d6" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
+            {visibleMetrics.cogs && <polyline points={makePath('cogs')} fill="none" stroke="#ff9500" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
+            {visibleMetrics.opex && <polyline points={makePath('opex')} fill="none" stroke="#8b5cf6" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
+            {visibleMetrics.pl && <polyline points={makePath('pl')} fill="none" stroke="#10b981" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
+            {visibleMetrics.revenue && points.map((p, i) => (<circle key={`rev${i}`} cx={xPos(i)} cy={getY(p.revenue)} r="3" fill="#2a78d6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
+            {visibleMetrics.cogs && points.map((p, i) => (<circle key={`cogs${i}`} cx={xPos(i)} cy={getY(p.cogs)} r="3" fill="#ff9500" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
+            {visibleMetrics.opex && points.map((p, i) => (<circle key={`opex${i}`} cx={xPos(i)} cy={getY(p.opex)} r="3" fill="#8b5cf6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
+            {visibleMetrics.pl && points.map((p, i) => (<circle key={`pl${i}`} cx={xPos(i)} cy={getY(p.pl)} r="3" fill="#10b981" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
             {points.map((p, i) => (i % labelStride === 0) && (<text key={`label${i}`} x={xPos(i)} y={50 + chartHeight + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{p.month}</text>))}
             {hoveredMonth !== null && (
               (() => {
