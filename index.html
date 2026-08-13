@@ -2060,7 +2060,12 @@
         else { setSortBy(field); setSortDir('desc'); }
       };
 
-      const avgMargin = products.length > 0 ? (products.reduce((s, p) => s + p.margin, 0) / products.length * 100).toFixed(1) : 0;
+      const weightedMargin = products.length > 0 ? (() => {
+        const totalRevenue = products.reduce((s, p) => s + (p.squarePrice * (p.quantity || 0)), 0);
+        if (totalRevenue === 0) return 0;
+        const totalMargin = products.reduce((s, p) => s + ((p.squarePrice - p.cogs) * (p.quantity || 0)), 0);
+        return (totalMargin / totalRevenue * 100).toFixed(1);
+      })() : 0;
 
       return (
         <div className="container">
@@ -2076,9 +2081,9 @@
               <div className="metric-sub">Total tracked</div>
             </div>
             <div className="metric-card">
-              <div className="metric-label">Avg Margin %</div>
-              <div className="metric-value">{avgMargin}%</div>
-              <div className="metric-sub">Across all products</div>
+              <div className="metric-label">Weighted Margin %</div>
+              <div className="metric-value">{weightedMargin}%</div>
+              <div className="metric-sub">{products.length > 0 ? `Based on quantities sold` : 'No products'}</div>
             </div>
           </div>
 
