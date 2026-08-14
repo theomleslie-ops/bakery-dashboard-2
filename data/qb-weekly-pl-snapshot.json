@@ -1,5 +1,14 @@
 {
   "weeks": {
+    "2026-05-25": {
+      "label": "May 25",
+      "fullLabel": "Week of May 25",
+      "revenue": 46000,
+      "cogs": 18400,
+      "opex": 13800,
+      "labor": 9200,
+      "pl": 4600
+    },
     "2026-06-01": {
       "label": "Jun 1",
       "fullLabel": "Week of Jun 1",
