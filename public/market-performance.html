@@ -239,6 +239,8 @@
         }
 
         function MarketLineChart({ weekStarts, series, colorOf }) {
+            const [hoveredWeekIndex, setHoveredWeekIndex] = useState(null);
+            const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
             const chartHeight = 400;
             const plotLeft = 60, plotRight = 960, plotTop = 20, plotBottom = chartHeight + 20;
             const n = weekStarts.length || 1;
@@ -249,31 +251,83 @@
             const labelStride = Math.max(1, Math.ceil(n / 16));
             const fmtWeekLabel = (dateStr) => { const [y, m, d] = dateStr.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
 
+            const handleMouseMove = (e) => {
+                const svg = e.currentTarget;
+                const rect = svg.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const pct = (x - plotLeft) / (plotRight - plotLeft);
+                const idx = Math.round(pct * (n - 1));
+                if (idx >= 0 && idx < n) {
+                    setHoveredWeekIndex(idx);
+                    setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                }
+            };
+
+            const handleMouseLeave = () => {
+                setHoveredWeekIndex(null);
+            };
+
             return (
-                <svg width="100%" height="500" viewBox="0 0 1000 500" style={{ overflow: 'visible' }}>
-                    <line x1={plotLeft} y1={plotBottom} x2={plotRight} y2={plotBottom} stroke="var(--text)" strokeWidth="2" />
-                    <line x1={plotLeft} y1={plotTop} x2={plotLeft} y2={plotBottom} stroke="var(--text)" strokeWidth="2" />
-                    {[0, 1, 2, 3, 4, 5].map(i => {
-                        const val = (i * chartMax) / 5;
-                        const y = plotBottom - (i * (plotBottom - plotTop)) / 5;
-                        return (
-                            <g key={`grid${i}`}>
-                                <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--border)" strokeWidth="1" />
-                                <text x={plotLeft - 10} y={y + 4} textAnchor="end" fontSize="11" fill="var(--text-light)">${(val / 1000).toFixed(0)}k</text>
-                            </g>
-                        );
-                    })}
-                    {weekStarts.map((ws, i) => (i % labelStride === 0) && (
-                        <text key={`xlabel${i}`} x={xPos(i)} y={plotBottom + 20} textAnchor="middle" fontSize="11" fill="var(--text)" fontWeight="600">{fmtWeekLabel(ws)}</text>
-                    ))}
-                    {series.map(s => (
-                        <polyline key={s.name} points={s.revenue.map((v, i) => `${xPos(i)},${getY(v)}`).join(' ')}
-                            fill="none" stroke={colorOf(s.name)} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-                    ))}
-                    {n <= 14 && series.map(s => s.revenue.map((v, i) => (
-                        <circle key={`${s.name}-${i}`} cx={xPos(i)} cy={getY(v)} r="3" fill={colorOf(s.name)} />
-                    )))}
-                </svg>
+                <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+                    <svg width="100%" height="500" viewBox="0 0 1000 500" style={{ overflow: 'visible' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
+                        <line x1={plotLeft} y1={plotBottom} x2={plotRight} y2={plotBottom} stroke="var(--text)" strokeWidth="2" />
+                        <line x1={plotLeft} y1={plotTop} x2={plotLeft} y2={plotBottom} stroke="var(--text)" strokeWidth="2" />
+                        {[0, 1, 2, 3, 4, 5].map(i => {
+                            const val = (i * chartMax) / 5;
+                            const y = plotBottom - (i * (plotBottom - plotTop)) / 5;
+                            return (
+                                <g key={`grid${i}`}>
+                                    <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--border)" strokeWidth="1" />
+                                    <text x={plotLeft - 10} y={y + 4} textAnchor="end" fontSize="11" fill="var(--text-light)">${(val / 1000).toFixed(0)}k</text>
+                                </g>
+                            );
+                        })}
+                        {weekStarts.map((ws, i) => (i % labelStride === 0) && (
+                            <text key={`xlabel${i}`} x={xPos(i)} y={plotBottom + 20} textAnchor="middle" fontSize="11" fill="var(--text)" fontWeight="600">{fmtWeekLabel(ws)}</text>
+                        ))}
+                        {series.map(s => (
+                            <polyline key={s.name} points={s.revenue.map((v, i) => `${xPos(i)},${getY(v)}`).join(' ')}
+                                fill="none" stroke={colorOf(s.name)} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                        ))}
+                        {n <= 14 && series.map(s => s.revenue.map((v, i) => (
+                            <circle key={`${s.name}-${i}`} cx={xPos(i)} cy={getY(v)} r="3" fill={colorOf(s.name)} />
+                        )))}
+                        {hoveredWeekIndex !== null && (
+                            <line x1={xPos(hoveredWeekIndex)} y1={plotTop} x2={xPos(hoveredWeekIndex)} y2={plotBottom} stroke="var(--text)" strokeWidth="1" strokeDasharray="4" opacity="0.5" />
+                        )}
+                    </svg>
+                    {hoveredWeekIndex !== null && (
+                        <div style={{
+                            position: 'absolute',
+                            left: `${(tooltipPos.x / 1000) * 100}%`,
+                            top: `${(tooltipPos.y / 500) * 100}%`,
+                            transform: 'translate(-50%, -100%)',
+                            marginTop: '-10px',
+                            backgroundColor: 'var(--bg-alt)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '6px',
+                            padding: '10px',
+                            fontSize: '12px',
+                            color: 'var(--text)',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                            zIndex: 10,
+                            maxWidth: '300px',
+                            pointerEvents: 'none',
+                            whiteSpace: 'nowrap'
+                        }}>
+                            <div style={{ fontWeight: '600', marginBottom: '6px', whiteSpace: 'normal' }}>
+                                Week of {fmtWeekLabel(weekStarts[hoveredWeekIndex])}
+                            </div>
+                            {series.map(s => (
+                                <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', whiteSpace: 'normal' }}>
+                                    <span style={{ width: '8px', height: '8px', borderRadius: '1px', background: colorOf(s.name), flexShrink: 0 }}></span>
+                                    <span style={{ flex: 1 }}>{s.name}</span>
+                                    <span style={{ fontWeight: '600', marginLeft: '8px' }}>${s.revenue[hoveredWeekIndex].toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             );
         }
 

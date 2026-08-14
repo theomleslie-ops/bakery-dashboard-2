@@ -768,6 +768,8 @@
                 fullLabel: m.month + ' ' + m.year,
                 dateObj: date,
                 revenue: m.revenue,
+                foodCost: m.cogs,
+                labor: labor,
                 foodPercent,
                 laborPercent,
                 totalPercent: foodPercent + laborPercent,
@@ -787,8 +789,45 @@
               filtered.pop();
             }
           }
-          setWeeks(filtered);
-          setStatus(combined.length > 0 ? 'ready' : 'empty');
+
+          // Group into 4-week periods
+          const grouped = [];
+          for (let i = 0; i < filtered.length; i += 4) {
+            const periodMonths = filtered.slice(i, i + 4);
+            const totalRevenue = periodMonths.reduce((sum, m) => sum + m.revenue, 0);
+            const totalFoodCost = periodMonths.reduce((sum, m) => sum + m.foodCost, 0);
+            const totalLabor = periodMonths.reduce((sum, m) => sum + m.labor, 0);
+
+            if (totalRevenue > 0) {
+              const foodPercent = (totalFoodCost / totalRevenue) * 100;
+              const laborPercent = (totalLabor / totalRevenue) * 100;
+
+              // Create date range label: "8/1-8/28"
+              const firstMonth = periodMonths[0];
+              const lastMonth = periodMonths[periodMonths.length - 1];
+              const startDay = 1;
+              const startMonth = firstMonth.dateObj.getMonth() + 1;
+              const endDay = new Date(lastMonth.dateObj.getFullYear(), lastMonth.dateObj.getMonth() + 1, 0).getDate();
+              const endMonth = lastMonth.dateObj.getMonth() + 1;
+
+              const label = startMonth === endMonth
+                ? `${startMonth}/${startDay}-${endDay}`
+                : `${startMonth}/${startDay}-${endMonth}/${endDay}`;
+
+              grouped.push({
+                label: label,
+                fullLabel: `${periodMonths[0].fullLabel} to ${periodMonths[periodMonths.length - 1].fullLabel}`,
+                dateObj: firstMonth.dateObj,
+                revenue: totalRevenue,
+                foodPercent,
+                laborPercent,
+                totalPercent: foodPercent + laborPercent,
+              });
+            }
+          }
+
+          setWeeks(grouped);
+          setStatus(grouped.length > 0 ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
@@ -800,7 +839,7 @@
         <div className="container">
           <header>
             <h1>🎯 Prime Cost Dashboard</h1>
-            <p className="subtitle">Food Cost + Labor as % of Revenue, monthly (Goal: ≤60%)</p>
+            <p className="subtitle">Food Cost + Labor as % of Revenue, by 4-week period (Goal: ≤60%)</p>
           </header>
           <div className="controls">
             <div className="view-toggle">
@@ -817,7 +856,7 @@
                 <div className="metric-card">
                   <div className="metric-label">Avg Prime Cost</div>
                   <div className="metric-value">{avgPrimeCost.toFixed(1)}%</div>
-                  <div className="metric-sub">Average across all months</div>
+                  <div className="metric-sub">Average across all 4-week periods</div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-label">Goal</div>
@@ -826,7 +865,7 @@
                 </div>
               </div>
               <div className="chart-container">
-                <div className="chart-title">Prime Cost, by Month (% of Revenue)</div>
+                <div className="chart-title">Prime Cost, by 4-Week Period (% of Revenue)</div>
                 <PrimeCostChart weeks={weeks} />
               </div>
             </>
