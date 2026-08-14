@@ -772,11 +772,11 @@
 
           const grouped = [];
 
-          // Group complete weeks into 4-week periods (newest first, then older)
-          for (let i = completeWeeks.length - 4; i >= 0; i -= 4) {
+          // Group complete weeks into 4-week periods (oldest to newest)
+          for (let i = 0; i + 4 <= completeWeeks.length; i += 4) {
             const periodWeeks = completeWeeks.slice(i, i + 4);
 
-            if (periodWeeks.length !== 4) continue; // Skip incomplete periods
+            if (periodWeeks.length !== 4) break; // Stop at incomplete periods
 
             const totalRevenue = periodWeeks.reduce((sum, w) => sum + (w.revenue || 0), 0);
             const totalCogs = periodWeeks.reduce((sum, w) => sum + (w.cogs || 0), 0);
@@ -801,7 +801,7 @@
                 ? `${startMonth}/${startDay}-${endDay}`
                 : `${startMonth}/${startDay}-${endMonth}/${endDay}`;
 
-              grouped.unshift({
+              grouped.push({
                 label: label,
                 fullLabel: `${firstWeek.date} to ${lastWeek.date}`,
                 dateObj: startDate,
