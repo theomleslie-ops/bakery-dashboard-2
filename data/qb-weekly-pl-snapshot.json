@@ -1,0 +1,104 @@
+{
+  "weeks": {
+    "2026-06-01": {
+      "label": "Jun 1",
+      "fullLabel": "Week of Jun 1",
+      "revenue": 47000,
+      "cogs": 18800,
+      "opex": 14100,
+      "labor": 9400,
+      "pl": 4700
+    },
+    "2026-06-08": {
+      "label": "Jun 8",
+      "fullLabel": "Week of Jun 8",
+      "revenue": 49000,
+      "cogs": 19600,
+      "opex": 14700,
+      "labor": 9800,
+      "pl": 4900
+    },
+    "2026-06-15": {
+      "label": "Jun 15",
+      "fullLabel": "Week of Jun 15",
+      "revenue": 51000,
+      "cogs": 20400,
+      "opex": 15300,
+      "labor": 10200,
+      "pl": 5100
+    },
+    "2026-06-22": {
+      "label": "Jun 22",
+      "fullLabel": "Week of Jun 22",
+      "revenue": 48500,
+      "cogs": 19400,
+      "opex": 14600,
+      "labor": 9700,
+      "pl": 4800
+    },
+    "2026-06-29": {
+      "label": "Jun 29",
+      "fullLabel": "Week of Jun 29",
+      "revenue": 50000,
+      "cogs": 20000,
+      "opex": 15000,
+      "labor": 10000,
+      "pl": 5000
+    },
+    "2026-07-06": {
+      "label": "Jul 6",
+      "fullLabel": "Week of Jul 6",
+      "revenue": 48500,
+      "cogs": 19500,
+      "opex": 14500,
+      "labor": 9800,
+      "pl": 4700
+    },
+    "2026-07-13": {
+      "label": "Jul 13",
+      "fullLabel": "Week of Jul 13",
+      "revenue": 51000,
+      "cogs": 20500,
+      "opex": 15200,
+      "labor": 10300,
+      "pl": 5000
+    },
+    "2026-07-20": {
+      "label": "Jul 20",
+      "fullLabel": "Week of Jul 20",
+      "revenue": 52500,
+      "cogs": 21000,
+      "opex": 15600,
+      "labor": 10600,
+      "pl": 5300
+    },
+    "2026-07-27": {
+      "label": "Jul 27",
+      "fullLabel": "Week of Jul 27",
+      "revenue": 50000,
+      "cogs": 20000,
+      "opex": 15000,
+      "labor": 10000,
+      "pl": 5000
+    },
+    "2026-08-03": {
+      "label": "Aug 3",
+      "fullLabel": "Week of Aug 3",
+      "revenue": 49500,
+      "cogs": 19800,
+      "opex": 14800,
+      "labor": 9900,
+      "pl": 5000
+    },
+    "2026-08-10": {
+      "label": "Aug 10",
+      "fullLabel": "Week of Aug 10",
+      "revenue": 48000,
+      "cogs": 19200,
+      "opex": 14400,
+      "labor": 9600,
+      "pl": 4800
+    }
+  },
+  "rangeEnd": "2026-08-10"
+}
