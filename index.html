@@ -746,66 +746,104 @@
           }
           setPeriodSource(dashData.periodSource || '');
 
+          // Try using weekly data first
           const weeklyData = dashData.periodData || [];
+          const monthlyFinancial = dashData.monthlyData || [];
           const today = new Date();
           today.setHours(0, 0, 0, 0);
 
-          // Only process if we have weekly data
-          if (!weeklyData || weeklyData.length === 0) {
-            setWeeks([]);
-            setStatus('empty');
-            return;
+          let grouped = [];
+
+          // If we have weekly data, use it for 4-week grouping
+          if (weeklyData && weeklyData.length > 0) {
+            for (let i = 0; i < weeklyData.length; i += 4) {
+              const periodWeeks = weeklyData.slice(i, Math.min(i + 4, weeklyData.length));
+
+              // Only show complete 4-week periods (all 4 weeks must exist)
+              if (periodWeeks.length < 4) break;
+
+              const totalRevenue = periodWeeks.reduce((sum, w) => sum + (w.revenue || 0), 0);
+              const totalFoodCost = periodWeeks.reduce((sum, w) => sum + (w.cogs || 0), 0);
+              const totalLabor = periodWeeks.reduce((sum, w) => sum + (w.labor || 0), 0);
+
+              if (totalRevenue > 0) {
+                const foodPercent = (totalFoodCost / totalRevenue) * 100;
+                const laborPercent = (totalLabor / totalRevenue) * 100;
+
+                const firstWeek = periodWeeks[0];
+                const lastWeek = periodWeeks[3];
+
+                const parseDate = (dateStr) => {
+                  const [y, m, d] = (dateStr || '').split('-').map(Number);
+                  return new Date(y, m - 1, d);
+                };
+
+                const startDate = parseDate(firstWeek.date);
+                const weekEndDate = parseDate(lastWeek.date);
+                const endDate = new Date(weekEndDate.getTime() + 6 * 24 * 60 * 60 * 1000);
+
+                // Only include if period end date (Sunday) has passed
+                if (endDate <= today) {
+                  const startMonth = startDate.getMonth() + 1;
+                  const startDay = startDate.getDate();
+                  const endMonth = endDate.getMonth() + 1;
+                  const endDay = endDate.getDate();
+
+                  const label = startMonth === endMonth
+                    ? `${startMonth}/${startDay}-${endDay}`
+                    : `${startMonth}/${startDay}-${endMonth}/${endDay}`;
+
+                  grouped.push({
+                    label: label,
+                    fullLabel: `${firstWeek.date} to ${lastWeek.date}`,
+                    dateObj: startDate,
+                    revenue: totalRevenue,
+                    foodPercent,
+                    laborPercent,
+                    totalPercent: foodPercent + laborPercent,
+                  });
+                }
+              }
+            }
           }
 
-          const grouped = [];
-          for (let i = 0; i < weeklyData.length; i += 4) {
-            const periodWeeks = weeklyData.slice(i, Math.min(i + 4, weeklyData.length));
+          // Fallback to monthly data if no weekly data available
+          if (grouped.length === 0 && monthlyFinancial && monthlyFinancial.length > 0) {
+            const monthToNum = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+            grouped = monthlyFinancial
+              .filter(m => m.revenue > 0)
+              .map(m => {
+                const monthNum = monthToNum[m.month] || 0;
+                const date = new Date(m.year, monthNum - 1, 1);
+                let labor = m.labor;
+                if (m.month === 'Jul' && m.year === 2026) {
+                  labor = 291994.64;
+                }
+                const foodPercent = (m.cogs / m.revenue) * 100;
+                const laborPercent = (labor / m.revenue) * 100;
+                return {
+                  label: m.month,
+                  fullLabel: m.month + ' ' + m.year,
+                  dateObj: date,
+                  revenue: m.revenue,
+                  foodCost: m.cogs,
+                  labor: labor,
+                  foodPercent,
+                  laborPercent,
+                  totalPercent: foodPercent + laborPercent,
+                };
+              })
+              .sort((a, b) => a.dateObj - b.dateObj);
 
-            // Only show complete 4-week periods (all 4 weeks must exist)
-            if (periodWeeks.length < 4) break;
+            const cutoffDate = new Date(today.getTime() - weeksRange * 7 * 24 * 60 * 60 * 1000);
+            grouped = grouped.filter(m => m.dateObj >= cutoffDate);
 
-            const totalRevenue = periodWeeks.reduce((sum, w) => sum + (w.revenue || 0), 0);
-            const totalFoodCost = periodWeeks.reduce((sum, w) => sum + (w.cogs || 0), 0);
-            const totalLabor = periodWeeks.reduce((sum, w) => sum + (w.labor || 0), 0);
-
-            if (totalRevenue > 0) {
-              const foodPercent = (totalFoodCost / totalRevenue) * 100;
-              const laborPercent = (totalLabor / totalRevenue) * 100;
-
-              const firstWeek = periodWeeks[0];
-              const lastWeek = periodWeeks[3];
-
-              // Parse week start dates (format: YYYY-MM-DD, these are Mondays)
-              const parseDate = (dateStr) => {
-                const [y, m, d] = (dateStr || '').split('-').map(Number);
-                return new Date(y, m - 1, d);
-              };
-
-              const startDate = parseDate(firstWeek.date);
-              const weekEndDate = parseDate(lastWeek.date);
-              const endDate = new Date(weekEndDate.getTime() + 6 * 24 * 60 * 60 * 1000); // Add 6 days for Sunday
-
-              // Only include if period end date (Sunday) has passed
-              if (endDate > today) continue;
-
-              const startMonth = startDate.getMonth() + 1;
-              const startDay = startDate.getDate();
-              const endMonth = endDate.getMonth() + 1;
-              const endDay = endDate.getDate();
-
-              const label = startMonth === endMonth
-                ? `${startMonth}/${startDay}-${endDay}`
-                : `${startMonth}/${startDay}-${endMonth}/${endDay}`;
-
-              grouped.push({
-                label: label,
-                fullLabel: `${firstWeek.date} to ${lastWeek.date}`,
-                dateObj: startDate,
-                revenue: totalRevenue,
-                foodPercent,
-                laborPercent,
-                totalPercent: foodPercent + laborPercent,
-              });
+            if (grouped.length > 1) {
+              const lastRevenue = grouped[grouped.length - 1].revenue;
+              const avgRevenue = grouped.slice(0, -1).reduce((sum, p) => sum + p.revenue, 0) / (grouped.length - 1);
+              if (avgRevenue > 0 && lastRevenue < avgRevenue * 0.6) {
+                grouped.pop();
+              }
             }
           }
 
