@@ -812,9 +812,10 @@
                 ? `${startMonth}/${startDay}-${endDay}`
                 : `${startMonth}/${startDay}-${endMonth}/${endDay}`;
 
+              const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
               grouped.push({
                 label: label,
-                fullLabel: `${firstWeek.date} to ${lastWeek.date}`,
+                fullLabel: `${firstWeek.date} to ${endDateStr}`,
                 dateObj: startDate,
                 revenue: totalRevenue,
                 foodPercent,
