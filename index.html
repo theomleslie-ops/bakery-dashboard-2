@@ -798,7 +798,8 @@
               const firstWeek = periodWeeks[0];
               const lastWeek = periodWeeks[3];
               const startDate = parseDate(firstWeek.date);
-              const endDate = parseDate(lastWeek.date); // Use the last data point as end date
+              const lastWeekDate = parseDate(lastWeek.date);
+              const endDate = new Date(lastWeekDate.getTime() + 6 * 24 * 60 * 60 * 1000); // Add 6 days to get Sunday of 4th week
 
               const foodPercent = (totalCogs / totalRevenue) * 100;
               const laborPercent = (totalLabor / totalRevenue) * 100;
