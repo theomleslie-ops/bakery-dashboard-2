@@ -785,7 +785,8 @@
 
             const firstDate = parseDate(periodWeeks[0].date);
             const lastDate = parseDate(periodWeeks[3].date);
-            const daySpan = Math.round((lastDate - firstDate) / (24 * 60 * 60 * 1000));
+            const endDate = new Date(lastDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+            const daySpan = Math.round((endDate - firstDate) / (24 * 60 * 60 * 1000));
 
             console.log(`Period ${grouped.length + 1}: indices ${i}-${i+3}, dates ${periodWeeks[0].date} to ${periodWeeks[3].date}, span: ${daySpan} days`);
 
@@ -798,8 +799,6 @@
               const firstWeek = periodWeeks[0];
               const lastWeek = periodWeeks[3];
               const startDate = parseDate(firstWeek.date);
-              const lastWeekDate = parseDate(lastWeek.date);
-              const endDate = new Date(lastWeekDate.getTime() + 7 * 24 * 60 * 60 * 1000); // Monday of 5th week (end of 4-week period)
 
               const foodPercent = (totalCogs / totalRevenue) * 100;
               const laborPercent = (totalLabor / totalRevenue) * 100;
