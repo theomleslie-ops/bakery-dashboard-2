@@ -753,13 +753,13 @@
           const grouped = [];
 
           console.log('Weekly data:', weeklyData);
-          // Group weekly data into 4-week periods
-          for (let i = 0; i < weeklyData.length; i += 4) {
-            const periodWeeks = weeklyData.slice(i, i + 4);
+          // Group weekly data into 4-week periods (8 data points = 4 weeks if each point is 2 weeks)
+          for (let i = 0; i < weeklyData.length; i += 8) {
+            const periodWeeks = weeklyData.slice(i, i + 8);
 
-            console.log(`Period ${grouped.length + 1}: weeks at indices ${i}-${i+3}`, periodWeeks.map(w => w.date));
-            // Only process complete 4-week periods
-            if (periodWeeks.length !== 4) break;
+            console.log(`Period ${grouped.length + 1}: weeks at indices ${i}-${i+7}`, periodWeeks.map(w => w.date));
+            // Only process complete 4-week periods (8 data points)
+            if (periodWeeks.length < 8) break;
 
             const totalRevenue = periodWeeks.reduce((sum, w) => sum + (w.revenue || 0), 0);
             const totalCogs = periodWeeks.reduce((sum, w) => sum + (w.cogs || 0), 0);
@@ -767,7 +767,7 @@
 
             if (totalRevenue > 0) {
               const firstWeek = periodWeeks[0];
-              const lastWeek = periodWeeks[3];
+              const lastWeek = periodWeeks[7];  // Use the 8th week (index 7) for the end date
 
               const parseDate = (dateStr) => {
                 const [y, m, d] = (dateStr || '').split('-').map(Number);
