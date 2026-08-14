@@ -777,7 +777,7 @@
 
           const grouped = [];
 
-          // Group complete weeks into 4-week periods (oldest to newest)
+          // Group complete weeks into 4-week periods (by combining 2-week chunks) (oldest to newest)
           for (let i = 0; i + 4 <= completeWeeks.length; i += 4) {
             const periodWeeks = completeWeeks.slice(i, i + 4);
 
@@ -799,7 +799,7 @@
               const lastWeek = periodWeeks[3];
               const startDate = parseDate(firstWeek.date);
               const lastWeekDate = parseDate(lastWeek.date);
-              const endDate = new Date(lastWeekDate.getTime() + 6 * 24 * 60 * 60 * 1000); // Add 6 days to get Sunday of 4th week
+              const endDate = new Date(lastWeekDate.getTime() + 6 * 24 * 60 * 60 * 1000); // Sunday of 4th week
 
               const foodPercent = (totalCogs / totalRevenue) * 100;
               const laborPercent = (totalLabor / totalRevenue) * 100;
