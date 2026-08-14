@@ -776,7 +776,6 @@
           console.log('Complete weeks:', completeWeeks.map(w => w.date));
 
           const grouped = [];
-          let previousEndDate = null;
 
           // Group complete weeks into 4-week periods (by combining 2-week chunks) (oldest to newest)
           for (let i = 0; i + 4 <= completeWeeks.length; i += 4) {
@@ -784,13 +783,15 @@
 
             if (periodWeeks.length !== 4) break; // Stop at incomplete periods
 
-            let startDate = parseDate(periodWeeks[0].date);
-            // If this period would start before the previous one ended, shift it
-            if (previousEndDate && startDate <= previousEndDate) {
-              startDate = new Date(previousEndDate.getTime() + 24 * 60 * 60 * 1000); // Next day after previous period ended
+            // Start each period exactly 28 days after the previous one started
+            let startDate;
+            if (grouped.length === 0) {
+              startDate = parseDate(periodWeeks[0].date);
+            } else {
+              const previousPeriod = grouped[grouped.length - 1];
+              startDate = new Date(previousPeriod.dateObj.getTime() + 28 * 24 * 60 * 60 * 1000);
             }
 
-            const lastDate = parseDate(periodWeeks[3].date);
             const endDate = new Date(startDate.getTime() + 28 * 24 * 60 * 60 * 1000); // Exactly 28 days from start
             const daySpan = 28; // Always 28 days for 4-week period
 
@@ -828,7 +829,6 @@
                 laborPercent,
                 totalPercent: foodPercent + laborPercent,
               });
-              previousEndDate = endDate;
             }
           }
 
