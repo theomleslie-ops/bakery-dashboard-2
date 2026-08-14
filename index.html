@@ -753,13 +753,13 @@
           const grouped = [];
 
           console.log('Weekly data:', weeklyData);
-          // Group weekly data into 4-week periods (8 data points = 4 weeks if each point is 2 weeks)
-          for (let i = 0; i < weeklyData.length; i += 8) {
-            const periodWeeks = weeklyData.slice(i, i + 8);
+          // Group weekly data into 4-week periods (4 data points = 4 weeks, each data point is 1 week)
+          for (let i = 0; i < weeklyData.length; i += 4) {
+            const periodWeeks = weeklyData.slice(i, i + 4);
 
-            console.log(`Period ${grouped.length + 1}: weeks at indices ${i}-${i+7}`, periodWeeks.map(w => w.date));
-            // Only process complete 4-week periods (8 data points)
-            if (periodWeeks.length < 8) break;
+            console.log(`Period ${grouped.length + 1}: weeks at indices ${i}-${i+3}`, periodWeeks.map(w => w.date));
+            // Only process complete 4-week periods (4 data points = 4 weeks)
+            if (periodWeeks.length < 4) break;
 
             const totalRevenue = periodWeeks.reduce((sum, w) => sum + (w.revenue || 0), 0);
             const totalCogs = periodWeeks.reduce((sum, w) => sum + (w.cogs || 0), 0);
@@ -767,7 +767,7 @@
 
             if (totalRevenue > 0) {
               const firstWeek = periodWeeks[0];
-              const lastWeek = periodWeeks[7];
+              const lastWeek = periodWeeks[3];
 
               const parseDate = (dateStr) => {
                 const [y, m, d] = (dateStr || '').split('-').map(Number);
@@ -775,7 +775,8 @@
               };
 
               const startDate = parseDate(firstWeek.date);
-              const endDate = new Date(startDate.getTime() + 27 * 24 * 60 * 60 * 1000); // Exactly 28 days = 4 weeks
+              const lastWeekStart = parseDate(lastWeek.date);
+              const endDate = new Date(lastWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000); // Sunday of 4th week = 28 days total
 
               // Only include complete periods (end date must have passed)
               if (endDate > today) continue;
