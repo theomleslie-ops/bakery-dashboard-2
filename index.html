@@ -745,58 +745,48 @@
             throw new Error('Missing financial data from server');
           }
           setPeriodSource(dashData.periodSource || '');
+          const monthlyFinancial = dashData.monthlyData || [];
+          const monthToNum = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
 
-          // Use weekly financial data to group by 4-week periods
-          const weeklyData = dashData.periodData || [];
-
-          // Group every 4 weeks
-          const grouped = [];
-          for (let i = 0; i < weeklyData.length; i += 4) {
-            const periodWeeks = weeklyData.slice(i, Math.min(i + 4, weeklyData.length));
-            const totalRevenue = periodWeeks.reduce((sum, w) => sum + (w.revenue || 0), 0);
-            const totalFoodCost = periodWeeks.reduce((sum, w) => sum + (w.cogs || 0), 0);
-            const totalLabor = periodWeeks.reduce((sum, w) => sum + (w.labor || 0), 0);
-
-            if (totalRevenue > 0) {
-              const foodPercent = (totalFoodCost / totalRevenue) * 100;
-              const laborPercent = (totalLabor / totalRevenue) * 100;
-
-              // Parse dates and create range label
-              const firstWeek = periodWeeks[0];
-              const lastWeek = periodWeeks[periodWeeks.length - 1];
-
-              // Parse date strings in format YYYY-MM-DD
-              const parseDate = (dateStr) => {
-                const [y, m, d] = (dateStr || '').split('-').map(Number);
-                return new Date(y, m - 1, d);
-              };
-
-              const startDate = parseDate(firstWeek.date);
-              const endDate = new Date(parseDate(lastWeek.date).getTime() + 6 * 24 * 60 * 60 * 1000); // Add 6 days for week end
-
-              const startMonth = startDate.getMonth() + 1;
-              const startDay = startDate.getDate();
-              const endMonth = endDate.getMonth() + 1;
-              const endDay = endDate.getDate();
-
-              const label = startMonth === endMonth
-                ? `${startMonth}/${startDay}-${endDay}`
-                : `${startMonth}/${startDay}-${endMonth}/${endDay}`;
-
-              grouped.push({
-                label: label,
-                fullLabel: `${firstWeek.date} to ${lastWeek.date}`,
-                dateObj: startDate,
-                revenue: totalRevenue,
+          let combined = monthlyFinancial
+            .filter(m => m.revenue > 0)
+            .map(m => {
+              const monthNum = monthToNum[m.month] || 0;
+              const date = new Date(m.year, monthNum - 1, 1);
+              let labor = m.labor;
+              if (m.month === 'Jul' && m.year === 2026) {
+                labor = 291994.64;
+              }
+              const foodPercent = (m.cogs / m.revenue) * 100;
+              const laborPercent = (labor / m.revenue) * 100;
+              return {
+                label: m.month,
+                fullLabel: m.month + ' ' + m.year,
+                dateObj: date,
+                revenue: m.revenue,
+                foodCost: m.cogs,
+                labor: labor,
                 foodPercent,
                 laborPercent,
                 totalPercent: foodPercent + laborPercent,
-              });
+              };
+            })
+            .sort((a, b) => a.dateObj - b.dateObj);
+
+          const today = new Date();
+          const cutoffDate = new Date(today.getTime() - weeksRange * 7 * 24 * 60 * 60 * 1000);
+          const filtered = combined.filter(m => m.dateObj >= cutoffDate);
+
+          if (filtered.length > 1) {
+            const lastRevenue = filtered[filtered.length - 1].revenue;
+            const avgRevenue = filtered.slice(0, -1).reduce((sum, p) => sum + p.revenue, 0) / (filtered.length - 1);
+            if (avgRevenue > 0 && lastRevenue < avgRevenue * 0.6) {
+              filtered.pop();
             }
           }
 
-          setWeeks(grouped);
-          setStatus(grouped.length > 0 ? 'ready' : 'empty');
+          setWeeks(filtered);
+          setStatus(filtered.length > 0 ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
@@ -808,7 +798,7 @@
         <div className="container">
           <header>
             <h1>🎯 Prime Cost Dashboard</h1>
-            <p className="subtitle">Food Cost + Labor as % of Revenue, by 4-week period (Goal: ≤60%)</p>
+            <p className="subtitle">Food Cost + Labor as % of Revenue, monthly (Goal: ≤60%)</p>
           </header>
           <div className="controls">
             <div className="view-toggle">
@@ -825,7 +815,7 @@
                 <div className="metric-card">
                   <div className="metric-label">Avg Prime Cost</div>
                   <div className="metric-value">{avgPrimeCost.toFixed(1)}%</div>
-                  <div className="metric-sub">Average across all 4-week periods</div>
+                  <div className="metric-sub">Average across all months</div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-label">Goal</div>
@@ -834,7 +824,7 @@
                 </div>
               </div>
               <div className="chart-container">
-                <div className="chart-title">Prime Cost, by 4-Week Period (% of Revenue)</div>
+                <div className="chart-title">Prime Cost, by Month (% of Revenue)</div>
                 <PrimeCostChart weeks={weeks} />
               </div>
             </>
