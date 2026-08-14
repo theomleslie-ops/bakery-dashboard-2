@@ -750,16 +750,33 @@
           const today = new Date();
           today.setHours(0, 0, 0, 0);
 
+          const parseDate = (dateStr) => {
+            const parts = (dateStr || '').split('-');
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10);
+            const d = parseInt(parts[2], 10);
+            return new Date(y, m - 1, d);
+          };
+
+          // Find the most recent Monday (next Monday if today is Mon)
+          const nextMonday = new Date(today);
+          const dayOfWeek = nextMonday.getDay();
+          const daysUntilMonday = dayOfWeek === 0 ? 1 : (1 - dayOfWeek + 7) % 7 || 7;
+          nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
+
+          // Filter out the current/upcoming incomplete week
+          const completeWeeks = weeklyData.filter(w => {
+            const weekDate = parseDate(w.date);
+            return weekDate < nextMonday; // Only complete weeks before next Monday
+          });
+
           const grouped = [];
 
-          console.log('Weekly data:', weeklyData);
-          // Group weekly data into 4-week periods (4 data points = 4 weeks, each data point is 1 week)
-          for (let i = 0; i < weeklyData.length; i += 4) {
-            const periodWeeks = weeklyData.slice(i, i + 4);
+          // Group complete weeks into 4-week periods (newest first, then older)
+          for (let i = completeWeeks.length - 4; i >= 0; i -= 4) {
+            const periodWeeks = completeWeeks.slice(i, i + 4);
 
-            console.log(`Period ${grouped.length + 1}: weeks at indices ${i}-${i+3}`, periodWeeks.map(w => w.date));
-            // Only process complete 4-week periods (4 data points = 4 weeks)
-            if (periodWeeks.length < 4) break;
+            if (periodWeeks.length !== 4) continue; // Skip incomplete periods
 
             const totalRevenue = periodWeeks.reduce((sum, w) => sum + (w.revenue || 0), 0);
             const totalCogs = periodWeeks.reduce((sum, w) => sum + (w.cogs || 0), 0);
@@ -768,24 +785,9 @@
             if (totalRevenue > 0) {
               const firstWeek = periodWeeks[0];
               const lastWeek = periodWeeks[3];
-
-              const parseDate = (dateStr) => {
-                // Parse YYYY-MM-DD string to Date object without timezone shifts
-                const parts = (dateStr || '').split('-');
-                const y = parseInt(parts[0], 10);
-                const m = parseInt(parts[1], 10);
-                const d = parseInt(parts[2], 10);
-                // Create date at local midnight
-                const date = new Date(y, m - 1, d);
-                return date;
-              };
-
               const startDate = parseDate(firstWeek.date);
               const lastWeekStart = parseDate(lastWeek.date);
-              const endDate = new Date(lastWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000); // Monday of next week = 28 days from start
-
-              // Only include complete periods (end date must have passed)
-              if (endDate > today) continue;
+              const endDate = new Date(lastWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000); // Sunday of 4th week
 
               const foodPercent = (totalCogs / totalRevenue) * 100;
               const laborPercent = (totalLabor / totalRevenue) * 100;
@@ -799,9 +801,7 @@
                 ? `${startMonth}/${startDay}-${endDay}`
                 : `${startMonth}/${startDay}-${endMonth}/${endDay}`;
 
-              console.log(`  Label: ${label} (start: ${startDate.toDateString()}, end: ${endDate.toDateString()})`);
-
-              grouped.push({
+              grouped.unshift({
                 label: label,
                 fullLabel: `${firstWeek.date} to ${lastWeek.date}`,
                 dateObj: startDate,
