@@ -750,11 +750,18 @@
           const today = new Date();
           today.setHours(0, 0, 0, 0);
 
+          // Only process if we have weekly data
+          if (!weeklyData || weeklyData.length === 0) {
+            setWeeks([]);
+            setStatus('empty');
+            return;
+          }
+
           const grouped = [];
           for (let i = 0; i < weeklyData.length; i += 4) {
             const periodWeeks = weeklyData.slice(i, Math.min(i + 4, weeklyData.length));
 
-            // Only show complete 4-week periods (all 4 weeks must exist and end date must have passed)
+            // Only show complete 4-week periods (all 4 weeks must exist)
             if (periodWeeks.length < 4) break;
 
             const totalRevenue = periodWeeks.reduce((sum, w) => sum + (w.revenue || 0), 0);
@@ -779,7 +786,7 @@
               const endDate = new Date(weekEndDate.getTime() + 6 * 24 * 60 * 60 * 1000); // Add 6 days for Sunday
 
               // Only include if period end date (Sunday) has passed
-              if (endDate >= today) continue;
+              if (endDate > today) continue;
 
               const startMonth = startDate.getMonth() + 1;
               const startDay = startDate.getDate();
