@@ -770,13 +770,19 @@
               const lastWeek = periodWeeks[3];
 
               const parseDate = (dateStr) => {
-                const [y, m, d] = (dateStr || '').split('-').map(Number);
-                return new Date(y, m - 1, d);
+                // Parse YYYY-MM-DD string to Date object without timezone shifts
+                const parts = (dateStr || '').split('-');
+                const y = parseInt(parts[0], 10);
+                const m = parseInt(parts[1], 10);
+                const d = parseInt(parts[2], 10);
+                // Create date at local midnight
+                const date = new Date(y, m - 1, d);
+                return date;
               };
 
               const startDate = parseDate(firstWeek.date);
               const lastWeekStart = parseDate(lastWeek.date);
-              const endDate = new Date(lastWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000); // Sunday of 4th week = 28 days total
+              const endDate = new Date(lastWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000); // Monday of next week = 28 days from start
 
               // Only include complete periods (end date must have passed)
               if (endDate > today) continue;
