@@ -832,8 +832,16 @@
             }
           }
 
-          setWeeks(grouped);
-          setStatus(grouped.length > 0 ? 'ready' : 'empty');
+          // Only show periods that end on or before today
+          const today = new Date();
+          today.setHours(23, 59, 59, 999); // End of today
+          const completedPeriods = grouped.filter(p => {
+            const endDate = new Date(p.dateObj.getTime() + 28 * 24 * 60 * 60 * 1000);
+            return endDate <= today;
+          });
+
+          setWeeks(completedPeriods);
+          setStatus(completedPeriods.length > 0 ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
