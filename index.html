@@ -752,10 +752,12 @@
 
           const grouped = [];
 
+          console.log('Weekly data:', weeklyData);
           // Group weekly data into 4-week periods
           for (let i = 0; i < weeklyData.length; i += 4) {
             const periodWeeks = weeklyData.slice(i, i + 4);
 
+            console.log(`Period ${grouped.length + 1}: weeks at indices ${i}-${i+3}`, periodWeeks.map(w => w.date));
             // Only process complete 4-week periods
             if (periodWeeks.length !== 4) break;
 
@@ -790,6 +792,8 @@
               const label = startMonth === endMonth
                 ? `${startMonth}/${startDay}-${endDay}`
                 : `${startMonth}/${startDay}-${endMonth}/${endDay}`;
+
+              console.log(`  Label: ${label} (start: ${startDate.toDateString()}, end: ${endDate.toDateString()})`);
 
               grouped.push({
                 label: label,
