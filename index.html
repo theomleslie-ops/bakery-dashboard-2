@@ -764,17 +764,24 @@
           const daysUntilMonday = dayOfWeek === 0 ? 1 : (1 - dayOfWeek + 7) % 7 || 7;
           nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
 
+          console.log('Today:', today.toDateString(), 'Next Monday:', nextMonday.toDateString());
+          console.log('All weekly data:', weeklyData.map(w => w.date));
+
           // Filter out the current/upcoming incomplete week
           const completeWeeks = weeklyData.filter(w => {
             const weekDate = parseDate(w.date);
             return weekDate < nextMonday; // Only complete weeks before next Monday
           });
 
+          console.log('Complete weeks:', completeWeeks.map(w => w.date));
+
           const grouped = [];
 
           // Group complete weeks into 4-week periods (oldest to newest)
           for (let i = 0; i + 4 <= completeWeeks.length; i += 4) {
             const periodWeeks = completeWeeks.slice(i, i + 4);
+
+            console.log(`Period ${grouped.length + 1}: indices ${i}-${i+3}`, periodWeeks.map(w => w.date));
 
             if (periodWeeks.length !== 4) break; // Stop at incomplete periods
 
