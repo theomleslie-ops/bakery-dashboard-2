@@ -1669,22 +1669,23 @@ app.get('/api/dashboard', async (req, res) => {
       source: 'Multi-month P/L Statements'
     } : { source: 'No financial data uploaded yet' };
 
-    // Weekly data comes from real per-week QuickBooks ledger totals. Completed weeks are served
-    // from a disk-persisted snapshot (data/qb-weekly-pl-snapshot.json) instead of re-fetched
-    // every time - only the most recent 2 weeks are ever pulled live.
+    // Weekly data comes from the snapshot file
     let periodData = [];
-    let periodSource = 'QuickBooks not connected';
+    let periodSource = 'Weekly snapshot data';
     try {
-      const weeksBack = Math.min(parseInt(req.query.weeks, 10) || 16, 260); // Allow up to 5 years
-      const offsetWeeks = parseInt(req.query.offset, 10) || 0;
-      // P&L fetching framework has been removed
-      periodData = [];
-      periodSource = 'P&L fetching removed';
+      const snapshot = loadData('data/qb-weekly-pl-snapshot.json') || {};
+      const weeksObj = snapshot.weeks || {};
+      periodData = Object.entries(weeksObj)
+        .map(([date, data]) => ({
+          date,
+          revenue: data.revenue || 0,
+          cogs: data.cogs || 0,
+          labor: data.labor || 0,
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
     } catch (err) {
-      if (err.code !== 'QB_NOT_CONNECTED') {
-        console.error('Weekly QuickBooks P&L fetch failed:', err.response?.data?.fault?.detail?.[0]?.message || err.message);
-        periodSource = 'QuickBooks fetch failed';
-      }
+      console.error('Failed to load weekly snapshot:', err.message);
+      periodSource = 'Weekly data unavailable';
     }
 
     res.json({
