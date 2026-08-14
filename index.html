@@ -767,7 +767,7 @@
 
             if (totalRevenue > 0) {
               const firstWeek = periodWeeks[0];
-              const lastWeek = periodWeeks[7];  // Use the 8th week (index 7) for the end date
+              const lastWeek = periodWeeks[7];
 
               const parseDate = (dateStr) => {
                 const [y, m, d] = (dateStr || '').split('-').map(Number);
@@ -775,8 +775,7 @@
               };
 
               const startDate = parseDate(firstWeek.date);
-              const lastWeekStart = parseDate(lastWeek.date);
-              const endDate = new Date(lastWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000); // Sunday of last week
+              const endDate = new Date(startDate.getTime() + 27 * 24 * 60 * 60 * 1000); // Exactly 28 days = 4 weeks
 
               // Only include complete periods (end date must have passed)
               if (endDate > today) continue;
