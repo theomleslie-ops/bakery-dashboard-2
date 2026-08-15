@@ -45,10 +45,14 @@ class QPrimeCostFetcher {
           const metrics = this.plFetcher.extractMetrics(report);
 
           // Create 4-week period
-          const parts1 = periodDates.start.split('-');
-          const parts2 = periodDates.end.split('-');
-          const labelStart = `${parseInt(parts1[1])}/${parseInt(parts1[2])}`;
-          const labelEnd = `${parseInt(parts2[1])}/${parseInt(parts2[2])}`;
+          // Adjust for timezone offset: dates are one day behind due to UTC conversion
+          const startDate = new Date(periodDates.start + 'T00:00:00Z');
+          const endDate = new Date(periodDates.end + 'T00:00:00Z');
+          startDate.setDate(startDate.getDate() + 1);
+          endDate.setDate(endDate.getDate() + 1);
+
+          const labelStart = `${startDate.getMonth() + 1}/${startDate.getDate()}`;
+          const labelEnd = `${endDate.getMonth() + 1}/${endDate.getDate()}`;
 
           const primeContribution = metrics.cogs + metrics.labor;
           const primeCostPercent = metrics.revenue > 0 ? (primeContribution / metrics.revenue) * 100 : 0;
