@@ -14,6 +14,7 @@ const qbCache = require('./pipeline/qb-cache');
 const claudeMCP = require('./pipeline/claude-mcp');
 const ingredientSchedulerModule = require('./pipeline/ingredient-scheduler');
 const { fetchProductionData } = require('./pipeline/google-drive-production');
+const { refreshPrimeCostData } = require('./pipeline/qb-prime-cost-refresh');
 
 let ingredientScheduler = null;
 let composioConnectors = null;
@@ -3915,7 +3916,6 @@ const server = app.listen(PORT, async () => {
       setTimeout(async () => {
         try {
           console.log('🔄 Running initial prime cost refresh...');
-          const { refreshPrimeCostData } = require('./pipeline/qb-prime-cost-refresh');
           await refreshPrimeCostData(qbClient);
         } catch (err) {
           console.warn('⚠️  Initial prime cost refresh failed (will retry on schedule):', err.message);
