@@ -23,11 +23,11 @@ async function refreshPrimeCostData(qbClient) {
     const fetcher = new QPrimeCostFetcher(qbClient, plFetcher);
     const store = new PrimeCostStore();
 
-    // Fetch 2-week P&L data from QB (includes labor detail)
-    // Use past 6 months to avoid QB rate limiting (52+ API calls for 2 years)
+    // Fetch 4-week P&L data from QB (includes labor detail)
+    // Use past 3 years (~39 API calls for ~13 periods per year)
     const endDate = new Date();
     const startDate = new Date(endDate);
-    startDate.setMonth(startDate.getMonth() - 6);
+    startDate.setFullYear(startDate.getFullYear() - 3);
 
     const periods = await fetcher.fetchPrimeCostPeriodsFromQB(
       startDate.toISOString().split('T')[0],
