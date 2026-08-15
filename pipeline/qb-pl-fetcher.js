@@ -295,6 +295,7 @@ class QBPLFetcher {
           end: week.end,
           revenue: metrics.revenue,
           cogs: metrics.cogs,
+          labor: metrics.labor,
           operations: metrics.operations,
           netIncome: metrics.netIncome
         });
