@@ -1700,6 +1700,44 @@ app.get('/api/dashboard', async (req, res) => {
   }
 });
 
+// ============= PRIME COST ENDPOINTS =============
+
+// GET /api/prime-cost/periods - Get 4-week prime cost periods
+app.get('/api/prime-cost/periods', async (req, res) => {
+  try {
+    const PrimeCostStore = require('./pipeline/qb-prime-cost-store');
+    const store = new PrimeCostStore();
+    const data = await store.getAllPeriods();
+
+    res.json({
+      success: true,
+      periods: data.periods || [],
+      count: data.count || 0,
+      lastUpdated: data.lastUpdated
+    });
+  } catch (err) {
+    console.error('Prime cost periods fetch error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/prime-cost/refresh - Refresh prime cost periods
+app.post('/api/prime-cost/refresh', async (req, res) => {
+  try {
+    const { refreshPrimeCostData } = require('./pipeline/qb-prime-cost-refresh');
+    const result = await refreshPrimeCostData(req.protocol + '://' + req.get('host'));
+
+    res.json({
+      success: true,
+      message: 'Prime cost data refreshed',
+      ...result
+    });
+  } catch (err) {
+    console.error('Prime cost refresh error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/pl-by-channel
 // Combined channel + market + revenue-allocation P&L, built from the three sheets uploaded via
 // /api/upload/pl-channel/*. Nothing here is computed/derived - every number is exactly what was in
