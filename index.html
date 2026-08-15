@@ -143,10 +143,10 @@
         for (let i = 0; i < weekData.length; i += weeks) {
           const chunk = weekData.slice(i, i + weeks);
           if (chunk.length === 0) continue;
-          const revenue = chunk.reduce((s, d) => s + parseFloat(d.revenue || 0), 0) / chunk.length;
-          const cogs = chunk.reduce((s, d) => s + parseFloat(d.cogs || 0), 0) / chunk.length;
-          const opex = chunk.reduce((s, d) => s + parseFloat(d.opex || 0), 0) / chunk.length;
-          const pl = chunk.reduce((s, d) => s + parseFloat(d.pl || 0), 0) / chunk.length;
+          const revenue = chunk.reduce((s, d) => s + parseFloat(d.revenue || 0), 0);
+          const cogs = chunk.reduce((s, d) => s + parseFloat(d.cogs || 0), 0);
+          const opex = chunk.reduce((s, d) => s + parseFloat(d.opex || 0), 0);
+          const pl = chunk.reduce((s, d) => s + parseFloat(d.pl || 0), 0);
           const startDate = chunk[0].startDate;
           const lastWeekStart = chunk[chunk.length - 1].startDate;
           const periodLabel = weeks === 13 ? 'Quarter' : weeks === 4 ? '4 weeks' : '2 weeks';
