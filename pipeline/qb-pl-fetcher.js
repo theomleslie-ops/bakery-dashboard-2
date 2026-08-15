@@ -165,12 +165,13 @@ class QBPLFetcher {
     }
 
     if (!Array.isArray(rows)) {
-      return { revenue: 0, cogs: 0, operations: 0, netIncome: 0 };
+      return { revenue: 0, cogs: 0, labor: 0, operations: 0, netIncome: 0 };
     }
 
     const metrics = {
       revenue: 0,
       cogs: 0,
+      labor: 0,
       operations: 0,
       netIncome: 0
     };
