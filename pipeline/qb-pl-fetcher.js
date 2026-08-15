@@ -24,6 +24,11 @@ class QBPLFetcher {
     const url = `${baseUrl}/v3/company/${tokens.realmId}/reports/ProfitAndLoss`;
 
     try {
+      // Log exact dates being sent to QB (critical for debugging year/date issues)
+      if (startDate.includes('12') && endDate.includes('01')) {
+        console.log(`  🔍 Year-boundary fetch: start=${startDate}, end=${endDate}`);
+      }
+
       const response = await axios.get(url, {
         params: {
           start_date: startDate,
