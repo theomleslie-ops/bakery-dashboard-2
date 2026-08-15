@@ -777,16 +777,22 @@
 
           const grouped = [];
 
-          // Group complete weeks into 4-week periods (by combining 2-week chunks) (oldest to newest)
+          // Group complete weeks into 4-week periods (oldest to newest)
           for (let i = 0; i + 4 <= completeWeeks.length; i += 4) {
             const periodWeeks = completeWeeks.slice(i, i + 4);
 
             if (periodWeeks.length !== 4) break; // Stop at incomplete periods
 
-            // Use actual data dates, not fixed 28-day spans
-            const startDate = parseDate(periodWeeks[0].date);
-            const endDate = parseDate(periodWeeks[3].date);
-            const daySpan = Math.round((endDate - startDate) / (24 * 60 * 60 * 1000));
+            // Each period is exactly 28 days, starting where the previous one ended
+            let startDate;
+            if (grouped.length === 0) {
+              startDate = parseDate(periodWeeks[0].date);
+            } else {
+              const prevPeriod = grouped[grouped.length - 1];
+              startDate = new Date(prevPeriod.dateObj.getTime() + 28 * 24 * 60 * 60 * 1000);
+            }
+            const endDate = new Date(startDate.getTime() + 27 * 24 * 60 * 60 * 1000); // 28 days inclusive
+            const daySpan = 28;
 
             console.log(`Period ${grouped.length + 1}: indices ${i}-${i+3}, dates ${periodWeeks[0].date} to ${periodWeeks[3].date}, span: ${daySpan} days`);
 
