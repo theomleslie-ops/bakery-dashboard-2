@@ -805,23 +805,25 @@
               const firstWeek = periodWeeks[0];
               const lastWeek = periodWeeks[3];
 
+              // Use ACTUAL data dates, not calculated dates
+              const actualStartDate = parseDate(firstWeek.date);
+              const actualEndDate = parseDate(lastWeek.date);
+
               const foodPercent = (totalCogs / totalRevenue) * 100;
               const laborPercent = (totalLabor / totalRevenue) * 100;
 
-              const startMonth = startDate.getMonth() + 1;
-              const startDay = startDate.getDate();
-              const endMonth = endDate.getMonth() + 1;
-              const endDay = endDate.getDate();
+              const startMonth = actualStartDate.getMonth() + 1;
+              const startDay = actualStartDate.getDate();
+              const endMonth = actualEndDate.getMonth() + 1;
+              const endDay = actualEndDate.getDate();
 
               const label = startMonth === endMonth
                 ? `${startMonth}/${startDay}-${endDay}`
                 : `${startMonth}/${startDay}-${endMonth}/${endDay}`;
 
-              const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
-              const startDateStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
               grouped.push({
                 label: label,
-                fullLabel: `${startDateStr} to ${endDateStr}`,
+                fullLabel: `${firstWeek.date} to ${lastWeek.date}`,
                 dateObj: startDate,
                 revenue: totalRevenue,
                 foodPercent,
