@@ -275,11 +275,20 @@ class QBPLFetcher {
         // Labor is a top-level account
         metrics.labor = extractRowValue(rows[this.rowMap.labor]);
       } else if (typeof this.rowMap.labor === 'object') {
-        // Labor is a sub-row under Expenses
+        // Labor is a sub-row under Expenses - try multiple sub-row locations
         const expensesRow = rows[this.rowMap.labor.parentIdx];
-        if (expensesRow && expensesRow.Rows?.Row && Array.isArray(expensesRow.Rows.Row)) {
-          const laborRow = expensesRow.Rows.Row[this.rowMap.labor.subIdx];
-          if (laborRow) {
+        if (expensesRow) {
+          let subRowsArray = null;
+          if (Array.isArray(expensesRow.Rows?.Row)) {
+            subRowsArray = expensesRow.Rows.Row;
+          } else if (Array.isArray(expensesRow.Rows?.Rows)) {
+            subRowsArray = expensesRow.Rows.Rows;
+          } else if (Array.isArray(expensesRow.Rows)) {
+            subRowsArray = expensesRow.Rows;
+          }
+
+          if (subRowsArray && subRowsArray[this.rowMap.labor.subIdx]) {
+            const laborRow = subRowsArray[this.rowMap.labor.subIdx];
             metrics.labor = extractRowValue(laborRow);
           }
         }
