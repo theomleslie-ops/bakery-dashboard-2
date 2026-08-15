@@ -831,15 +831,8 @@
             }
           }
 
-          // Only show periods that have ended (endDate is before or today)
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const displayPeriods = grouped.filter(p => {
-            return p.dateObj && new Date(p.dateObj.getTime() + 28 * 24 * 60 * 60 * 1000) <= today;
-          });
-
-          setWeeks(displayPeriods);
-          setStatus(displayPeriods.length > 0 ? 'ready' : 'empty');
+          setWeeks(grouped);
+          setStatus(grouped.length > 0 ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
