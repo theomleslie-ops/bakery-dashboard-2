@@ -1498,16 +1498,27 @@ app.get('/api/quickbooks/expenses', async (req, res) => {
 const QBPLFetcher = require('./pipeline/qb-pl-fetcher');
 const PLStore = require('./pipeline/qb-pl-store');
 const { refreshPLData } = require('./pipeline/qb-pl-refresh');
+const PrimeCostStore = require('./pipeline/qb-prime-cost-store');
+const { refreshPrimeCostData } = require('./pipeline/qb-prime-cost-refresh');
 
 let plFetcher = null;
+let primeCostFetcher = null;
 // Use absolute path for P&L data to ensure persistence on Railway
 const PL_DATA_FILE = path.join(DATA_DIR, 'pl-weekly.json');
+const PRIME_COST_DATA_FILE = path.join(DATA_DIR, 'prime-cost-periods.json');
 let plStore = new PLStore(PL_DATA_FILE);
+let primeCostStore = new PrimeCostStore(PRIME_COST_DATA_FILE);
 console.log(`📁 P&L data file: ${PL_DATA_FILE}`);
+console.log(`📁 Prime Cost data file: ${PRIME_COST_DATA_FILE}`);
 
-// Initialize P&L fetcher with QB client
+// Initialize P&L and Prime Cost fetchers with QB client
 function initPLFetcher() {
   plFetcher = new QBPLFetcher(qbClient);
+}
+
+function initPrimeCostFetcher() {
+  const QPrimeCostFetcher = require('./pipeline/qb-prime-cost-fetcher');
+  primeCostFetcher = new QPrimeCostFetcher(qbClient);
 }
 
 // GET /api/pl/weekly - Retrieve stored weekly P&L data
@@ -1618,6 +1629,112 @@ app.get('/api/pl/weekly/range', async (req, res) => {
     });
   } catch (error) {
     console.error('P&L range query error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============= PRIME COST DASHBOARD =============
+
+// GET /api/prime-cost/periods - Retrieve stored 4-week prime cost periods
+app.get('/api/prime-cost/periods', async (req, res) => {
+  try {
+    const data = await primeCostStore.getAllData();
+    res.json({
+      success: true,
+      periods: data.periods.length,
+      data: data.periods,
+      lastUpdated: data.lastUpdated,
+      source: 'Stored 4-week prime cost periods'
+    });
+  } catch (error) {
+    console.error('Prime cost fetch error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/prime-cost/summary - Get prime cost summary (totals + stats)
+app.get('/api/prime-cost/summary', async (req, res) => {
+  try {
+    const data = await primeCostStore.getAllData();
+    if (!data.periods.length) {
+      return res.json({ error: 'No prime cost data available', periods: 0 });
+    }
+
+    const avgPrimeCost = await primeCostStore.getAveragePrimeCost();
+    const periodsMetGoal = await primeCostStore.getPeriodsMetGoal();
+
+    const totals = {
+      totalRevenue: data.periods.reduce((sum, p) => sum + (p.totalRevenue || 0), 0),
+      totalCogs: data.periods.reduce((sum, p) => sum + (p.totalCogs || 0), 0),
+      totalLabor: data.periods.reduce((sum, p) => sum + (p.totalLabor || 0), 0),
+      totalPrimeContribution: data.periods.reduce((sum, p) => sum + (p.primeContribution || 0), 0),
+    };
+
+    res.json({
+      success: true,
+      periods: data.periods.length,
+      averagePrimeCost: avgPrimeCost,
+      periodsMetGoal: periodsMetGoal.length,
+      goalPercentage: data.periods.length > 0 ? (periodsMetGoal.length / data.periods.length * 100).toFixed(1) : 0,
+      totals,
+      lastUpdated: data.lastUpdated
+    });
+  } catch (error) {
+    console.error('Prime cost summary error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/prime-cost/refresh - Refresh prime cost periods using same algorithm as P&L
+app.post('/api/prime-cost/refresh', async (req, res) => {
+  try {
+    const isQBConnected = () => {
+      try { const t = qbClient.loadTokens(); return !!(t && t.refresh_token); } catch { return false; }
+    };
+
+    if (!isQBConnected()) {
+      return res.status(400).json({ error: 'QuickBooks not connected', message: 'Connect QuickBooks first' });
+    }
+
+    if (!primeCostFetcher) {
+      initPrimeCostFetcher();
+    }
+
+    const result = await refreshPrimeCostData(qbClient);
+    res.json({
+      success: true,
+      message: 'Prime cost data refreshed successfully',
+      periodCount: result.periodCount,
+      averagePrimeCost: result.avgPrimeCost,
+      validation: result.validation,
+      lastUpdated: result.lastUpdated
+    });
+  } catch (err) {
+    console.error('Prime cost refresh failed:', err.message);
+    res.status(500).json({
+      error: 'Prime cost refresh failed',
+      message: err.message,
+    });
+  }
+});
+
+// GET /api/prime-cost/range - Get prime cost periods for date range
+app.get('/api/prime-cost/range', async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    if (!start_date || !end_date) {
+      return res.status(400).json({ error: 'Missing start_date or end_date' });
+    }
+
+    const data = await primeCostStore.getDataByRange(start_date, end_date);
+    res.json({
+      success: true,
+      periods: data.length,
+      data,
+      range: { start: start_date, end: end_date }
+    });
+  } catch (error) {
+    console.error('Prime cost range query error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -3808,17 +3925,23 @@ const server = app.listen(PORT, async () => {
     console.log('⚠️  QuickBooks not configured');
   }
 
-  // Initialize P&L weekly fetcher
+  // Initialize P&L and Prime Cost fetchers
   if (qbConfigured) {
     try {
       initPLFetcher();
       console.log('✅ P&L Weekly fetcher initialized');
+
+      initPrimeCostFetcher();
+      console.log('✅ Prime Cost fetcher initialized');
 
       // Do initial refresh in background (don't wait for it)
       setTimeout(async () => {
         try {
           console.log('🔄 Running initial P&L refresh...');
           await refreshPLData(qbClient);
+
+          console.log('🔄 Running initial Prime Cost refresh...');
+          await refreshPrimeCostData(qbClient);
         } catch (err) {
           console.error('❌ Initial P&L refresh failed:', err.message);
         }
