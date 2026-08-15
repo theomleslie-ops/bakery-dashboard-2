@@ -134,10 +134,20 @@ class QBPLFetcher {
         this.rowMap.operations = i;
         console.log(`  ✓ Operations: index ${i} (${accountName})`);
         // Look for labor in sub-rows under Expenses
+        console.log(`    DEBUG Expenses row structure:`, {
+          hasRows: !!row.Rows,
+          rowsType: typeof row.Rows,
+          hasRowsRow: !!row.Rows?.Row,
+          rowsRowIsArray: Array.isArray(row.Rows?.Row),
+          rowsRowLength: row.Rows?.Row?.length
+        });
+
         if (row.Rows?.Row && Array.isArray(row.Rows.Row)) {
+          console.log(`    DEBUG Found ${row.Rows.Row.length} sub-rows under Expenses:`);
           for (let j = 0; j < row.Rows.Row.length; j++) {
             const subRow = row.Rows.Row[j];
             const subName = subRow.Header?.ColData?.[0]?.value || '';
+            console.log(`      [${j}] "${subName}"`);
             // Look for labor/payroll accounts (6200 LABOR/PAYROLL EXPENSES or similar)
             if (subName.includes('LABOR') || subName.includes('PAYROLL') || subName.includes('6200')) {
               this.rowMap.labor = { parentIdx: i, subIdx: j };
@@ -145,6 +155,11 @@ class QBPLFetcher {
               break;
             }
           }
+          if (!this.rowMap.labor) {
+            console.log(`    ⚠️  No labor found in Expenses sub-rows`);
+          }
+        } else {
+          console.log(`    ⚠️  Expenses row has no Rows.Row array`);
         }
       } else if (accountName === 'Net Income') {
         this.rowMap.netIncome = i;
