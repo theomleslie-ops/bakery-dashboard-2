@@ -129,38 +129,39 @@
     const formatPercent = (val) => `${Math.abs(val).toFixed(0)}%`;
     const formatPercentPrecise = (val) => `${Math.abs(val).toFixed(1)}%`;
 
-    const StackedBarChart = ({ data, viewMode, fillWidth = true }) => {
+    const StackedBarChart = ({ data, viewMode, periodLength = 1, fillWidth = true }) => {
       const [hoveredMonth, setHoveredMonth] = React.useState(null);
       const [visibleMetrics, setVisibleMetrics] = React.useState({ revenue: true, cogs: true, opex: true, pl: true });
-      const [visibleMovingAvgs, setVisibleMovingAvgs] = React.useState({ ma2w: false, ma4w: false, ma13w: false, ytd: false });
 
       const toggleMetric = (metric) => {
         setVisibleMetrics(prev => ({ ...prev, [metric]: !prev[metric] }));
       };
 
-      const toggleMovingAvg = (metric) => {
-        setVisibleMovingAvgs(prev => ({ ...prev, [metric]: !prev[metric] }));
+      const aggregateDataByPeriod = (weekData, weeks) => {
+        if (weeks === 1) return weekData;
+        const aggregated = [];
+        for (let i = 0; i < weekData.length; i += weeks) {
+          const chunk = weekData.slice(i, i + weeks);
+          if (chunk.length === 0) continue;
+          const revenue = chunk.reduce((s, d) => s + parseFloat(d.revenue || 0), 0) / chunk.length;
+          const cogs = chunk.reduce((s, d) => s + parseFloat(d.cogs || 0), 0) / chunk.length;
+          const opex = chunk.reduce((s, d) => s + parseFloat(d.opex || 0), 0) / chunk.length;
+          const pl = chunk.reduce((s, d) => s + parseFloat(d.pl || 0), 0) / chunk.length;
+          const startDate = chunk[0].startDate;
+          const endDate = chunk[chunk.length - 1].startDate;
+          const periodLabel = weeks === 13 ? 'Quarter' : weeks === 4 ? '4 weeks' : '2 weeks';
+          const [sy, sm, sd] = startDate.split('-').map(Number);
+          const [ey, em, ed] = endDate.split('-').map(Number);
+          const endDate2 = new Date(ey, em - 1, ed + (weeks * 7) - 1);
+          const endStr = endDate2.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          const startStr = new Date(sy, sm - 1, sd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          const dateRange = `${startStr} – ${endStr}`;
+          aggregated.push({ revenue, cogs, opex, pl, month: periodLabel, dateRange });
+        }
+        return aggregated;
       };
 
-      const calculateMovingAverage = (points, key, windowSize) => {
-        return points.map((_, i) => {
-          if (i < windowSize - 1) return null;
-          const window = points.slice(i - windowSize + 1, i + 1);
-          return window.reduce((sum, p) => sum + p[key], 0) / windowSize;
-        });
-      };
-
-      const calculateYTD = (points, key) => {
-        const now = new Date();
-        const ytdStart = new Date(now.getFullYear(), 0, 1);
-        return points.map((p, i) => {
-          const periodPoints = points.slice(0, i + 1).filter(pt => {
-            const date = new Date(pt.dateRange.split(' – ')[0]);
-            return date >= ytdStart;
-          });
-          return periodPoints.length > 0 ? periodPoints.reduce((sum, pt) => sum + pt[key], 0) / periodPoints.length : null;
-        });
-      };
+      const aggregatedData = aggregateDataByPeriod(data, periodLength);
 
       const rawValue = (d, key) => parseFloat(d[key]) || 0;
       const scaled = (d, key) => {
@@ -171,7 +172,7 @@
         }
         return raw;
       };
-      const points = data.map(d => {
+      const points = aggregatedData.map(d => {
         const revenue = scaled(d, 'revenue');
         const cogs = scaled(d, 'cogs');
         const opex = scaled(d, 'opex');
@@ -202,25 +203,11 @@
         return points.map((p, i) => `${xPos(i)},${getY(p[key])}`).join(' ');
       };
 
-      const makeMovingAvgPath = (key, windowSize) => {
-        const ma = calculateMovingAverage(points, key, windowSize);
-        return ma.map((val, i) => val !== null ? `${xPos(i)},${getY(val)}` : null).filter(v => v).join(' ');
-      };
-
-      const makeYTDPath = (key) => {
-        const ytd = calculateYTD(points, key);
-        return ytd.map((val, i) => val !== null ? `${xPos(i)},${getY(val)}` : null).filter(v => v).join(' ');
-      };
-
       const legendItems = [
-        { label: 'Revenue', color: '#2a78d6', key: 'revenue', type: 'metric' },
-        { label: 'COGS', color: '#ff9500', key: 'cogs', type: 'metric' },
-        { label: 'Operating Expenses', color: '#8b5cf6', key: 'opex', type: 'metric' },
-        { label: 'Profit/Loss', color: '#10b981', key: 'pl', type: 'metric' },
-        { label: '2-Week MA', color: '#2a78d6', key: 'ma2w', type: 'ma', opacity: 0.5 },
-        { label: '4-Week MA', color: '#ff9500', key: 'ma4w', type: 'ma', opacity: 0.5 },
-        { label: '13-Week MA', color: '#8b5cf6', key: 'ma13w', type: 'ma', opacity: 0.5 },
-        { label: 'YTD Avg', color: '#10b981', key: 'ytd', type: 'ma', opacity: 0.5 },
+        { label: 'Revenue', color: '#2a78d6', key: 'revenue' },
+        { label: 'COGS', color: '#ff9500', key: 'cogs' },
+        { label: 'Operating Expenses', color: '#8b5cf6', key: 'opex' },
+        { label: 'Profit/Loss', color: '#10b981', key: 'pl' },
       ];
 
       const labelStride = Math.max(1, Math.ceil(n / 8));
@@ -230,11 +217,10 @@
           <p style={{ fontSize: '12px', color: 'var(--text-light)', marginBottom: '0.5rem' }}>Click a metric to show/hide it</p>
           <div className="chart-legend">
             {legendItems.map(item => {
-              const isVisible = item.type === 'metric' ? visibleMetrics[item.key] : visibleMovingAvgs[item.key];
-              const toggleFn = item.type === 'metric' ? toggleMetric : toggleMovingAvg;
+              const isVisible = visibleMetrics[item.key];
               return (
-                <div key={item.label} className="chart-legend-item" onClick={() => toggleFn(item.key)} style={{ cursor: 'pointer', opacity: isVisible ? 1 : 0.4 }}>
-                  <div className="chart-legend-swatch" style={{ backgroundColor: item.color, opacity: item.opacity || 1 }}></div>
+                <div key={item.label} className="chart-legend-item" onClick={() => toggleMetric(item.key)} style={{ cursor: 'pointer', opacity: isVisible ? 1 : 0.4 }}>
+                  <div className="chart-legend-swatch" style={{ backgroundColor: item.color }}></div>
                   <span>{item.label}</span>
                 </div>
               );
@@ -258,22 +244,6 @@
             {visibleMetrics.cogs && <polyline points={makePath('cogs')} fill="none" stroke="#ff9500" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
             {visibleMetrics.opex && <polyline points={makePath('opex')} fill="none" stroke="#8b5cf6" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
             {visibleMetrics.pl && <polyline points={makePath('pl')} fill="none" stroke="#10b981" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma2w && <polyline points={makeMovingAvgPath('revenue', 2)} fill="none" stroke="#2a78d6" strokeWidth="2" opacity="0.6" strokeDasharray="5,5" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma2w && <polyline points={makeMovingAvgPath('cogs', 2)} fill="none" stroke="#ff9500" strokeWidth="2" opacity="0.6" strokeDasharray="5,5" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma2w && <polyline points={makeMovingAvgPath('opex', 2)} fill="none" stroke="#8b5cf6" strokeWidth="2" opacity="0.6" strokeDasharray="5,5" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma2w && <polyline points={makeMovingAvgPath('pl', 2)} fill="none" stroke="#10b981" strokeWidth="2" opacity="0.6" strokeDasharray="5,5" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma4w && <polyline points={makeMovingAvgPath('revenue', 4)} fill="none" stroke="#2a78d6" strokeWidth="2" opacity="0.6" strokeDasharray="3,3" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma4w && <polyline points={makeMovingAvgPath('cogs', 4)} fill="none" stroke="#ff9500" strokeWidth="2" opacity="0.6" strokeDasharray="3,3" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma4w && <polyline points={makeMovingAvgPath('opex', 4)} fill="none" stroke="#8b5cf6" strokeWidth="2" opacity="0.6" strokeDasharray="3,3" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma4w && <polyline points={makeMovingAvgPath('pl', 4)} fill="none" stroke="#10b981" strokeWidth="2" opacity="0.6" strokeDasharray="3,3" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma13w && <polyline points={makeMovingAvgPath('revenue', 13)} fill="none" stroke="#2a78d6" strokeWidth="2" opacity="0.6" strokeDasharray="2,2" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma13w && <polyline points={makeMovingAvgPath('cogs', 13)} fill="none" stroke="#ff9500" strokeWidth="2" opacity="0.6" strokeDasharray="2,2" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma13w && <polyline points={makeMovingAvgPath('opex', 13)} fill="none" stroke="#8b5cf6" strokeWidth="2" opacity="0.6" strokeDasharray="2,2" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ma13w && <polyline points={makeMovingAvgPath('pl', 13)} fill="none" stroke="#10b981" strokeWidth="2" opacity="0.6" strokeDasharray="2,2" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ytd && <polyline points={makeYTDPath('revenue')} fill="none" stroke="#2a78d6" strokeWidth="2" opacity="0.6" strokeDasharray="1,4" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ytd && <polyline points={makeYTDPath('cogs')} fill="none" stroke="#ff9500" strokeWidth="2" opacity="0.6" strokeDasharray="1,4" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ytd && <polyline points={makeYTDPath('opex')} fill="none" stroke="#8b5cf6" strokeWidth="2" opacity="0.6" strokeDasharray="1,4" vectorEffect="non-scaling-stroke" />}
-            {visibleMovingAvgs.ytd && <polyline points={makeYTDPath('pl')} fill="none" stroke="#10b981" strokeWidth="2" opacity="0.6" strokeDasharray="1,4" vectorEffect="non-scaling-stroke" />}
             {visibleMetrics.revenue && points.map((p, i) => (<circle key={`rev${i}`} cx={xPos(i)} cy={getY(p.revenue)} r="3" fill="#2a78d6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
             {visibleMetrics.cogs && points.map((p, i) => (<circle key={`cogs${i}`} cx={xPos(i)} cy={getY(p.cogs)} r="3" fill="#ff9500" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
             {visibleMetrics.opex && points.map((p, i) => (<circle key={`opex${i}`} cx={xPos(i)} cy={getY(p.opex)} r="3" fill="#8b5cf6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
@@ -333,6 +303,7 @@
       const [periodSource, setPeriodSource] = useState('');
       const [viewMode, setViewMode] = useState('dollars');
       const [weeksRange, setWeeksRange] = useState(16);
+      const [periodLength, setPeriodLength] = useState(1);
       useEffect(() => { fetchData(); }, [weeksRange]);
       const filterIncompleteLastPeriod = (periods) => {
         if (periods.length < 2) return periods;
@@ -403,10 +374,18 @@
               ))}
             </div>
             {data.length > 0 && (
-              <div className="view-toggle">
-                <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
-                <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
-              </div>
+              <>
+                <div className="view-toggle">
+                  <button className={periodLength === 1 ? 'active' : ''} onClick={() => setPeriodLength(1)}>Weekly</button>
+                  <button className={periodLength === 2 ? 'active' : ''} onClick={() => setPeriodLength(2)}>2 Weeks</button>
+                  <button className={periodLength === 4 ? 'active' : ''} onClick={() => setPeriodLength(4)}>4 Weeks</button>
+                  <button className={periodLength === 13 ? 'active' : ''} onClick={() => setPeriodLength(13)}>Quarterly</button>
+                </div>
+                <div className="view-toggle">
+                  <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
+                  <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
+                </div>
+              </>
             )}
           </div>
           {!error && data.length === 0 && (
@@ -416,8 +395,8 @@
           )}
           {data.length > 0 && (
             <div className="chart-container">
-              <div className="chart-title">COGS, Operating Expenses & Profit/Loss, weekly ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
-              <StackedBarChart data={data} viewMode={viewMode} />
+              <div className="chart-title">COGS, Operating Expenses & Profit/Loss, {periodLength === 1 ? 'weekly' : periodLength === 2 ? 'bi-weekly' : periodLength === 4 ? 'monthly' : 'quarterly'} ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
+              <StackedBarChart data={data} viewMode={viewMode} periodLength={periodLength} />
             </div>
           )}
         </div>
