@@ -390,13 +390,6 @@
                   <button className={periodLength === 4 ? 'active' : ''} onClick={() => { setPeriodLength(4); setWeeksRange(26); }}>4 Weeks</button>
                   <button className={periodLength === 13 ? 'active' : ''} onClick={() => { setPeriodLength(13); setWeeksRange(52); }}>Quarterly</button>
                 </div>
-                {periodLength !== 13 && (
-                  <div className="view-toggle">
-                    {WEEK_COUNT_OPTIONS.map(opt => (
-                      <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
-                    ))}
-                  </div>
-                )}
                 <div className="view-toggle">
                   <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
                   <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
