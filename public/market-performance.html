@@ -242,6 +242,7 @@
         function MarketLineChart({ weekStarts, series, colorOf }) {
             const [hoveredWeekIndex, setHoveredWeekIndex] = useState(null);
             const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+            const containerRef = useRef(null);
             const chartHeight = 400;
             const plotLeft = 60, plotRight = 960, plotTop = 20, plotBottom = chartHeight + 20;
             const n = weekStarts.length || 1;
@@ -254,13 +255,16 @@
 
             const handleMouseMove = (e) => {
                 const svg = e.currentTarget;
-                const rect = svg.getBoundingClientRect();
-                const x = e.clientX - rect.left;
+                const svgRect = svg.getBoundingClientRect();
+                const x = e.clientX - svgRect.left;
                 const pct = (x - plotLeft) / (plotRight - plotLeft);
                 const idx = Math.round(pct * (n - 1));
                 if (idx >= 0 && idx < n) {
+                    if (containerRef.current) {
+                        const containerRect = containerRef.current.getBoundingClientRect();
+                        setTooltipPos({ x: e.clientX - containerRect.left, y: e.clientY - containerRect.top });
+                    }
                     setHoveredWeekIndex(idx);
-                    setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
                 }
             };
 
@@ -269,7 +273,7 @@
             };
 
             return (
-                <div style={{ position: 'relative', display: 'inline-block', width: '100%', overflow: 'visible' }}>
+                <div ref={containerRef} style={{ position: 'relative', display: 'inline-block', width: '100%', overflow: 'visible' }}>
                     <svg width="100%" height="500" viewBox="0 0 1000 500" style={{ overflow: 'visible', display: 'block' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
                         <line x1={plotLeft} y1={plotBottom} x2={plotRight} y2={plotBottom} stroke="var(--text)" strokeWidth="2" />
                         <line x1={plotLeft} y1={plotTop} x2={plotLeft} y2={plotBottom} stroke="var(--text)" strokeWidth="2" />
