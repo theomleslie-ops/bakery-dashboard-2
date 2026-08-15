@@ -1675,12 +1675,13 @@ app.get('/api/dashboard', async (req, res) => {
     const plData = await plStore.getAllData();
     periodData = (plData.weeks || [])
       .map(week => ({
-        date: week.date,
+        date: week.date || '',
         revenue: week.revenue || 0,
         cogs: week.cogs || 0,
         labor: week.labor || 0,
       }))
-      .sort((a, b) => a.date.localeCompare(b.date));
+      .filter(week => week.date) // Remove entries without dates
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
     if (periodData.length === 0) {
       console.warn('No P&L weekly data available');
