@@ -55,9 +55,9 @@ class QPrimeCostFetcher {
           const hoverStart = `${startHoverDate.getFullYear()}-${String(startHoverDate.getMonth() + 1).padStart(2, '0')}-${String(startHoverDate.getDate()).padStart(2, '0')}`;
           const hoverEnd = `${endHoverDate.getFullYear()}-${String(endHoverDate.getMonth() + 1).padStart(2, '0')}-${String(endHoverDate.getDate()).padStart(2, '0')}`;
 
-          // Label dates: add 1 day from hover to match display
-          const startLabelDate = new Date(startYear, startMonth - 1, startDay - 1);
-          const endLabelDate = new Date(endYear, endMonth - 1, endDay - 1);
+          // Label dates: add 1 day from original periodDates for display
+          const startLabelDate = new Date(startYear, startMonth - 1, startDay + 1);
+          const endLabelDate = new Date(endYear, endMonth - 1, endDay + 1);
 
           const labelStart = `${startLabelDate.getMonth() + 1}/${startLabelDate.getDate()}`;
           const labelEnd = `${endLabelDate.getMonth() + 1}/${endLabelDate.getDate()}`;
