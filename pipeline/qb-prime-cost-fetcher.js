@@ -1,14 +1,133 @@
 /**
  * QB Prime Cost Fetcher
- * Groups P&L weekly data into 4-week periods (Monday-Sunday)
+ * Fetches 2-week P&L periods from QB (includes labor detail)
+ * Groups into 4-week periods for prime cost calculation
  * Prime cost = (COGS + Labor) / Revenue * 100
  */
 
 const axios = require('axios');
 
 class QPrimeCostFetcher {
+  constructor(qbClient, plFetcher) {
+    this.qbClient = qbClient;
+    this.plFetcher = plFetcher;
+  }
+
   /**
-   * Fetch and group P&L data into 4-week periods
+   * Fetch 2-week periods directly from QB (includes labor detail)
+   * Then group into 4-week periods for prime cost
+   */
+  async fetchPrimeCostPeriodsFromQB(startDate, endDate) {
+    try {
+      console.log(`📊 Fetching 2-week P&L periods for prime cost (${startDate} to ${endDate})`);
+
+      // Generate 2-week periods
+      const twoWeekPeriods = this.generate2WeekPeriods(startDate, endDate);
+      console.log(`  Generated ${twoWeekPeriods.length} 2-week periods`);
+
+      // Fetch P&L data for each 2-week period
+      const twoWeekData = [];
+      for (const period of twoWeekPeriods) {
+        try {
+          const report = await this.plFetcher.fetchPLReport(period.start, period.end);
+          const metrics = this.plFetcher.extractMetrics(report);
+          twoWeekData.push({
+            start: period.start,
+            end: period.end,
+            revenue: metrics.revenue,
+            cogs: metrics.cogs,
+            labor: metrics.labor,
+            operations: metrics.operations
+          });
+        } catch (err) {
+          console.error(`  ✗ Failed to fetch ${period.start} to ${period.end}:`, err.message);
+        }
+      }
+
+      console.log(`  ✅ Fetched ${twoWeekData.length} 2-week periods with labor detail`);
+
+      // Group 2-week periods into 4-week periods
+      const fourWeekPeriods = this.groupTwoWeekIntoPeriods(twoWeekData);
+      return fourWeekPeriods;
+    } catch (err) {
+      console.error('Prime cost QB fetch error:', err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * Generate 2-week periods (include labor detail in QB reports)
+   */
+  generate2WeekPeriods(startDate, endDate) {
+    let current = new Date(startDate);
+    const end = new Date(endDate);
+    const periods = [];
+
+    // Adjust to Monday
+    const dayOfWeek = current.getDay();
+    if (dayOfWeek !== 1) {
+      current.setDate(current.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    }
+
+    while (current <= end) {
+      const periodStart = new Date(current);
+      const periodEnd = new Date(current);
+      periodEnd.setDate(periodEnd.getDate() + 13); // 2 weeks
+
+      const fetchStart = new Date(Math.max(periodStart.getTime(), new Date(startDate).getTime()));
+      const fetchEnd = new Date(Math.min(periodEnd.getTime(), end.getTime()));
+
+      periods.push({
+        start: fetchStart.toISOString().split('T')[0],
+        end: fetchEnd.toISOString().split('T')[0]
+      });
+
+      current.setDate(current.getDate() + 14);
+    }
+
+    return periods;
+  }
+
+  /**
+   * Group 2-week periods into 4-week periods
+   */
+  groupTwoWeekIntoPeriods(twoWeekData) {
+    const periods = [];
+
+    for (let i = 0; i < twoWeekData.length; i += 2) {
+      if (i + 1 < twoWeekData.length) {
+        const period1 = twoWeekData[i];
+        const period2 = twoWeekData[i + 1];
+
+        const totalRevenue = period1.revenue + period2.revenue;
+        const totalCogs = period1.cogs + period2.cogs;
+        const totalLabor = period1.labor + period2.labor;
+        const totalOperations = period1.operations + period2.operations;
+
+        const primeContribution = totalCogs + totalLabor;
+        const primeCostPercent = totalRevenue > 0 ? (primeContribution / totalRevenue) * 100 : 0;
+
+        periods.push({
+          number: periods.length + 1,
+          startDate: period1.start,
+          endDate: period2.end,
+          label: `${period1.start.split('-')[1]}/${period1.start.split('-')[2]}-${period2.end.split('-')[1]}/${period2.end.split('-')[2]}`,
+          totalRevenue,
+          totalCogs,
+          totalLabor,
+          totalOperations,
+          primeContribution,
+          primeCostPercent,
+          meetsGoal: primeCostPercent <= 60
+        });
+      }
+    }
+
+    return periods;
+  }
+
+  /**
+   * Fetch and group P&L data into 4-week periods (old method - uses weekly data)
    * Periods: Monday to Sunday, aligned from most recent Sunday
    */
   async fetchPrimeCostPeriods(baseUrl) {
