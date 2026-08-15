@@ -376,19 +376,27 @@
           </header>
           {error && <div className="error">{error}</div>}
           <div className="controls">
-            <div className="view-toggle">
-              {WEEK_COUNT_OPTIONS.map(opt => (
-                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
-              ))}
-            </div>
+            {periodLength !== 13 && (
+              <div className="view-toggle">
+                {WEEK_COUNT_OPTIONS.map(opt => (
+                  <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
+                ))}
+              </div>
+            )}
             {data.length > 0 && (
               <>
                 <div className="view-toggle">
-                  <button className={periodLength === 1 ? 'active' : ''} onClick={() => setPeriodLength(1)}>Weekly</button>
-                  <button className={periodLength === 2 ? 'active' : ''} onClick={() => setPeriodLength(2)}>2 Weeks</button>
-                  <button className={periodLength === 4 ? 'active' : ''} onClick={() => setPeriodLength(4)}>4 Weeks</button>
-                  <button className={periodLength === 13 ? 'active' : ''} onClick={() => setPeriodLength(13)}>Quarterly</button>
+                  <button className={periodLength === 2 ? 'active' : ''} onClick={() => { setPeriodLength(2); setWeeksRange(26); }}>2 Weeks</button>
+                  <button className={periodLength === 4 ? 'active' : ''} onClick={() => { setPeriodLength(4); setWeeksRange(26); }}>4 Weeks</button>
+                  <button className={periodLength === 13 ? 'active' : ''} onClick={() => { setPeriodLength(13); setWeeksRange(52); }}>Quarterly</button>
                 </div>
+                {periodLength !== 13 && (
+                  <div className="view-toggle">
+                    {WEEK_COUNT_OPTIONS.map(opt => (
+                      <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
+                    ))}
+                  </div>
+                )}
                 <div className="view-toggle">
                   <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
                   <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
