@@ -27,9 +27,12 @@ class QPrimeCostFetcher {
 
       // Fetch P&L data for each 4-week period
       const periods = [];
+      const failedPeriods = [];
+      console.log(`  📋 Fetching ${fourWeekPeriods.length} periods...`);
       for (let i = 0; i < fourWeekPeriods.length; i++) {
         const periodDates = fourWeekPeriods[i];
         try {
+          console.log(`  [${i + 1}/${fourWeekPeriods.length}] Fetching ${periodDates.start} to ${periodDates.end}...`);
           const report = await this.plFetcher.fetchPLReport(periodDates.start, periodDates.end);
           const metrics = this.plFetcher.extractMetrics(report);
 
@@ -57,13 +60,20 @@ class QPrimeCostFetcher {
           };
 
           periods.push(period);
-          console.log(`  ✓ Period ${i + 1}: ${periodDates.start} to ${periodDates.end} (${labelStart}-${labelEnd}), labor=${metrics.labor.toFixed(0)}, prime cost=${primeCostPercent.toFixed(1)}%`);
+          console.log(`    ✓ labor=${metrics.labor.toFixed(0)}, prime cost=${primeCostPercent.toFixed(1)}%`);
         } catch (err) {
-          console.error(`  ✗ Failed to fetch period ${i + 1} (${periodDates.start} to ${periodDates.end}):`, err.message);
+          console.error(`    ✗ Error: ${err.message}`);
+          failedPeriods.push({ index: i + 1, dates: periodDates, error: err.message });
         }
       }
 
-      console.log(`  ✅ Fetched ${periods.length} 4-week periods`);
+      console.log(`  ✅ Fetched ${periods.length}/${fourWeekPeriods.length} periods`);
+      if (failedPeriods.length > 0) {
+        console.warn(`  ⚠️  ${failedPeriods.length} periods failed:`);
+        failedPeriods.forEach(f => {
+          console.warn(`      [${f.index}] ${f.dates.start} to ${f.dates.end}: ${f.error}`);
+        });
+      }
       return periods;
     } catch (err) {
       console.error('Prime cost QB fetch error:', err.message);
@@ -109,11 +119,16 @@ class QPrimeCostFetcher {
 
     // Log periods generated
     if (periods.length > 0) {
-      console.log(`  4-week periods generated: ${periods.length} total`);
-      if (periods.length >= 2) {
-        console.log(`    First: ${periods[0].start} to ${periods[0].end}`);
-        console.log(`    Last:  ${periods[periods.length-1].start} to ${periods[periods.length-1].end}`);
+      console.log(`  📅 Generated ${periods.length} 4-week periods:`);
+      console.log(`    First: ${periods[0].start} to ${periods[0].end}`);
+      console.log(`    Last:  ${periods[periods.length-1].start} to ${periods[periods.length-1].end}`);
+      if (periods.length <= 10) {
+        periods.forEach((p, i) => {
+          console.log(`      [${i + 1}] ${p.start} to ${p.end}`);
+        });
       }
+    } else {
+      console.log(`  📅 No periods generated for range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
     }
 
     return periods;
