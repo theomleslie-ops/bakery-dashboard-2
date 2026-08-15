@@ -1,21 +1,38 @@
 /**
  * QB Prime Cost Refresh
- * Refreshes 4-week prime cost periods from weekly P&L data
+ * Refreshes 4-week prime cost periods from QB 2-week P&L data
+ * (2-week reports include labor detail, weekly reports do not)
  */
 
 const QPrimeCostFetcher = require('./qb-prime-cost-fetcher');
+const QBPLFetcher = require('./qb-pl-fetcher');
 const PrimeCostStore = require('./qb-prime-cost-store');
 
-async function refreshPrimeCostData(baseUrl) {
+async function refreshPrimeCostData(qbClient) {
   console.log('📊 === PRIME COST REFRESH STARTED ===');
   const startTime = Date.now();
 
   try {
-    const fetcher = new QPrimeCostFetcher();
+    const plFetcher = new QBPLFetcher(qbClient);
+
+    // Ensure row IDs are identified (needed for labor extraction)
+    if (!plFetcher.rowMap) {
+      await plFetcher.identifyRowIds();
+    }
+
+    const fetcher = new QPrimeCostFetcher(qbClient, plFetcher);
     const store = new PrimeCostStore();
 
-    // Fetch and group P&L data into 4-week periods
-    const periods = await fetcher.fetchPrimeCostPeriods(baseUrl);
+    // Fetch 2-week P&L data from QB (includes labor detail)
+    // Use past 2 years for prime cost analysis
+    const endDate = new Date();
+    const startDate = new Date(endDate);
+    startDate.setFullYear(startDate.getFullYear() - 2);
+
+    const periods = await fetcher.fetchPrimeCostPeriodsFromQB(
+      startDate.toISOString().split('T')[0],
+      endDate.toISOString().split('T')[0]
+    );
 
     if (periods.length === 0) {
       console.warn('⚠️ No 4-week periods found');

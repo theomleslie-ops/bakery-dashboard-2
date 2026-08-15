@@ -1760,11 +1760,11 @@ app.get('/api/prime-cost/periods', async (req, res) => {
 app.post('/api/prime-cost/refresh', async (req, res) => {
   try {
     const { refreshPrimeCostData } = require('./pipeline/qb-prime-cost-refresh');
-    const result = await refreshPrimeCostData(req.protocol + '://' + req.get('host'));
+    const result = await refreshPrimeCostData(qbClient);
 
     res.json({
       success: true,
-      message: 'Prime cost data refreshed',
+      message: 'Prime cost data refreshed with labor detail',
       ...result
     });
   } catch (err) {
