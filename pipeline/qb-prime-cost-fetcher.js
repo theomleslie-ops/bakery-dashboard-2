@@ -1,7 +1,7 @@
 /**
  * QB Prime Cost Fetcher
- * Fetches 2-week P&L periods from QB (includes labor detail)
- * Groups into 4-week periods for prime cost calculation
+ * Fetches 4-week P&L periods from QB using custom date ranges
+ * Each 4-week period: Monday to Sunday, generated backward from most recent Sunday
  * Prime cost = (COGS + Labor) / Revenue * 100
  */
 
@@ -14,90 +14,57 @@ class QPrimeCostFetcher {
   }
 
   /**
-   * Fetch 2-week periods directly from QB (includes labor detail)
-   * Then group into 4-week periods for prime cost
+   * Fetch 4-week periods directly from QB using custom date ranges
+   * Each period is Monday to Sunday, generated backward from most recent Sunday
    */
   async fetchPrimeCostPeriodsFromQB(startDate, endDate) {
     try {
-      console.log(`📊 Fetching 2-week P&L periods for prime cost (${startDate} to ${endDate})`);
+      console.log(`📊 Fetching 4-week P&L periods for prime cost (${startDate} to ${endDate})`);
 
-      // Generate 2-week periods
-      const twoWeekPeriods = this.generate2WeekPeriods(startDate, endDate);
-      console.log(`  Generated ${twoWeekPeriods.length} 2-week periods`);
+      // Generate 4-week periods (Monday to Sunday)
+      const fourWeekPeriods = this.generateFourWeekPeriods(startDate, endDate);
+      console.log(`  Generated ${fourWeekPeriods.length} 4-week periods`);
 
-      // Fetch P&L data for each 2-week period
-      const twoWeekData = [];
-      let firstFetch = true;
-      for (const period of twoWeekPeriods) {
+      // Fetch P&L data for each 4-week period
+      const periods = [];
+      for (let i = 0; i < fourWeekPeriods.length; i++) {
+        const periodDates = fourWeekPeriods[i];
         try {
-          const report = await this.plFetcher.fetchPLReport(period.start, period.end);
-
-          // Debug first 2-week response
-          if (firstFetch) {
-            firstFetch = false;
-            let rows = [];
-            if (Array.isArray(report.Rows)) {
-              rows = report.Rows;
-            } else if (report.Rows?.Row && Array.isArray(report.Rows.Row)) {
-              rows = report.Rows.Row;
-            }
-            if (rows.length > 0) {
-              const expensesRow = rows[3];
-              console.log(`  DEBUG 2-week fetch (${period.start} to ${period.end}):`);
-              console.log(`    Expenses row name: ${expensesRow?.Header?.ColData?.[0]?.value}`);
-              console.log(`    Expenses row Rows type: ${typeof expensesRow?.Rows}`);
-              console.log(`    Expenses row Rows keys: ${Object.keys(expensesRow?.Rows || {})}`);
-              console.log(`    Has Rows.Row? ${!!expensesRow?.Rows?.Row}`);
-              console.log(`    Has Rows.Rows? ${!!expensesRow?.Rows?.Rows}`);
-              console.log(`    Is Rows array? ${Array.isArray(expensesRow?.Rows)}`);
-
-              let subRowsArray = null;
-              if (Array.isArray(expensesRow?.Rows?.Row)) {
-                subRowsArray = expensesRow.Rows.Row;
-                console.log(`    Using Rows.Row structure`);
-              } else if (Array.isArray(expensesRow?.Rows?.Rows)) {
-                subRowsArray = expensesRow.Rows.Rows;
-                console.log(`    Using Rows.Rows structure`);
-              } else if (Array.isArray(expensesRow?.Rows)) {
-                subRowsArray = expensesRow.Rows;
-                console.log(`    Using Rows directly as array`);
-              }
-
-              if (subRowsArray) {
-                console.log(`    Expenses sub-rows count: ${subRowsArray.length}`);
-                // Log all sub-row names
-                subRowsArray.forEach((row, idx) => {
-                  const name = row.Header?.ColData?.[0]?.value || '(no name)';
-                  console.log(`      [${idx}] ${name}`);
-                });
-              } else {
-                console.log(`    ⚠️  No sub-rows array found`);
-              }
-            }
-          }
-
+          const report = await this.plFetcher.fetchPLReport(periodDates.start, periodDates.end);
           const metrics = this.plFetcher.extractMetrics(report);
-          twoWeekData.push({
-            start: period.start,
-            end: period.end,
-            revenue: metrics.revenue,
-            cogs: metrics.cogs,
-            labor: metrics.labor,
-            operations: metrics.operations
-          });
-          if (metrics.labor > 0) {
-            console.log(`  ✓ ${period.start} to ${period.end}: labor=${metrics.labor.toFixed(0)}`);
-          }
+
+          // Create 4-week period
+          const parts1 = periodDates.start.split('-');
+          const parts2 = periodDates.end.split('-');
+          const labelStart = `${parseInt(parts1[1])}/${parseInt(parts1[2])}`;
+          const labelEnd = `${parseInt(parts2[1])}/${parseInt(parts2[2])}`;
+
+          const primeContribution = metrics.cogs + metrics.labor;
+          const primeCostPercent = metrics.revenue > 0 ? (primeContribution / metrics.revenue) * 100 : 0;
+
+          const period = {
+            number: i + 1,
+            startDate: periodDates.start,
+            endDate: periodDates.end,
+            label: `${labelStart}-${labelEnd}`,
+            totalRevenue: metrics.revenue,
+            totalCogs: metrics.cogs,
+            totalLabor: metrics.labor,
+            totalOperations: metrics.operations,
+            primeContribution,
+            primeCostPercent,
+            meetsGoal: primeCostPercent <= 60
+          };
+
+          periods.push(period);
+          console.log(`  ✓ Period ${i + 1}: ${periodDates.start} to ${periodDates.end} (${labelStart}-${labelEnd}), labor=${metrics.labor.toFixed(0)}, prime cost=${primeCostPercent.toFixed(1)}%`);
         } catch (err) {
-          console.error(`  ✗ Failed to fetch ${period.start} to ${period.end}:`, err.message);
+          console.error(`  ✗ Failed to fetch period ${i + 1} (${periodDates.start} to ${periodDates.end}):`, err.message);
         }
       }
 
-      console.log(`  ✅ Fetched ${twoWeekData.length} 2-week periods with labor detail`);
-
-      // Group 2-week periods into 4-week periods
-      const fourWeekPeriods = this.groupTwoWeekIntoPeriods(twoWeekData);
-      return fourWeekPeriods;
+      console.log(`  ✅ Fetched ${periods.length} 4-week periods`);
+      return periods;
     } catch (err) {
       console.error('Prime cost QB fetch error:', err.message);
       throw err;
@@ -105,92 +72,53 @@ class QPrimeCostFetcher {
   }
 
   /**
-   * Generate 2-week periods (include labor detail in QB reports)
+   * Generate 4-week periods: Monday to Sunday
+   * Start with most recent Sunday as end date, go back 4 weeks at a time
    */
-  generate2WeekPeriods(startDate, endDate) {
-    let current = new Date(startDate);
+  generateFourWeekPeriods(startDate, endDate) {
     const end = new Date(endDate);
+    const start = new Date(startDate);
     const periods = [];
 
-    // Adjust to Monday
-    const dayOfWeek = current.getDay();
-    if (dayOfWeek !== 1) {
-      current.setDate(current.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    // Find most recent Sunday from end date
+    let currentSunday = new Date(end);
+    const dayOfWeek = currentSunday.getDay();
+    if (dayOfWeek !== 0) { // 0 = Sunday
+      currentSunday.setDate(currentSunday.getDate() - dayOfWeek);
     }
 
-    while (current <= end) {
-      const periodStart = new Date(current);
-      const periodEnd = new Date(current);
-      periodEnd.setDate(periodEnd.getDate() + 13); // 2 weeks
+    // Generate periods backward from most recent Sunday
+    while (currentSunday >= start) {
+      // Monday is 6 days before Sunday (or 27 days in the past from current Sunday)
+      const periodStart = new Date(currentSunday);
+      periodStart.setDate(periodStart.getDate() - 27); // Monday, 4 weeks before
 
-      const fetchStart = new Date(Math.max(periodStart.getTime(), new Date(startDate).getTime()));
-      const fetchEnd = new Date(Math.min(periodEnd.getTime(), end.getTime()));
+      // Don't go before the requested start date
+      const fetchStart = new Date(Math.max(periodStart.getTime(), start.getTime()));
 
-      periods.push({
-        start: fetchStart.toISOString().split('T')[0],
-        end: fetchEnd.toISOString().split('T')[0]
-      });
-
-      current.setDate(current.getDate() + 14);
-    }
-
-    // Log last 2 periods generated
-    if (periods.length > 0) {
-      console.log(`  2-week periods generated: ${periods.length} total`);
-      if (periods.length >= 2) {
-        console.log(`    Last 2: ${periods[periods.length-2].start} to ${periods[periods.length-2].end}`);
-        console.log(`            ${periods[periods.length-1].start} to ${periods[periods.length-1].end}`);
-      }
-    }
-
-    return periods;
-  }
-
-  /**
-   * Group 2-week periods into 4-week periods
-   */
-  groupTwoWeekIntoPeriods(twoWeekData) {
-    const periods = [];
-
-    for (let i = 0; i < twoWeekData.length; i += 2) {
-      if (i + 1 < twoWeekData.length) {
-        const period1 = twoWeekData[i];
-        const period2 = twoWeekData[i + 1];
-
-        const totalRevenue = period1.revenue + period2.revenue;
-        const totalCogs = period1.cogs + period2.cogs;
-        const totalLabor = period1.labor + period2.labor;
-        const totalOperations = period1.operations + period2.operations;
-
-        const primeContribution = totalCogs + totalLabor;
-        const primeCostPercent = totalRevenue > 0 ? (primeContribution / totalRevenue) * 100 : 0;
-
-        // Label: Monday of period1 to Sunday of period2 (4-week range)
-        const parts1 = period1.start.split('-');
-        const parts2 = period2.end.split('-');
-        const labelStart = `${parseInt(parts1[1])}/${parseInt(parts1[2])}`;
-        const labelEnd = `${parseInt(parts2[1])}/${parseInt(parts2[2])}`;
-
-        console.log(`  Period ${periods.length + 1}: ${period1.start} to ${period2.end} -> label: ${labelStart}-${labelEnd}`);
-
-        periods.push({
-          number: periods.length + 1,
-          startDate: period1.start,
-          endDate: period2.end,
-          label: `${labelStart}-${labelEnd}`,
-          totalRevenue,
-          totalCogs,
-          totalLabor,
-          totalOperations,
-          primeContribution,
-          primeCostPercent,
-          meetsGoal: primeCostPercent <= 60
+      if (fetchStart <= currentSunday) {
+        periods.unshift({
+          start: fetchStart.toISOString().split('T')[0],
+          end: currentSunday.toISOString().split('T')[0]
         });
       }
+
+      // Move back to previous Sunday (4 weeks back = 28 days)
+      currentSunday.setDate(currentSunday.getDate() - 28);
+    }
+
+    // Log periods generated
+    if (periods.length > 0) {
+      console.log(`  4-week periods generated: ${periods.length} total`);
+      if (periods.length >= 2) {
+        console.log(`    First: ${periods[0].start} to ${periods[0].end}`);
+        console.log(`    Last:  ${periods[periods.length-1].start} to ${periods[periods.length-1].end}`);
+      }
     }
 
     return periods;
   }
+
 
   /**
    * Fetch and group P&L data into 4-week periods (old method - uses weekly data)
