@@ -1685,8 +1685,8 @@ app.get('/api/prime-cost/summary', async (req, res) => {
   }
 });
 
-// POST /api/prime-cost/refresh - Refresh prime cost periods using same algorithm as P&L
-app.post('/api/prime-cost/refresh', async (req, res) => {
+// GET/POST /api/prime-cost/refresh - Refresh prime cost periods using same algorithm as P&L
+const primeCostRefreshHandler = async (req, res) => {
   try {
     const isQBConnected = () => {
       try { const t = qbClient.loadTokens(); return !!(t && t.refresh_token); } catch { return false; }
@@ -1716,7 +1716,9 @@ app.post('/api/prime-cost/refresh', async (req, res) => {
       message: err.message,
     });
   }
-});
+};
+app.get('/api/prime-cost/refresh', primeCostRefreshHandler);
+app.post('/api/prime-cost/refresh', primeCostRefreshHandler);
 
 // GET /api/prime-cost/range - Get prime cost periods for date range
 app.get('/api/prime-cost/range', async (req, res) => {
