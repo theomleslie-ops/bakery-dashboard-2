@@ -46,17 +46,26 @@ class QPrimeCostFetcher {
 
     if (successWeeks.length < 4) {
       console.warn(`⚠️  Only ${successWeeks.length} successful weeks found, need at least 4 for period aggregation`);
+      return [];
     }
 
     const periods = [];
 
-    // Group weeks into 4-week chunks
-    for (let i = 0; i + 3 < successWeeks.length; i += 4) {
+    // Group weeks into 4-week chunks (continue as long as we have at least 4 weeks left)
+    for (let i = 0; i + 4 <= successWeeks.length; i += 4) {
       const periodWeeks = successWeeks.slice(i, i + 4);
+
+      // Ensure we have exactly 4 weeks
+      if (periodWeeks.length !== 4) {
+        console.warn(`⚠️  Skipping incomplete period at index ${i}: only ${periodWeeks.length} weeks`);
+        continue;
+      }
 
       const totalRevenue = periodWeeks.reduce((sum, w) => sum + (w.revenue || 0), 0);
       const totalCogs = periodWeeks.reduce((sum, w) => sum + (w.cogs || 0), 0);
       const totalLabor = periodWeeks.reduce((sum, w) => sum + (w.labor || 0), 0);
+
+      console.log(`📊 Period ${periods.length + 1}: weeks ${i}-${i+3}, revenue=$${totalRevenue}, cogs=$${totalCogs}, labor=$${totalLabor}`);
 
       if (totalRevenue > 0) {
         const primeContribution = totalCogs + totalLabor;
@@ -77,6 +86,7 @@ class QPrimeCostFetcher {
       }
     }
 
+    console.log(`✅ Aggregated ${successWeeks.length} weeks into ${periods.length} 4-week periods`);
     return periods;
   }
 
