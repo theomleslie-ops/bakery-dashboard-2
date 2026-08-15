@@ -39,6 +39,9 @@ class QPrimeCostFetcher {
             labor: metrics.labor,
             operations: metrics.operations
           });
+          if (metrics.labor > 0) {
+            console.log(`  ✓ ${period.start} to ${period.end}: labor=${metrics.labor.toFixed(0)}`);
+          }
         } catch (err) {
           console.error(`  ✗ Failed to fetch ${period.start} to ${period.end}:`, err.message);
         }
@@ -107,11 +110,20 @@ class QPrimeCostFetcher {
         const primeContribution = totalCogs + totalLabor;
         const primeCostPercent = totalRevenue > 0 ? (primeContribution / totalRevenue) * 100 : 0;
 
+        // Extract start date from period1, use next day for label
+        const p1start = new Date(period1.start);
+        p1start.setDate(p1start.getDate() + 1);
+        const labelStart = `${String(p1start.getMonth() + 1).padStart(2, '0')}/${String(p1start.getDate()).padStart(2, '0')}`;
+
+        // Extract end date from period2
+        const p2end = new Date(period2.end);
+        const labelEnd = `${String(p2end.getMonth() + 1).padStart(2, '0')}/${String(p2end.getDate()).padStart(2, '0')}`;
+
         periods.push({
           number: periods.length + 1,
           startDate: period1.start,
           endDate: period2.end,
-          label: `${period1.start.split('-')[1]}/${period1.start.split('-')[2]}-${period2.end.split('-')[1]}/${period2.end.split('-')[2]}`,
+          label: `${labelStart}-${labelEnd}`,
           totalRevenue,
           totalCogs,
           totalLabor,
