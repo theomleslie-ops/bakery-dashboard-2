@@ -253,8 +253,11 @@ class QBPLFetcher {
         const laborRow = expensesRow.Rows[this.rowMap.labor.subIdx];
         if (laborRow) {
           metrics.labor = extractRowValue(laborRow);
+          console.log(`  ✓ LABOR: ${metrics.labor}`);
         }
       }
+    } else if (this.rowMap.labor === null) {
+      console.log(`  ⚠️ LABOR NOT FOUND in QB structure`);
     }
     if (this.rowMap.operations !== null && rows[this.rowMap.operations]) {
       metrics.operations = extractRowValue(rows[this.rowMap.operations]);
