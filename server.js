@@ -1669,7 +1669,7 @@ app.get('/api/dashboard', async (req, res) => {
       source: 'Multi-month P/L Statements'
     } : { source: 'No financial data uploaded yet' };
 
-    // Weekly data comes from PLStore (same as P&L endpoints)
+    // Weekly data: try PLStore first, fall back to snapshot
     let periodData = [];
     let periodSource = 'P&L weekly data';
     try {
@@ -1682,9 +1682,29 @@ app.get('/api/dashboard', async (req, res) => {
           labor: week.labor || 0,
         }))
         .sort((a, b) => a.date.localeCompare(b.date));
+
+      // If PLStore is empty, fall back to snapshot
+      if (periodData.length === 0) {
+        throw new Error('No P&L data available');
+      }
     } catch (err) {
-      console.error('Failed to load P&L weekly data:', err.message);
-      periodSource = 'P&L data unavailable';
+      console.error('PLStore failed, trying snapshot:', err.message);
+      periodSource = 'Snapshot weekly data (fallback)';
+      try {
+        const snapshot = loadData('data/qb-weekly-pl-snapshot.json') || {};
+        const weeksObj = snapshot.weeks || {};
+        periodData = Object.entries(weeksObj)
+          .map(([date, data]) => ({
+            date,
+            revenue: data.revenue || 0,
+            cogs: data.cogs || 0,
+            labor: data.labor || 0,
+          }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+      } catch (snapshotErr) {
+        console.error('Snapshot also failed:', snapshotErr.message);
+        periodSource = 'Weekly data unavailable';
+      }
     }
 
     res.json({
