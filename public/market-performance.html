@@ -270,7 +270,7 @@
 
             return (
                 <div style={{ position: 'relative', display: 'inline-block', width: '100%', overflow: 'visible' }}>
-                    <svg ref={svgRef} width="100%" height="500" viewBox="0 0 1000 500" style={{ overflow: 'visible', display: 'block' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
+                    <svg width="100%" height="500" viewBox="0 0 1000 500" style={{ overflow: 'visible', display: 'block' }} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
                         <line x1={plotLeft} y1={plotBottom} x2={plotRight} y2={plotBottom} stroke="var(--text)" strokeWidth="2" />
                         <line x1={plotLeft} y1={plotTop} x2={plotLeft} y2={plotBottom} stroke="var(--text)" strokeWidth="2" />
                         {[0, 1, 2, 3, 4, 5].map(i => {
