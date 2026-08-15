@@ -47,13 +47,31 @@ class QPrimeCostFetcher {
               console.log(`    Expenses row name: ${expensesRow?.Header?.ColData?.[0]?.value}`);
               console.log(`    Expenses row Rows type: ${typeof expensesRow?.Rows}`);
               console.log(`    Expenses row Rows keys: ${Object.keys(expensesRow?.Rows || {})}`);
-              if (expensesRow?.Rows?.Row && Array.isArray(expensesRow.Rows.Row)) {
-                console.log(`    Expenses sub-rows count: ${expensesRow.Rows.Row.length}`);
+              console.log(`    Has Rows.Row? ${!!expensesRow?.Rows?.Row}`);
+              console.log(`    Has Rows.Rows? ${!!expensesRow?.Rows?.Rows}`);
+              console.log(`    Is Rows array? ${Array.isArray(expensesRow?.Rows)}`);
+
+              let subRowsArray = null;
+              if (Array.isArray(expensesRow?.Rows?.Row)) {
+                subRowsArray = expensesRow.Rows.Row;
+                console.log(`    Using Rows.Row structure`);
+              } else if (Array.isArray(expensesRow?.Rows?.Rows)) {
+                subRowsArray = expensesRow.Rows.Rows;
+                console.log(`    Using Rows.Rows structure`);
+              } else if (Array.isArray(expensesRow?.Rows)) {
+                subRowsArray = expensesRow.Rows;
+                console.log(`    Using Rows directly as array`);
+              }
+
+              if (subRowsArray) {
+                console.log(`    Expenses sub-rows count: ${subRowsArray.length}`);
                 // Log all sub-row names
-                expensesRow.Rows.Row.forEach((row, idx) => {
+                subRowsArray.forEach((row, idx) => {
                   const name = row.Header?.ColData?.[0]?.value || '(no name)';
                   console.log(`      [${idx}] ${name}`);
                 });
+              } else {
+                console.log(`    ⚠️  No sub-rows array found`);
               }
             }
           }
