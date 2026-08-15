@@ -67,7 +67,9 @@
       "Bash(grep -E \"\\\\.\\(json|csv\\)$\")",
       "Bash(pkill -f \"node.*server.js\")",
       "Bash(railway variable *)",
-      "Bash(gh pr *)"
+      "Bash(gh pr *)",
+      "Bash(awk 'NR>=2406 && NR<=2656 {print NR\": \"$0}' server.js)",
+      "Bash(git commit -m 'Fix public market performance endpoint to serve from file instead of hardcoded template *)"
     ]
   }
 }
