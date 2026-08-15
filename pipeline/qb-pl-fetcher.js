@@ -269,6 +269,11 @@ class QBPLFetcher {
     }
     if (this.rowMap.cogs !== null && rows[this.rowMap.cogs]) {
       metrics.cogs = extractRowValue(rows[this.rowMap.cogs]);
+      // QB API sometimes returns negative COGS even when value is positive in UI
+      // Use absolute value to match QB UI display
+      if (metrics.cogs < 0) {
+        metrics.cogs = Math.abs(metrics.cogs);
+      }
     }
     if (this.rowMap.labor !== null) {
       console.log(`  DEBUG labor extraction: rowMap.labor=${JSON.stringify(this.rowMap.labor)}`);

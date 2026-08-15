@@ -25,6 +25,14 @@ class QPrimeCostFetcher {
       const fourWeekPeriods = this.generateFourWeekPeriods(startDate, endDate);
       console.log(`  Generated ${fourWeekPeriods.length} 4-week periods`);
 
+      // Log all periods upfront
+      if (fourWeekPeriods.length > 0) {
+        console.log(`  📅 Period date ranges:`);
+        fourWeekPeriods.forEach((p, i) => {
+          console.log(`      [${i + 1}] ${p.start} to ${p.end}`);
+        });
+      }
+
       // Fetch P&L data for each 4-week period
       const periods = [];
       const failedPeriods = [];
