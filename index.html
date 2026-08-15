@@ -211,7 +211,7 @@
         { label: 'Revenue', color: '#2a78d6', key: 'revenue' },
         { label: 'COGS', color: '#ff9500', key: 'cogs' },
         { label: 'Operating Expenses', color: '#8b5cf6', key: 'opex' },
-        { label: 'Profit/Loss', color: '#10b981', key: 'pl' },
+        { label: 'Net Income', color: '#10b981', key: 'pl' },
       ];
 
       const labelStride = Math.max(1, Math.ceil(n / 8));
@@ -372,7 +372,7 @@
         <div className="container-expanded">
           <header>
             <h1>📊 P/L Dashboard</h1>
-            <p className="subtitle">Profit, Cost of Goods, and Operating Expenses, weekly</p>
+            <p className="subtitle">Revenue, Cost of Goods, Operating Expenses, and Net Income, weekly</p>
           </header>
           {error && <div className="error">{error}</div>}
           <div className="controls">
@@ -403,7 +403,7 @@
           )}
           {data.length > 0 && (
             <div className="chart-container">
-              <div className="chart-title">COGS, Operating Expenses & Profit/Loss, {periodLength === 1 ? 'weekly' : periodLength === 2 ? 'bi-weekly' : periodLength === 4 ? 'monthly' : 'quarterly'} ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
+              <div className="chart-title">Revenue, COGS, Operating Expenses & Net Income, {periodLength === 1 ? 'weekly' : periodLength === 2 ? 'bi-weekly' : periodLength === 4 ? 'monthly' : 'quarterly'} ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
               <StackedBarChart data={data} viewMode={viewMode} periodLength={periodLength} />
             </div>
           )}
