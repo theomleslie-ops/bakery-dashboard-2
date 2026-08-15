@@ -45,14 +45,16 @@ class QPrimeCostFetcher {
           const metrics = this.plFetcher.extractMetrics(report);
 
           // Create 4-week period
-          // Adjust for timezone offset: dates are one day behind due to UTC conversion
-          const startDate = new Date(periodDates.start + 'T00:00:00Z');
-          const endDate = new Date(periodDates.end + 'T00:00:00Z');
-          startDate.setDate(startDate.getDate() + 1);
-          endDate.setDate(endDate.getDate() + 1);
+          // Label dates: parse and add 1 day to account for timezone offset
+          const [startYear, startMonth, startDay] = periodDates.start.split('-').map(Number);
+          const [endYear, endMonth, endDay] = periodDates.end.split('-').map(Number);
 
-          const labelStart = `${startDate.getMonth() + 1}/${startDate.getDate()}`;
-          const labelEnd = `${endDate.getMonth() + 1}/${endDate.getDate()}`;
+          // Add 1 day for label display
+          const startLabelDate = new Date(startYear, startMonth - 1, startDay + 1);
+          const endLabelDate = new Date(endYear, endMonth - 1, endDay + 1);
+
+          const labelStart = `${startLabelDate.getMonth() + 1}/${startLabelDate.getDate()}`;
+          const labelEnd = `${endLabelDate.getMonth() + 1}/${endLabelDate.getDate()}`;
 
           const primeContribution = metrics.cogs + metrics.labor;
           const primeCostPercent = metrics.revenue > 0 ? (primeContribution / metrics.revenue) * 100 : 0;
