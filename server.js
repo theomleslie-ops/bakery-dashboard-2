@@ -1635,10 +1635,39 @@ app.get('/api/pl/weekly/range', async (req, res) => {
 
 // ============= PRIME COST DASHBOARD =============
 
-// GET /api/prime-cost/periods - Retrieve stored 4-week prime cost periods
+// GET /api/prime-cost/periods - Retrieve stored 4-week prime cost periods (auto-refresh if empty)
 app.get('/api/prime-cost/periods', async (req, res) => {
   try {
     const data = await primeCostStore.getAllData();
+
+    // Auto-refresh if data is empty
+    if (!data.periods || data.periods.length === 0) {
+      console.log('[/api/prime-cost/periods] No data found, auto-refreshing...');
+
+      const isQBConnected = () => {
+        try { const t = qbClient.loadTokens(); return !!(t && t.refresh_token); } catch { return false; }
+      };
+
+      if (isQBConnected()) {
+        try {
+          if (!primeCostFetcher) {
+            initPrimeCostFetcher();
+          }
+          await refreshPrimeCostData(qbClient);
+          const refreshedData = await primeCostStore.getAllData();
+          return res.json({
+            success: true,
+            periods: refreshedData.periods.length,
+            data: refreshedData.periods,
+            lastUpdated: refreshedData.lastUpdated,
+            source: 'Auto-refreshed 4-week prime cost periods'
+          });
+        } catch (err) {
+          console.error('[/api/prime-cost/periods] Auto-refresh failed:', err.message);
+        }
+      }
+    }
+
     res.json({
       success: true,
       periods: data.periods.length,
