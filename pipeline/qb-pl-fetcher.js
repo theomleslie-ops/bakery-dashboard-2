@@ -290,6 +290,7 @@ class QBPLFetcher {
           if (subRowsArray && subRowsArray[this.rowMap.labor.subIdx]) {
             const laborRow = subRowsArray[this.rowMap.labor.subIdx];
             metrics.labor = extractRowValue(laborRow);
+            console.log(`  ℹ️  Labor extracted: ${metrics.labor} from sub-row ${this.rowMap.labor.subIdx}`);
           }
         }
       }
