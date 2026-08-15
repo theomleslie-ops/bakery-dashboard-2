@@ -134,9 +134,9 @@ class QBPLFetcher {
         this.rowMap.operations = i;
         console.log(`  ✓ Operations: index ${i} (${accountName})`);
         // Look for labor in sub-rows under Expenses
-        if (row.Rows && Array.isArray(row.Rows)) {
-          for (let j = 0; j < row.Rows.length; j++) {
-            const subRow = row.Rows[j];
+        if (row.Rows?.Row && Array.isArray(row.Rows.Row)) {
+          for (let j = 0; j < row.Rows.Row.length; j++) {
+            const subRow = row.Rows.Row[j];
             const subName = subRow.Header?.ColData?.[0]?.value || '';
             // Look for labor/payroll accounts (6200 LABOR/PAYROLL EXPENSES or similar)
             if (subName.includes('LABOR') || subName.includes('PAYROLL') || subName.includes('6200')) {
@@ -246,8 +246,8 @@ class QBPLFetcher {
       } else if (typeof this.rowMap.labor === 'object') {
         // Labor is a sub-row under Expenses
         const expensesRow = rows[this.rowMap.labor.parentIdx];
-        if (expensesRow && expensesRow.Rows && Array.isArray(expensesRow.Rows)) {
-          const laborRow = expensesRow.Rows[this.rowMap.labor.subIdx];
+        if (expensesRow && expensesRow.Rows?.Row && Array.isArray(expensesRow.Rows.Row)) {
+          const laborRow = expensesRow.Rows.Row[this.rowMap.labor.subIdx];
           if (laborRow) {
             metrics.labor = extractRowValue(laborRow);
           }
