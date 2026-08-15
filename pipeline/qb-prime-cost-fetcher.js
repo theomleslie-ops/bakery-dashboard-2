@@ -135,8 +135,10 @@ class QPrimeCostFetcher {
         // Label: Monday of period1 to Sunday of period2 (4-week range)
         const parts1 = period1.start.split('-');
         const parts2 = period2.end.split('-');
-        const labelStart = `${parts1[1]}/${parts1[2]}`;
-        const labelEnd = `${parts2[1]}/${parts2[2]}`;
+        const labelStart = `${parseInt(parts1[1])}/${parseInt(parts1[2])}`;
+        const labelEnd = `${parseInt(parts2[1])}/${parseInt(parts2[2])}`;
+
+        console.log(`  Period ${periods.length + 1}: ${period1.start} to ${period2.end} -> label: ${labelStart}-${labelEnd}`);
 
         periods.push({
           number: periods.length + 1,
