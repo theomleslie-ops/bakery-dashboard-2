@@ -137,15 +137,33 @@ class QBPLFetcher {
         console.log(`    DEBUG Expenses row structure:`, {
           hasRows: !!row.Rows,
           rowsType: typeof row.Rows,
+          rowsKeys: Object.keys(row.Rows || {}).slice(0, 10),
           hasRowsRow: !!row.Rows?.Row,
           rowsRowIsArray: Array.isArray(row.Rows?.Row),
-          rowsRowLength: row.Rows?.Row?.length
+          rowsRowLength: row.Rows?.Row?.length,
+          hasRowsRows: !!row.Rows?.Rows,
+          rowsRowsIsArray: Array.isArray(row.Rows?.Rows),
+          isRowsArray: Array.isArray(row.Rows)
         });
 
-        if (row.Rows?.Row && Array.isArray(row.Rows.Row)) {
-          console.log(`    DEBUG Found ${row.Rows.Row.length} sub-rows under Expenses:`);
-          for (let j = 0; j < row.Rows.Row.length; j++) {
-            const subRow = row.Rows.Row[j];
+        let subRowsArray = null;
+        if (Array.isArray(row.Rows?.Row)) {
+          subRowsArray = row.Rows.Row;
+          console.log(`    Using row.Rows.Row`);
+        } else if (Array.isArray(row.Rows?.Rows)) {
+          subRowsArray = row.Rows.Rows;
+          console.log(`    Using row.Rows.Rows`);
+        } else if (Array.isArray(row.Rows)) {
+          subRowsArray = row.Rows;
+          console.log(`    Using row.Rows directly (array)`);
+        } else {
+          console.log(`    ⚠️  No array found for sub-rows. Full Expenses row:`, JSON.stringify(row).substring(0, 500));
+        }
+
+        if (subRowsArray) {
+          console.log(`    DEBUG Found ${subRowsArray.length} sub-rows under Expenses:`);
+          for (let j = 0; j < subRowsArray.length; j++) {
+            const subRow = subRowsArray[j];
             const subName = subRow.Header?.ColData?.[0]?.value || '';
             console.log(`      [${j}] "${subName}"`);
             // Look for labor/payroll accounts (6200 LABOR/PAYROLL EXPENSES or similar)
@@ -158,8 +176,6 @@ class QBPLFetcher {
           if (!this.rowMap.labor) {
             console.log(`    ⚠️  No labor found in Expenses sub-rows`);
           }
-        } else {
-          console.log(`    ⚠️  Expenses row has no Rows.Row array`);
         }
       } else if (accountName === 'Net Income') {
         this.rowMap.netIncome = i;
