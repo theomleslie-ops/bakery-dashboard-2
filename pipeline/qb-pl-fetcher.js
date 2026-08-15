@@ -278,8 +278,8 @@ class QBPLFetcher {
         metrics.labor = extractRowValue(rows[this.rowMap.labor]);
         console.log(`    Extracted value: ${metrics.labor}`);
       } else if (typeof this.rowMap.labor === 'object') {
-        // Labor is a sub-row under Expenses - try multiple sub-row locations
-        console.log(`    Labor is sub-row: parentIdx=${this.rowMap.labor.parentIdx}, subIdx=${this.rowMap.labor.subIdx}`);
+        // Labor is a sub-row under Expenses - search by name since index may vary by date range
+        console.log(`    Labor is sub-row: parentIdx=${this.rowMap.labor.parentIdx}, searching by name`);
         const expensesRow = rows[this.rowMap.labor.parentIdx];
         if (expensesRow) {
           console.log(`    Expenses row found at index ${this.rowMap.labor.parentIdx}`);
@@ -298,15 +298,20 @@ class QBPLFetcher {
           }
 
           if (subRowsArray) {
-            console.log(`      Total sub-rows: ${subRowsArray.length}, looking for index ${this.rowMap.labor.subIdx}`);
-            if (subRowsArray[this.rowMap.labor.subIdx]) {
-              const laborRow = subRowsArray[this.rowMap.labor.subIdx];
-              const laborName = laborRow.Header?.ColData?.[0]?.value || '(no name)';
-              console.log(`      Found labor row: "${laborName}"`);
-              metrics.labor = extractRowValue(laborRow);
-              console.log(`      Extracted labor value: ${metrics.labor}`);
-            } else {
-              console.log(`      ⚠️  Sub-row index ${this.rowMap.labor.subIdx} not found in array of ${subRowsArray.length}`);
+            console.log(`      Total sub-rows: ${subRowsArray.length}, searching for LABOR/PAYROLL/6200`);
+            // Search for labor by name instead of index (index varies by date range)
+            for (let i = 0; i < subRowsArray.length; i++) {
+              const subRow = subRowsArray[i];
+              const subName = subRow.Header?.ColData?.[0]?.value || '';
+              if (subName.includes('LABOR') || subName.includes('PAYROLL') || subName.includes('6200')) {
+                console.log(`      Found labor row at index ${i}: "${subName}"`);
+                metrics.labor = extractRowValue(subRow);
+                console.log(`      Extracted labor value: ${metrics.labor}`);
+                break;
+              }
+            }
+            if (metrics.labor === 0) {
+              console.log(`      ⚠️  No labor row found in sub-rows`);
             }
           }
         } else {
