@@ -27,9 +27,31 @@ class QPrimeCostFetcher {
 
       // Fetch P&L data for each 2-week period
       const twoWeekData = [];
+      let firstFetch = true;
       for (const period of twoWeekPeriods) {
         try {
           const report = await this.plFetcher.fetchPLReport(period.start, period.end);
+
+          // Debug first 2-week response
+          if (firstFetch) {
+            firstFetch = false;
+            let rows = [];
+            if (Array.isArray(report.Rows)) {
+              rows = report.Rows;
+            } else if (report.Rows?.Row && Array.isArray(report.Rows.Row)) {
+              rows = report.Rows.Row;
+            }
+            if (rows.length > 0) {
+              const expensesRow = rows[3];
+              console.log(`  DEBUG 2-week fetch (${period.start} to ${period.end}):`);
+              console.log(`    Expenses row has Rows.Row? ${!!expensesRow?.Rows?.Row}`);
+              console.log(`    Expenses row Rows keys: ${Object.keys(expensesRow?.Rows || {})}`);
+              if (expensesRow?.Rows?.Row) {
+                console.log(`    Expenses sub-rows count: ${expensesRow.Rows.Row.length}`);
+              }
+            }
+          }
+
           const metrics = this.plFetcher.extractMetrics(report);
           twoWeekData.push({
             start: period.start,
