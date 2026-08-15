@@ -110,6 +110,15 @@ class QPrimeCostFetcher {
       current.setDate(current.getDate() + 14);
     }
 
+    // Log last 2 periods generated
+    if (periods.length > 0) {
+      console.log(`  2-week periods generated: ${periods.length} total`);
+      if (periods.length >= 2) {
+        console.log(`    Last 2: ${periods[periods.length-2].start} to ${periods[periods.length-2].end}`);
+        console.log(`            ${periods[periods.length-1].start} to ${periods[periods.length-1].end}`);
+      }
+    }
+
     return periods;
   }
 
