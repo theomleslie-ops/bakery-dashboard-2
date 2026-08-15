@@ -184,7 +184,7 @@ class QBPLFetcher {
     }
 
     // Log final row map for debugging
-    console.log(`  📊 Row mapping complete: revenue=${this.rowMap.revenue}, cogs=${this.rowMap.cogs}, ops=${this.rowMap.operations}, net=${this.rowMap.netIncome}`);
+    console.log(`  📊 Row mapping complete: revenue=${this.rowMap.revenue}, cogs=${this.rowMap.cogs}, labor=${JSON.stringify(this.rowMap.labor)}, ops=${this.rowMap.operations}, net=${this.rowMap.netIncome}`);
 
     return this.rowMap;
   }
@@ -271,31 +271,52 @@ class QBPLFetcher {
       metrics.cogs = extractRowValue(rows[this.rowMap.cogs]);
     }
     if (this.rowMap.labor !== null) {
+      console.log(`  DEBUG labor extraction: rowMap.labor=${JSON.stringify(this.rowMap.labor)}`);
       if (typeof this.rowMap.labor === 'number') {
         // Labor is a top-level account
+        console.log(`    Labor is top-level at index ${this.rowMap.labor}`);
         metrics.labor = extractRowValue(rows[this.rowMap.labor]);
+        console.log(`    Extracted value: ${metrics.labor}`);
       } else if (typeof this.rowMap.labor === 'object') {
         // Labor is a sub-row under Expenses - try multiple sub-row locations
-        // Note: Weekly data may not include sub-rows, so labor may be unavailable
+        console.log(`    Labor is sub-row: parentIdx=${this.rowMap.labor.parentIdx}, subIdx=${this.rowMap.labor.subIdx}`);
         const expensesRow = rows[this.rowMap.labor.parentIdx];
         if (expensesRow) {
+          console.log(`    Expenses row found at index ${this.rowMap.labor.parentIdx}`);
           let subRowsArray = null;
           if (Array.isArray(expensesRow.Rows?.Row)) {
             subRowsArray = expensesRow.Rows.Row;
+            console.log(`      Using Rows.Row (${subRowsArray.length} sub-rows)`);
           } else if (Array.isArray(expensesRow.Rows?.Rows)) {
             subRowsArray = expensesRow.Rows.Rows;
+            console.log(`      Using Rows.Rows (${subRowsArray.length} sub-rows)`);
           } else if (Array.isArray(expensesRow.Rows)) {
             subRowsArray = expensesRow.Rows;
+            console.log(`      Using Rows directly (${subRowsArray.length} sub-rows)`);
+          } else {
+            console.log(`      ⚠️  No array found. Rows keys: ${Object.keys(expensesRow.Rows || {})}`);
           }
 
-          if (subRowsArray && subRowsArray[this.rowMap.labor.subIdx]) {
-            const laborRow = subRowsArray[this.rowMap.labor.subIdx];
-            metrics.labor = extractRowValue(laborRow);
+          if (subRowsArray) {
+            console.log(`      Total sub-rows: ${subRowsArray.length}, looking for index ${this.rowMap.labor.subIdx}`);
+            if (subRowsArray[this.rowMap.labor.subIdx]) {
+              const laborRow = subRowsArray[this.rowMap.labor.subIdx];
+              const laborName = laborRow.Header?.ColData?.[0]?.value || '(no name)';
+              console.log(`      Found labor row: "${laborName}"`);
+              metrics.labor = extractRowValue(laborRow);
+              console.log(`      Extracted labor value: ${metrics.labor}`);
+            } else {
+              console.log(`      ⚠️  Sub-row index ${this.rowMap.labor.subIdx} not found in array of ${subRowsArray.length}`);
+            }
           }
-          // If no sub-rows, labor is not available in this period (e.g., weekly data)
-          // Keep metrics.labor as 0 (initialized value)
+        } else {
+          console.log(`    ⚠️  Expenses row NOT found at index ${this.rowMap.labor.parentIdx}`);
         }
+      } else {
+        console.log(`    ⚠️  Labor rowMap is neither number nor object: ${typeof this.rowMap.labor}`);
       }
+    } else {
+      console.log(`  DEBUG labor extraction: rowMap.labor is NULL (not set)`);
     }
     if (this.rowMap.operations !== null && rows[this.rowMap.operations]) {
       metrics.operations = extractRowValue(rows[this.rowMap.operations]);
