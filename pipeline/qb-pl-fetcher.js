@@ -276,6 +276,7 @@ class QBPLFetcher {
         metrics.labor = extractRowValue(rows[this.rowMap.labor]);
       } else if (typeof this.rowMap.labor === 'object') {
         // Labor is a sub-row under Expenses - try multiple sub-row locations
+        // Note: Weekly data may not include sub-rows, so labor may be unavailable
         const expensesRow = rows[this.rowMap.labor.parentIdx];
         if (expensesRow) {
           let subRowsArray = null;
@@ -290,14 +291,9 @@ class QBPLFetcher {
           if (subRowsArray && subRowsArray[this.rowMap.labor.subIdx]) {
             const laborRow = subRowsArray[this.rowMap.labor.subIdx];
             metrics.labor = extractRowValue(laborRow);
-            if (metrics.labor > 0) {
-              console.log(`  ✓ Labor: ${metrics.labor} (week)`);
-            }
-          } else if (!subRowsArray) {
-            console.warn(`  ⚠️  No sub-rows array found for labor at parentIdx=${this.rowMap.labor.parentIdx}`);
           }
-        } else {
-          console.warn(`  ⚠️  Expenses row at index ${this.rowMap.labor.parentIdx} not found`);
+          // If no sub-rows, labor is not available in this period (e.g., weekly data)
+          // Keep metrics.labor as 0 (initialized value)
         }
       }
     }
