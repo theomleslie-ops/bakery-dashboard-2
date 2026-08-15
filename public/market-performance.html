@@ -300,8 +300,8 @@
                     {hoveredWeekIndex !== null && (
                         <div style={{
                             position: 'absolute',
-                            left: `${(tooltipPos.x / 1000) * 100}%`,
-                            top: `${(tooltipPos.y / 500) * 100}%`,
+                            left: `${tooltipPos.x}px`,
+                            top: `${tooltipPos.y}px`,
                             transform: 'translate(-50%, -100%)',
                             marginTop: '-10px',
                             backgroundColor: 'var(--bg-alt)',
