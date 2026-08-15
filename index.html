@@ -738,16 +738,46 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
+
+          // Try prime cost endpoint first (pre-aggregated 4-week periods)
+          try {
+            const pcResponse = await fetch(`${baseUrl}/api/prime-cost/periods`);
+            if (pcResponse.ok) {
+              const pcData = await pcResponse.json();
+              if (pcData.data && pcData.data.length > 0) {
+                console.log('Using pre-aggregated prime cost data from /api/prime-cost/periods');
+                setPeriodSource('Prime Cost API (server-aggregated 4-week periods)');
+
+                // Convert server format to dashboard format
+                const converted = pcData.data.map(period => ({
+                  label: `${period.startDate.split('-')[1]}/${period.startDate.split('-')[2]}-${period.endDate.split('-')[2]}`,
+                  fullLabel: `${period.startDate} to ${period.endDate}`,
+                  revenue: period.totalRevenue,
+                  foodPercent: (period.totalCogs / period.totalRevenue) * 100,
+                  laborPercent: (period.totalLabor / period.totalRevenue) * 100,
+                  totalPercent: period.primeCostPercent,
+                }));
+
+                setWeeks(converted);
+                setStatus(converted.length > 0 ? 'ready' : 'empty');
+                return;
+              }
+            }
+          } catch (err) {
+            console.warn('Prime cost API not ready yet, falling back to dashboard weekly data:', err.message);
+          }
+
+          // Fallback: use dashboard endpoint and aggregate client-side
           const response = await fetch(`${baseUrl}/api/dashboard`);
           const dashData = await response.json();
           if (!dashData.periodData) {
             throw new Error('Missing financial data from server');
           }
-          setPeriodSource(dashData.periodSource || '');
+          setPeriodSource(dashData.periodSource || 'Weekly data (client-aggregated)');
 
           const weeklyData = (dashData.periodData || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
+
+          console.log('Weekly data received:', weeklyData.map(w => ({date: w.date, labor: w.labor})));
 
           const parseDate = (dateStr) => {
             const parts = (dateStr || '').split('-');
@@ -757,54 +787,23 @@
             return new Date(y, m - 1, d);
           };
 
-          // Find the most recent Monday (next Monday if today is Mon)
-          const nextMonday = new Date(today);
-          const dayOfWeek = nextMonday.getDay();
-          const daysUntilMonday = dayOfWeek === 0 ? 1 : (1 - dayOfWeek + 7) % 7 || 7;
-          nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
-
-          console.log('Today:', today.toDateString(), 'Next Monday:', nextMonday.toDateString());
-          console.log('All weekly data:', weeklyData.map(w => w.date));
-
-          // Filter out the current/upcoming incomplete week
-          const completeWeeks = weeklyData.filter(w => {
-            const weekDate = parseDate(w.date);
-            return weekDate < nextMonday; // Only complete weeks before next Monday
-          });
-
-          console.log('Complete weeks:', completeWeeks.map(w => w.date));
-
           const grouped = [];
 
-          // Group complete weeks into 4-week periods (oldest to newest)
-          for (let i = 0; i + 4 <= completeWeeks.length; i += 4) {
-            const periodWeeks = completeWeeks.slice(i, i + 4);
+          // Group weeks into 4-week periods (oldest to newest)
+          for (let i = 0; i + 4 <= weeklyData.length; i += 4) {
+            const periodWeeks = weeklyData.slice(i, i + 4);
 
             if (periodWeeks.length !== 4) break; // Stop at incomplete periods
-
-            // Each period is exactly 28 days, starting where the previous one ended
-            let startDate;
-            if (grouped.length === 0) {
-              startDate = parseDate(periodWeeks[0].date);
-            } else {
-              const prevPeriod = grouped[grouped.length - 1];
-              startDate = new Date(prevPeriod.dateObj.getTime() + 28 * 24 * 60 * 60 * 1000);
-            }
-            const endDate = new Date(startDate.getTime() + 27 * 24 * 60 * 60 * 1000); // 28 days inclusive
-            const daySpan = 28;
-
-            console.log(`Period ${grouped.length + 1}: indices ${i}-${i+3}, dates ${periodWeeks[0].date} to ${periodWeeks[3].date}, span: ${daySpan} days`);
 
             const totalRevenue = periodWeeks.reduce((sum, w) => sum + (w.revenue || 0), 0);
             const totalCogs = periodWeeks.reduce((sum, w) => sum + (w.cogs || 0), 0);
             const totalLabor = periodWeeks.reduce((sum, w) => sum + (w.labor || 0), 0);
 
+            console.log(`Period ${grouped.length + 1}: weeks ${i}-${i+3}, revenue=$${totalRevenue}, cogs=$${totalCogs}, labor=$${totalLabor}`);
+
             if (totalRevenue > 0) {
-              console.log(`  ✓ Revenue: $${totalRevenue}`);
               const firstWeek = periodWeeks[0];
               const lastWeek = periodWeeks[3];
-
-              // Use ACTUAL data dates, not calculated dates
               const actualStartDate = parseDate(firstWeek.date);
               const actualEndDate = parseDate(lastWeek.date);
 
@@ -823,7 +822,6 @@
               grouped.push({
                 label: label,
                 fullLabel: `${firstWeek.date} to ${lastWeek.date}`,
-                dateObj: startDate,
                 revenue: totalRevenue,
                 foodPercent,
                 laborPercent,
