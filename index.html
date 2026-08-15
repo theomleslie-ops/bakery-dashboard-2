@@ -148,13 +148,14 @@
           const opex = chunk.reduce((s, d) => s + parseFloat(d.opex || 0), 0) / chunk.length;
           const pl = chunk.reduce((s, d) => s + parseFloat(d.pl || 0), 0) / chunk.length;
           const startDate = chunk[0].startDate;
-          const endDate = chunk[chunk.length - 1].startDate;
+          const lastWeekStart = chunk[chunk.length - 1].startDate;
           const periodLabel = weeks === 13 ? 'Quarter' : weeks === 4 ? '4 weeks' : '2 weeks';
           const [sy, sm, sd] = startDate.split('-').map(Number);
-          const [ey, em, ed] = endDate.split('-').map(Number);
-          const endDate2 = new Date(ey, em - 1, ed + (weeks * 7) - 1);
-          const endStr = endDate2.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-          const startStr = new Date(sy, sm - 1, sd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          const [ey, em, ed] = lastWeekStart.split('-').map(Number);
+          const startDateObj = new Date(sy, sm - 1, sd);
+          const endDateObj = new Date(ey, em - 1, ed + 6);
+          const endStr = endDateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          const startStr = startDateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
           const dateRange = `${startStr} – ${endStr}`;
           aggregated.push({ revenue, cogs, opex, pl, month: periodLabel, dateRange });
         }
