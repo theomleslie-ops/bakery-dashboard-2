@@ -1669,23 +1669,22 @@ app.get('/api/dashboard', async (req, res) => {
       source: 'Multi-month P/L Statements'
     } : { source: 'No financial data uploaded yet' };
 
-    // Weekly data comes from the snapshot file
+    // Weekly data comes from PLStore (same as P&L endpoints)
     let periodData = [];
-    let periodSource = 'Weekly snapshot data';
+    let periodSource = 'P&L weekly data';
     try {
-      const snapshot = loadData('data/qb-weekly-pl-snapshot.json') || {};
-      const weeksObj = snapshot.weeks || {};
-      periodData = Object.entries(weeksObj)
-        .map(([date, data]) => ({
-          date,
-          revenue: data.revenue || 0,
-          cogs: data.cogs || 0,
-          labor: data.labor || 0,
+      const plData = await plStore.getAllData();
+      periodData = (plData.weeks || [])
+        .map(week => ({
+          date: week.date,
+          revenue: week.revenue || 0,
+          cogs: week.cogs || 0,
+          labor: week.labor || 0,
         }))
         .sort((a, b) => a.date.localeCompare(b.date));
     } catch (err) {
-      console.error('Failed to load weekly snapshot:', err.message);
-      periodSource = 'Weekly data unavailable';
+      console.error('Failed to load P&L weekly data:', err.message);
+      periodSource = 'P&L data unavailable';
     }
 
     res.json({
