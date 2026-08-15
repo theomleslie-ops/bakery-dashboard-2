@@ -833,6 +833,17 @@
             }
           }
 
+          console.log('=== FINAL PERIODS FOR CHART ===');
+          console.log(`Total periods created: ${grouped.length}`);
+          grouped.forEach((p, idx) => {
+            console.log(`Period ${idx + 1}: ${p.label}`);
+            console.log(`  fullLabel: ${p.fullLabel}`);
+            console.log(`  revenue: $${p.revenue}`);
+            console.log(`  foodPercent: ${p.foodPercent.toFixed(1)}%`);
+            console.log(`  laborPercent: ${p.laborPercent.toFixed(1)}%`);
+            console.log(`  totalPercent: ${p.totalPercent.toFixed(1)}%`);
+          });
+
           setWeeks(grouped);
           setStatus(grouped.length > 0 ? 'ready' : 'empty');
         } catch (err) {
