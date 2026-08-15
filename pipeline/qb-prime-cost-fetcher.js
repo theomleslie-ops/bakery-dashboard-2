@@ -110,14 +110,11 @@ class QPrimeCostFetcher {
         const primeContribution = totalCogs + totalLabor;
         const primeCostPercent = totalRevenue > 0 ? (primeContribution / totalRevenue) * 100 : 0;
 
-        // Extract start date from period1, use next day for label
-        const p1start = new Date(period1.start);
-        p1start.setDate(p1start.getDate() + 1);
-        const labelStart = `${String(p1start.getMonth() + 1).padStart(2, '0')}/${String(p1start.getDate()).padStart(2, '0')}`;
-
-        // Extract end date from period2
-        const p2end = new Date(period2.end);
-        const labelEnd = `${String(p2end.getMonth() + 1).padStart(2, '0')}/${String(p2end.getDate()).padStart(2, '0')}`;
+        // Label: Monday of period1 to Sunday of period2 (4-week range)
+        const parts1 = period1.start.split('-');
+        const parts2 = period2.end.split('-');
+        const labelStart = `${parts1[1]}/${parts1[2]}`;
+        const labelEnd = `${parts2[1]}/${parts2[2]}`;
 
         periods.push({
           number: periods.length + 1,
