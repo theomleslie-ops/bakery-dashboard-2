@@ -45,30 +45,21 @@ class QPrimeCostFetcher {
           const metrics = this.plFetcher.extractMetrics(report);
 
           // Create 4-week period
-          // Adjust hover dates: subtract 2 days to correct timezone offset
+          // Use actual period dates for both hover and label
           const [startYear, startMonth, startDay] = periodDates.start.split('-').map(Number);
           const [endYear, endMonth, endDay] = periodDates.end.split('-').map(Number);
 
-          const startHoverDate = new Date(startYear, startMonth - 1, startDay - 4);
-          const endHoverDate = new Date(endYear, endMonth - 1, endDay - 4);
-
-          const hoverStart = `${startHoverDate.getFullYear()}-${String(startHoverDate.getMonth() + 1).padStart(2, '0')}-${String(startHoverDate.getDate()).padStart(2, '0')}`;
-          const hoverEnd = `${endHoverDate.getFullYear()}-${String(endHoverDate.getMonth() + 1).padStart(2, '0')}-${String(endHoverDate.getDate()).padStart(2, '0')}`;
-
-          // Label dates: add 3 days from original periodDates for display
-          const startLabelDate = new Date(startYear, startMonth - 1, startDay + 3);
-          const endLabelDate = new Date(endYear, endMonth - 1, endDay + 3);
-
-          const labelStart = `${startLabelDate.getMonth() + 1}/${startLabelDate.getDate()}`;
-          const labelEnd = `${endLabelDate.getMonth() + 1}/${endLabelDate.getDate()}`;
+          // Label: show actual dates (M/D format)
+          const labelStart = `${startMonth}/${startDay}`;
+          const labelEnd = `${endMonth}/${endDay}`;
 
           const primeContribution = metrics.cogs + metrics.labor;
           const primeCostPercent = metrics.revenue > 0 ? (primeContribution / metrics.revenue) * 100 : 0;
 
           const period = {
             number: i + 1,
-            startDate: hoverStart,
-            endDate: hoverEnd,
+            startDate: periodDates.start,
+            endDate: periodDates.end,
             label: `${labelStart}-${labelEnd}`,
             totalRevenue: metrics.revenue,
             totalCogs: metrics.cogs,
