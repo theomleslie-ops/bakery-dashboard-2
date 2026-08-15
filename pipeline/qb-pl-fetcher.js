@@ -13,6 +13,38 @@ class QBPLFetcher {
   }
 
   /**
+   * Extract numeric value from a QB row (used in row identification and extraction)
+   */
+  extractRowValue(row) {
+    if (!row) return 0;
+
+    // Try Summary first (should be the total for the category)
+    if (row.Summary?.ColData?.[1]?.value) {
+      const val = parseFloat(row.Summary.ColData[1].value);
+      if (!isNaN(val)) return val;
+    }
+
+    // Try Header second
+    if (row.Header?.ColData?.[1]?.value) {
+      const val = parseFloat(row.Header.ColData[1].value);
+      if (!isNaN(val)) return val;
+    }
+
+    // If row has nested Rows, sum them up
+    if (row.Rows?.Row && Array.isArray(row.Rows.Row)) {
+      let total = 0;
+      for (const subRow of row.Rows.Row) {
+        if (subRow.Summary?.ColData?.[1]?.value) {
+          total += parseFloat(subRow.Summary.ColData[1].value) || 0;
+        }
+      }
+      if (total !== 0) return total;
+    }
+
+    return 0;
+  }
+
+  /**
    * Fetch P&L report from QB REST API
    */
   async fetchPLReport(startDate, endDate) {
@@ -141,16 +173,40 @@ class QBPLFetcher {
       } else if (accountName === 'Expenses') {
         this.rowMap.operations = i;
         console.log(`  ✓ Operations: index ${i} (${accountName})`);
-        // Look for Payroll/Labor sub-row
+        // Look for Payroll/Labor sub-row - try multiple patterns
         if (row.Rows && Array.isArray(row.Rows)) {
+          console.log(`    Found ${row.Rows.length} sub-rows under Expenses:`);
+          let largestSubIdx = -1;
+          let largestValue = 0;
+
           for (let j = 0; j < row.Rows.length; j++) {
             const subRow = row.Rows[j];
             const subName = subRow.Header?.ColData?.[0]?.value;
-            if (subName && (subName.includes('Payroll') || subName.includes('Wages') || subName.includes('Salaries'))) {
+            console.log(`      [${j}] ${subName || '(unnamed)'}`);
+
+            // Try exact matches first
+            if (subName && (subName.toLowerCase().includes('payroll') ||
+                           subName.toLowerCase().includes('wages') ||
+                           subName.toLowerCase().includes('salaries') ||
+                           subName.toLowerCase().includes('labor') ||
+                           subName.toLowerCase().includes('personnel'))) {
               this.rowMap.labor = { parentIdx: i, subIdx: j };
               console.log(`  ✓ Labor: subrow ${i}.${j} (${subName})`);
               break;
             }
+
+            // Track largest sub-account as fallback (likely labor)
+            const subValue = this.extractRowValue(subRow);
+            if (subValue > largestValue) {
+              largestValue = subValue;
+              largestSubIdx = j;
+            }
+          }
+
+          // Fallback: use largest expense sub-account (usually labor)
+          if (!this.rowMap.labor && largestSubIdx >= 0) {
+            this.rowMap.labor = { parentIdx: i, subIdx: largestSubIdx };
+            console.log(`  ⚠️ Labor not found by name, using largest sub-account (${largestValue}): ${i}.${largestSubIdx}`);
           }
         }
       } else if (accountName === 'Net Income') {
@@ -210,41 +266,11 @@ class QBPLFetcher {
     }
 
     // Extract values by row index (QB REST API structure)
-    // QB returns nested structure: each row has Header (category name), Rows (details), and Summary (total)
-    const extractRowValue = (row) => {
-      if (!row) return 0;
-
-      // Try Summary first (should be the total for the category)
-      if (row.Summary?.ColData?.[1]?.value) {
-        const val = parseFloat(row.Summary.ColData[1].value);
-        if (!isNaN(val)) return val;
-      }
-
-      // Try Header second
-      if (row.Header?.ColData?.[1]?.value) {
-        const val = parseFloat(row.Header.ColData[1].value);
-        if (!isNaN(val)) return val;
-      }
-
-      // If row has nested Rows, sum them up
-      if (row.Rows?.Row && Array.isArray(row.Rows.Row)) {
-        let total = 0;
-        for (const subRow of row.Rows.Row) {
-          if (subRow.Summary?.ColData?.[1]?.value) {
-            total += parseFloat(subRow.Summary.ColData[1].value) || 0;
-          }
-        }
-        if (total !== 0) return total;
-      }
-
-      return 0;
-    };
-
     if (this.rowMap.revenue !== null && rows[this.rowMap.revenue]) {
-      metrics.revenue = extractRowValue(rows[this.rowMap.revenue]);
+      metrics.revenue = this.extractRowValue(rows[this.rowMap.revenue]);
     }
     if (this.rowMap.cogs !== null && rows[this.rowMap.cogs]) {
-      metrics.cogs = extractRowValue(rows[this.rowMap.cogs]);
+      metrics.cogs = this.extractRowValue(rows[this.rowMap.cogs]);
     }
     if (this.rowMap.labor !== null && typeof this.rowMap.labor === 'object') {
       // Extract labor from sub-row
@@ -252,7 +278,7 @@ class QBPLFetcher {
       if (expensesRow && expensesRow.Rows && Array.isArray(expensesRow.Rows)) {
         const laborRow = expensesRow.Rows[this.rowMap.labor.subIdx];
         if (laborRow) {
-          metrics.labor = extractRowValue(laborRow);
+          metrics.labor = this.extractRowValue(laborRow);
           console.log(`  ✓ LABOR: ${metrics.labor}`);
         }
       }
@@ -260,10 +286,10 @@ class QBPLFetcher {
       console.log(`  ⚠️ LABOR NOT FOUND in QB structure`);
     }
     if (this.rowMap.operations !== null && rows[this.rowMap.operations]) {
-      metrics.operations = extractRowValue(rows[this.rowMap.operations]);
+      metrics.operations = this.extractRowValue(rows[this.rowMap.operations]);
     }
     if (this.rowMap.netIncome !== null && rows[this.rowMap.netIncome]) {
-      metrics.netIncome = extractRowValue(rows[this.rowMap.netIncome]);
+      metrics.netIncome = this.extractRowValue(rows[this.rowMap.netIncome]);
     } else {
       // If Net Income row not found, calculate it
       metrics.netIncome = metrics.revenue - metrics.cogs - metrics.operations;
