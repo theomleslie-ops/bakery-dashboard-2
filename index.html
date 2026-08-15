@@ -738,15 +738,14 @@
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
-          const limitedWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
-          const response = await fetch(`${baseUrl}/api/dashboard?weeks=${limitedWeeks}`);
-          const dashData = await response.json();
-          if (!dashData.periodData) {
-            throw new Error('Missing financial data from server');
+          const response = await fetch(`${baseUrl}/api/pl/weekly`);
+          const plData = await response.json();
+          if (!plData.data) {
+            throw new Error('Missing weekly P&L data from server');
           }
-          setPeriodSource(dashData.periodSource || '');
+          setPeriodSource(plData.source || 'Weekly P&L data');
 
-          const weeklyData = (dashData.periodData || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+          const weeklyData = (plData.data || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
           const today = new Date();
           today.setHours(0, 0, 0, 0);
 
