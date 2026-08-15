@@ -2608,6 +2608,21 @@ cron.schedule('5 0 * * 0', refreshQBWeeklyData, {
 });
 console.log(`📅 QB data auto-refresh scheduled: Sundays at 00:05 UTC (weekly - P&L, accounts, expenses)`);
 
+// Auto-refresh prime cost data 30 minutes after weekly P&L refresh
+cron.schedule('35 0 * * 0', async () => {
+  try {
+    console.log('🔄 Starting scheduled prime cost refresh...');
+    const { refreshPrimeCostData } = require('./pipeline/qb-prime-cost-refresh');
+    const result = await refreshPrimeCostData(qbClient);
+    console.log('✅ Prime cost refresh complete:', result);
+  } catch (err) {
+    console.error('❌ Scheduled prime cost refresh failed:', err.message);
+  }
+}, {
+  timezone: 'UTC',
+});
+console.log(`📅 Prime cost auto-refresh scheduled: Sundays at 00:35 UTC (2-week periods with labor)`);
+
 
 // ============= INTEGRATIONS STATUS (Google + QuickBooks health) =============
 
