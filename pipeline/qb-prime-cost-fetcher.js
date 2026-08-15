@@ -49,9 +49,11 @@ class QPrimeCostFetcher {
           const [startYear, startMonth, startDay] = periodDates.start.split('-').map(Number);
           const [endYear, endMonth, endDay] = periodDates.end.split('-').map(Number);
 
-          // Label: show actual dates (M/D format)
-          const labelStart = `${startMonth}/${startDay}`;
-          const labelEnd = `${endMonth}/${endDay}`;
+          // Label: add 1 day to match hover format
+          const startLabelDate = new Date(startYear, startMonth - 1, startDay + 1);
+          const endLabelDate = new Date(endYear, endMonth - 1, endDay + 1);
+          const labelStart = `${startLabelDate.getMonth() + 1}/${startLabelDate.getDate()}`;
+          const labelEnd = `${endLabelDate.getMonth() + 1}/${endLabelDate.getDate()}`;
 
           const primeContribution = metrics.cogs + metrics.labor;
           const primeCostPercent = metrics.revenue > 0 ? (primeContribution / metrics.revenue) * 100 : 0;
