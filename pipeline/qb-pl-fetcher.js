@@ -107,7 +107,7 @@ class QBPLFetcher {
     this.rowMap = {};
 
     // QB REST API structure: rows ARE the categories, extract totals directly
-    this.rowMap = { revenue: null, cogs: null, operations: null, netIncome: null };
+    this.rowMap = { revenue: null, cogs: null, labor: null, operations: null, netIncome: null };
 
     // Debug: log all account names first
     console.log('  Available rows:');
@@ -115,6 +115,14 @@ class QBPLFetcher {
       const row = rows[i];
       const accountName = row.Header?.ColData?.[0]?.value;
       console.log(`    [${i}] ${accountName || '(unnamed)'}`);
+      // Also log sub-rows if they exist (for payroll extraction)
+      if (row.Rows && Array.isArray(row.Rows)) {
+        for (let j = 0; j < row.Rows.length; j++) {
+          const subRow = row.Rows[j];
+          const subName = subRow.Header?.ColData?.[0]?.value;
+          if (subName) console.log(`      [${i}.${j}] ${subName}`);
+        }
+      }
     }
 
     for (let i = 0; i < rows.length; i++) {
@@ -133,6 +141,18 @@ class QBPLFetcher {
       } else if (accountName === 'Expenses') {
         this.rowMap.operations = i;
         console.log(`  ✓ Operations: index ${i} (${accountName})`);
+        // Look for Payroll/Labor sub-row
+        if (row.Rows && Array.isArray(row.Rows)) {
+          for (let j = 0; j < row.Rows.length; j++) {
+            const subRow = row.Rows[j];
+            const subName = subRow.Header?.ColData?.[0]?.value;
+            if (subName && (subName.includes('Payroll') || subName.includes('Wages') || subName.includes('Salaries'))) {
+              this.rowMap.labor = { parentIdx: i, subIdx: j };
+              console.log(`  ✓ Labor: subrow ${i}.${j} (${subName})`);
+              break;
+            }
+          }
+        }
       } else if (accountName === 'Net Income') {
         this.rowMap.netIncome = i;
         console.log(`  ✓ Net Income: index ${i} (${accountName})`);
@@ -171,6 +191,7 @@ class QBPLFetcher {
     const metrics = {
       revenue: 0,
       cogs: 0,
+      labor: 0,
       operations: 0,
       netIncome: 0
     };
@@ -224,6 +245,16 @@ class QBPLFetcher {
     }
     if (this.rowMap.cogs !== null && rows[this.rowMap.cogs]) {
       metrics.cogs = extractRowValue(rows[this.rowMap.cogs]);
+    }
+    if (this.rowMap.labor !== null && typeof this.rowMap.labor === 'object') {
+      // Extract labor from sub-row
+      const expensesRow = rows[this.rowMap.labor.parentIdx];
+      if (expensesRow && expensesRow.Rows && Array.isArray(expensesRow.Rows)) {
+        const laborRow = expensesRow.Rows[this.rowMap.labor.subIdx];
+        if (laborRow) {
+          metrics.labor = extractRowValue(laborRow);
+        }
+      }
     }
     if (this.rowMap.operations !== null && rows[this.rowMap.operations]) {
       metrics.operations = extractRowValue(rows[this.rowMap.operations]);
@@ -295,6 +326,7 @@ class QBPLFetcher {
           end: week.end,
           revenue: metrics.revenue,
           cogs: metrics.cogs,
+          labor: metrics.labor,
           operations: metrics.operations,
           netIncome: metrics.netIncome
         });
@@ -326,6 +358,7 @@ class QBPLFetcher {
     const totals = {
       revenue: 0,
       cogs: 0,
+      labor: 0,
       operations: 0,
       netIncome: 0
     };
@@ -334,6 +367,7 @@ class QBPLFetcher {
       if (!week.error) {
         totals.revenue += week.revenue || 0;
         totals.cogs += week.cogs || 0;
+        totals.labor += week.labor || 0;
         totals.operations += week.operations || 0;
         totals.netIncome += week.netIncome || 0;
       }

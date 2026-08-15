@@ -42,14 +42,26 @@ class PLStore {
 
     // Create a map of existing weeks by date range
     const storedMap = new Map(
-      stored.weeks.map(w => [`${w.start}|${w.end}`, w])
+      stored.weeks.map(w => [`${w.start || w.date}|${w.end}`, w])
     );
 
-    // Upsert new weeks
+    // Upsert new weeks, transforming QB format to dashboard format
     for (const week of newWeeks) {
       if (!week.error) {
-        const key = `${week.start}|${week.end}`;
-        storedMap.set(key, week);
+        const key = `${week.start || week.date}|${week.end}`;
+        // Transform QB format (start/end/operations) to dashboard format (date/labor/opex)
+        const transformed = {
+          date: week.date || week.start,  // Use start date as the week identifier
+          revenue: week.revenue || 0,
+          cogs: week.cogs || 0,
+          labor: week.labor || 0,  // Will be set if available
+          opex: week.opex || week.operations || 0,  // Fallback to operations if opex not provided
+          pl: week.netIncome || (week.revenue - week.cogs - (week.opex || week.operations || 0)),
+          week: week.week,
+          start: week.start,
+          end: week.end
+        };
+        storedMap.set(key, transformed);
       }
     }
 

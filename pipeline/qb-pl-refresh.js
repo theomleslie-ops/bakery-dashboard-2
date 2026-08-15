@@ -34,6 +34,7 @@ async function refreshPLData(qbClient) {
     console.log(`\n📈 Validation Results:`);
     console.log(`  Revenue:   $${validation.totals.revenue.toLocaleString('en-US', { maximumFractionDigits: 2 })}`);
     console.log(`  COGS:      $${validation.totals.cogs.toLocaleString('en-US', { maximumFractionDigits: 2 })}`);
+    console.log(`  Labor:     $${validation.totals.labor.toLocaleString('en-US', { maximumFractionDigits: 2 })}`);
     console.log(`  Operations: $${validation.totals.operations.toLocaleString('en-US', { maximumFractionDigits: 2 })}`);
     console.log(`  Net Income: $${validation.totals.netIncome.toLocaleString('en-US', { maximumFractionDigits: 2 })}`);
     console.log(`  Math Valid: ${validation.isValid ? '✓' : '✗'} (difference: $${validation.difference.toFixed(2)})`);
