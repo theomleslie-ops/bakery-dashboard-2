@@ -783,17 +783,10 @@
 
             if (periodWeeks.length !== 4) break; // Stop at incomplete periods
 
-            // Start each period exactly 28 days after the previous one started
-            let startDate;
-            if (grouped.length === 0) {
-              startDate = parseDate(periodWeeks[0].date);
-            } else {
-              const previousPeriod = grouped[grouped.length - 1];
-              startDate = new Date(previousPeriod.dateObj.getTime() + 28 * 24 * 60 * 60 * 1000);
-            }
-
-            const endDate = new Date(startDate.getTime() + 28 * 24 * 60 * 60 * 1000); // Exactly 28 days from start
-            const daySpan = 28; // Always 28 days for 4-week period
+            // Use actual data dates, not fixed 28-day spans
+            const startDate = parseDate(periodWeeks[0].date);
+            const endDate = parseDate(periodWeeks[3].date);
+            const daySpan = Math.round((endDate - startDate) / (24 * 60 * 60 * 1000));
 
             console.log(`Period ${grouped.length + 1}: indices ${i}-${i+3}, dates ${periodWeeks[0].date} to ${periodWeeks[3].date}, span: ${daySpan} days`);
 
@@ -832,16 +825,8 @@
             }
           }
 
-          // Only show periods that end on or before today
-          const today = new Date();
-          today.setHours(23, 59, 59, 999); // End of today
-          const completedPeriods = grouped.filter(p => {
-            const endDate = new Date(p.dateObj.getTime() + 28 * 24 * 60 * 60 * 1000);
-            return endDate <= today;
-          });
-
-          setWeeks(completedPeriods);
-          setStatus(completedPeriods.length > 0 ? 'ready' : 'empty');
+          setWeeks(grouped);
+          setStatus(grouped.length > 0 ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load data: ' + err.message);
           setStatus('error');
