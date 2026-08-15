@@ -100,14 +100,14 @@ class QBPLFetcher {
 
     if (!rows.length) {
       console.warn('⚠️  No rows found in QB response');
-      this.rowMap = { revenue: null, cogs: null, operations: null, netIncome: null };
+      this.rowMap = { revenue: null, cogs: null, labor: null, operations: null, netIncome: null };
       return this.rowMap;
     }
 
     this.rowMap = {};
 
     // QB REST API structure: rows ARE the categories, extract totals directly
-    this.rowMap = { revenue: null, cogs: null, operations: null, netIncome: null };
+    this.rowMap = { revenue: null, cogs: null, labor: null, operations: null, netIncome: null };
 
     // Debug: log all account names first
     console.log('  Available rows:');
