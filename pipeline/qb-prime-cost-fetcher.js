@@ -44,10 +44,16 @@ class QPrimeCostFetcher {
             if (rows.length > 0) {
               const expensesRow = rows[3];
               console.log(`  DEBUG 2-week fetch (${period.start} to ${period.end}):`);
-              console.log(`    Expenses row has Rows.Row? ${!!expensesRow?.Rows?.Row}`);
+              console.log(`    Expenses row name: ${expensesRow?.Header?.ColData?.[0]?.value}`);
+              console.log(`    Expenses row Rows type: ${typeof expensesRow?.Rows}`);
               console.log(`    Expenses row Rows keys: ${Object.keys(expensesRow?.Rows || {})}`);
-              if (expensesRow?.Rows?.Row) {
+              if (expensesRow?.Rows?.Row && Array.isArray(expensesRow.Rows.Row)) {
                 console.log(`    Expenses sub-rows count: ${expensesRow.Rows.Row.length}`);
+                // Log all sub-row names
+                expensesRow.Rows.Row.forEach((row, idx) => {
+                  const name = row.Header?.ColData?.[0]?.value || '(no name)';
+                  console.log(`      [${idx}] ${name}`);
+                });
               }
             }
           }
