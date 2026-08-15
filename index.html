@@ -777,7 +777,8 @@
 
           const weeklyData = (dashData.periodData || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
-          console.log('Weekly data received:', weeklyData.map(w => ({date: w.date, labor: w.labor})));
+          console.log('Weekly data received (total weeks):', weeklyData.length);
+          weeklyData.forEach(w => console.log(`  ${w.date}: revenue=${w.revenue}, cogs=${w.cogs}, labor=${w.labor}`));
 
           const parseDate = (dateStr) => {
             const parts = (dateStr || '').split('-');
@@ -799,7 +800,9 @@
             const totalCogs = periodWeeks.reduce((sum, w) => sum + (w.cogs || 0), 0);
             const totalLabor = periodWeeks.reduce((sum, w) => sum + (w.labor || 0), 0);
 
-            console.log(`Period ${grouped.length + 1}: weeks ${i}-${i+3}, revenue=$${totalRevenue}, cogs=$${totalCogs}, labor=$${totalLabor}`);
+            console.log(`Period ${grouped.length + 1}: weeks ${i}-${i+3}`);
+            periodWeeks.forEach((w, idx) => console.log(`  Week ${i+idx}: date=${w.date}, revenue=${w.revenue}, cogs=${w.cogs}, labor=${w.labor}`));
+            console.log(`  Totals: revenue=$${totalRevenue}, cogs=$${totalCogs}, labor=$${totalLabor}`);
 
             if (totalRevenue > 0) {
               const firstWeek = periodWeeks[0];
