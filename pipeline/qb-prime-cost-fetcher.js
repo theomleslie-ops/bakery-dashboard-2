@@ -45,13 +45,19 @@ class QPrimeCostFetcher {
           const metrics = this.plFetcher.extractMetrics(report);
 
           // Create 4-week period
-          // Label dates: parse and add 1 day to account for timezone offset
+          // Adjust hover dates: subtract 2 days to correct timezone offset
           const [startYear, startMonth, startDay] = periodDates.start.split('-').map(Number);
           const [endYear, endMonth, endDay] = periodDates.end.split('-').map(Number);
 
-          // Add 1 day for label display
-          const startLabelDate = new Date(startYear, startMonth - 1, startDay + 1);
-          const endLabelDate = new Date(endYear, endMonth - 1, endDay + 1);
+          const startHoverDate = new Date(startYear, startMonth - 1, startDay - 2);
+          const endHoverDate = new Date(endYear, endMonth - 1, endDay - 2);
+
+          const hoverStart = `${startHoverDate.getFullYear()}-${String(startHoverDate.getMonth() + 1).padStart(2, '0')}-${String(startHoverDate.getDate()).padStart(2, '0')}`;
+          const hoverEnd = `${endHoverDate.getFullYear()}-${String(endHoverDate.getMonth() + 1).padStart(2, '0')}-${String(endHoverDate.getDate()).padStart(2, '0')}`;
+
+          // Label dates: add 1 day from hover to match display
+          const startLabelDate = new Date(startYear, startMonth - 1, startDay - 1);
+          const endLabelDate = new Date(endYear, endMonth - 1, endDay - 1);
 
           const labelStart = `${startLabelDate.getMonth() + 1}/${startLabelDate.getDate()}`;
           const labelEnd = `${endLabelDate.getMonth() + 1}/${endLabelDate.getDate()}`;
@@ -61,8 +67,8 @@ class QPrimeCostFetcher {
 
           const period = {
             number: i + 1,
-            startDate: periodDates.start,
-            endDate: periodDates.end,
+            startDate: hoverStart,
+            endDate: hoverEnd,
             label: `${labelStart}-${labelEnd}`,
             totalRevenue: metrics.revenue,
             totalCogs: metrics.cogs,
