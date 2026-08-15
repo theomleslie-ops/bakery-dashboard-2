@@ -3820,7 +3820,7 @@ const server = app.listen(PORT, async () => {
           console.log('🔄 Running initial P&L refresh...');
           await refreshPLData(qbClient);
         } catch (err) {
-          console.warn('⚠️  Initial P&L refresh failed (will retry on schedule):', err.message);
+          console.error('❌ Initial P&L refresh failed:', err.message);
         }
       }, 2000);
     } catch (err) {
