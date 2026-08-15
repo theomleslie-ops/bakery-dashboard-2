@@ -290,8 +290,14 @@ class QBPLFetcher {
           if (subRowsArray && subRowsArray[this.rowMap.labor.subIdx]) {
             const laborRow = subRowsArray[this.rowMap.labor.subIdx];
             metrics.labor = extractRowValue(laborRow);
-            console.log(`  ℹ️  Labor extracted: ${metrics.labor} from sub-row ${this.rowMap.labor.subIdx}`);
+            if (metrics.labor > 0) {
+              console.log(`  ✓ Labor: ${metrics.labor} (week)`);
+            }
+          } else if (!subRowsArray) {
+            console.warn(`  ⚠️  No sub-rows array found for labor at parentIdx=${this.rowMap.labor.parentIdx}`);
           }
+        } else {
+          console.warn(`  ⚠️  Expenses row at index ${this.rowMap.labor.parentIdx} not found`);
         }
       }
     }
