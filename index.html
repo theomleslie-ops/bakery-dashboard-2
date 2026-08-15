@@ -187,10 +187,13 @@
       const minVal = Math.min(...allValues.filter(v => v < 0), 0);
       const chartHeight = 400;
       const range = maxVal - minVal || 1;
-      const n = data.length || 1;
-      const baseWidth = fillWidth ? 1200 : 700;
+      const n = points.length || 1;
+      const minSlotWidth = 60;
+      const requiredWidth = Math.max(1200, 50 + (n * minSlotWidth) + 50);
+      const baseWidth = requiredWidth;
       const slotWidth = baseWidth / n;
       const xPos = (i) => 50 + slotWidth * i + slotWidth / 2;
+      const viewBoxWidth = fillWidth ? requiredWidth + 100 : requiredWidth;
       const getY = (val) => {
         const safeVal = isNaN(val) ? 0 : val;
         // Linear scale: maxVal at top (Y=50), minVal at bottom (Y=450)
@@ -226,16 +229,16 @@
               );
             })}
           </div>
-          <svg width="100%" height="550" viewBox={`0 0 ${fillWidth ? 1300 : 800} 550`}>
-            <line x1="50" y1={zeroY} x2={fillWidth ? 1250 : 750} y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
+          <svg width="100%" height="550" viewBox={`0 0 ${viewBoxWidth} 550`} style={{ overflow: 'visible' }}>
+            <line x1="50" y1={zeroY} x2={viewBoxWidth - 50} y2={zeroY} stroke="var(--chart-axis)" strokeWidth="2" />
             <line x1="50" y1="50" x2="50" y2={50 + chartHeight} stroke="var(--chart-axis)" strokeWidth="2" />
-            <line x1="50" y1={50 + chartHeight} x2={fillWidth ? 1250 : 750} y2={50 + chartHeight} stroke="var(--chart-axis)" strokeWidth="2" />
+            <line x1="50" y1={50 + chartHeight} x2={viewBoxWidth - 50} y2={50 + chartHeight} stroke="var(--chart-axis)" strokeWidth="2" />
             {[0, 1, 2, 3, 4, 5].map(i => {
               const y = 50 + (chartHeight / 5) * i;
               const val = maxVal - (range * i / 5);
               return (
                 <g key={`grid${i}`}>
-                  <line x1="50" y1={y} x2={fillWidth ? 1250 : 750} y2={y} stroke="var(--chart-grid)" strokeWidth="1" />
+                  <line x1="50" y1={y} x2={viewBoxWidth - 50} y2={y} stroke="var(--chart-grid)" strokeWidth="1" />
                   <text x="40" y={y + 4} textAnchor="end" fontSize="11" fill="var(--chart-muted)">{formatAxis(val)}</text>
                 </g>
               );
@@ -248,7 +251,11 @@
             {visibleMetrics.cogs && points.map((p, i) => (<circle key={`cogs${i}`} cx={xPos(i)} cy={getY(p.cogs)} r="3" fill="#ff9500" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
             {visibleMetrics.opex && points.map((p, i) => (<circle key={`opex${i}`} cx={xPos(i)} cy={getY(p.opex)} r="3" fill="#8b5cf6" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
             {visibleMetrics.pl && points.map((p, i) => (<circle key={`pl${i}`} cx={xPos(i)} cy={getY(p.pl)} r="3" fill="#10b981" onMouseEnter={() => setHoveredMonth(i)} onMouseLeave={() => setHoveredMonth(null)} style={{ cursor: 'pointer' }} />))}
-            {points.map((p, i) => (i % labelStride === 0) && (<text key={`label${i}`} x={xPos(i)} y={50 + chartHeight + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{p.month}</text>))}
+            {points.map((p, i) => {
+              if (i % labelStride !== 0) return null;
+              const dateLabel = p.dateRange ? p.dateRange.split(' – ')[0] : p.month;
+              return <text key={`label${i}`} x={xPos(i)} y={50 + chartHeight + 20} textAnchor="middle" fontSize="12" fill="var(--chart-ink)" fontWeight="600">{dateLabel}</text>;
+            })}
             {hoveredMonth !== null && (
               (() => {
                 const p = points[hoveredMonth];
