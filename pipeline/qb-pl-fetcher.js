@@ -133,6 +133,19 @@ class QBPLFetcher {
       } else if (accountName === 'Expenses') {
         this.rowMap.operations = i;
         console.log(`  ✓ Operations: index ${i} (${accountName})`);
+        // Look for labor in sub-rows under Expenses
+        if (row.Rows && Array.isArray(row.Rows)) {
+          for (let j = 0; j < row.Rows.length; j++) {
+            const subRow = row.Rows[j];
+            const subName = subRow.Header?.ColData?.[0]?.value || '';
+            // Look for labor/payroll accounts (6200 LABOR/PAYROLL EXPENSES or similar)
+            if (subName.includes('LABOR') || subName.includes('PAYROLL') || subName.includes('6200')) {
+              this.rowMap.labor = { parentIdx: i, subIdx: j };
+              console.log(`  ✓ Labor: sub-row ${i}.${j} (${subName})`);
+              break;
+            }
+          }
+        }
       } else if (accountName === 'Net Income') {
         this.rowMap.netIncome = i;
         console.log(`  ✓ Net Income: index ${i} (${accountName})`);
