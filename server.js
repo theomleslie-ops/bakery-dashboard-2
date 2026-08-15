@@ -1757,8 +1757,8 @@ app.get('/api/prime-cost/periods', async (req, res) => {
   }
 });
 
-// POST /api/prime-cost/refresh - Refresh prime cost periods
-app.post('/api/prime-cost/refresh', async (req, res) => {
+// GET/POST /api/prime-cost/refresh - Refresh prime cost periods
+const primeCostRefreshHandler = async (req, res) => {
   try {
     const { refreshPrimeCostData } = require('./pipeline/qb-prime-cost-refresh');
     const result = await refreshPrimeCostData(qbClient);
@@ -1772,7 +1772,9 @@ app.post('/api/prime-cost/refresh', async (req, res) => {
     console.error('Prime cost refresh error:', err.message);
     res.status(500).json({ error: err.message });
   }
-});
+};
+app.get('/api/prime-cost/refresh', primeCostRefreshHandler);
+app.post('/api/prime-cost/refresh', primeCostRefreshHandler);
 
 // GET /api/pl-by-channel
 // Combined channel + market + revenue-allocation P&L, built from the three sheets uploaded via
