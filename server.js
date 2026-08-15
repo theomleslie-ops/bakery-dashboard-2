@@ -3910,6 +3910,17 @@ const server = app.listen(PORT, async () => {
           console.warn('⚠️  Initial P&L refresh failed (will retry on schedule):', err.message);
         }
       }, 2000);
+
+      // Do initial prime cost refresh after P&L is done
+      setTimeout(async () => {
+        try {
+          console.log('🔄 Running initial prime cost refresh...');
+          const { refreshPrimeCostData } = require('./pipeline/qb-prime-cost-refresh');
+          await refreshPrimeCostData(qbClient);
+        } catch (err) {
+          console.warn('⚠️  Initial prime cost refresh failed (will retry on schedule):', err.message);
+        }
+      }, 3000);
     } catch (err) {
       console.warn('⚠️  P&L Weekly fetcher failed to initialize:', err.message);
     }
