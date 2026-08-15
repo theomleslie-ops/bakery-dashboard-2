@@ -1790,6 +1790,12 @@ app.get('/api/dashboard', async (req, res) => {
     let periodData = [];
     let periodSource = 'P&L weekly data';
     const plData = await plStore.getAllData();
+
+    console.log('[/api/dashboard] plData.weeks count:', plData.weeks ? plData.weeks.length : 0);
+    if (plData.weeks && plData.weeks.length > 0) {
+      console.log('[/api/dashboard] First week sample:', JSON.stringify(plData.weeks[0]));
+    }
+
     periodData = (plData.weeks || [])
       .map(week => ({
         date: week.date || '',
@@ -1799,6 +1805,11 @@ app.get('/api/dashboard', async (req, res) => {
       }))
       .filter(week => week.date) // Remove entries without dates
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+    console.log('[/api/dashboard] Mapped periodData count:', periodData.length);
+    if (periodData.length > 0) {
+      console.log('[/api/dashboard] First period sample:', JSON.stringify(periodData[0]));
+    }
 
     if (periodData.length === 0) {
       console.warn('No P&L weekly data available');
