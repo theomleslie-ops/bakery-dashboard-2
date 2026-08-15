@@ -1601,6 +1601,41 @@ app.post('/api/pl/weekly/refresh', async (req, res) => {
   }
 });
 
+// DEBUG: GET /api/debug/labor - Check labor identification status
+app.get('/api/debug/labor', async (req, res) => {
+  try {
+    if (!plFetcher) {
+      initPLFetcher();
+    }
+
+    console.log('\n=== DEBUG LABOR IDENTIFICATION ===');
+    console.log('Current rowMap:', plFetcher.rowMap);
+
+    // Re-run identification to see debug logs
+    console.log('\nRe-running identifyRowIds to see full debug output...');
+    const rowMap = await plFetcher.identifyRowIds();
+
+    console.log('Final rowMap after re-identification:', rowMap);
+    console.log('Labor status:', {
+      laborFound: !!rowMap.labor,
+      laborValue: rowMap.labor
+    });
+    console.log('=== END DEBUG ===\n');
+
+    res.json({
+      rowMap,
+      laborFound: !!rowMap.labor,
+      message: 'Check Railway logs for full debug output'
+    });
+  } catch (error) {
+    console.error('Labor debug error:', error);
+    res.status(500).json({
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 // GET /api/pl/weekly/range - Get P&L data for specific date range
 app.get('/api/pl/weekly/range', async (req, res) => {
   try {
