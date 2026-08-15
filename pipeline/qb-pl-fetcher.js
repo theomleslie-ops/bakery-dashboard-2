@@ -225,6 +225,21 @@ class QBPLFetcher {
     if (this.rowMap.cogs !== null && rows[this.rowMap.cogs]) {
       metrics.cogs = extractRowValue(rows[this.rowMap.cogs]);
     }
+    if (this.rowMap.labor !== null) {
+      if (typeof this.rowMap.labor === 'number') {
+        // Labor is a top-level account
+        metrics.labor = extractRowValue(rows[this.rowMap.labor]);
+      } else if (typeof this.rowMap.labor === 'object') {
+        // Labor is a sub-row under Expenses
+        const expensesRow = rows[this.rowMap.labor.parentIdx];
+        if (expensesRow && expensesRow.Rows && Array.isArray(expensesRow.Rows)) {
+          const laborRow = expensesRow.Rows[this.rowMap.labor.subIdx];
+          if (laborRow) {
+            metrics.labor = extractRowValue(laborRow);
+          }
+        }
+      }
+    }
     if (this.rowMap.operations !== null && rows[this.rowMap.operations]) {
       metrics.operations = extractRowValue(rows[this.rowMap.operations]);
     }
