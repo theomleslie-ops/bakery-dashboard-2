@@ -43,13 +43,6 @@ class QPrimeCostFetcher {
           const report = await this.plFetcher.fetchPLReport(periodDates.start, periodDates.end);
           const metrics = this.plFetcher.extractMetrics(report, periodDates.start, periodDates.end);
 
-          // Create 4-week period using actual fetch dates
-          const [startYear, startMonth, startDay] = periodDates.start.split('-').map(Number);
-          const [endYear, endMonth, endDay] = periodDates.end.split('-').map(Number);
-
-          const labelStart = `${startMonth}/${startDay}`;
-          const labelEnd = `${endMonth}/${endDay}`;
-
           const primeContribution = metrics.cogs + metrics.labor;
           const primeCostPercent = metrics.revenue > 0 ? (primeContribution / metrics.revenue) * 100 : 0;
 
@@ -57,7 +50,7 @@ class QPrimeCostFetcher {
             number: i + 1,
             startDate: periodDates.start,
             endDate: periodDates.end,
-            label: `${labelStart}-${labelEnd}`,
+            label: `${periodDates.start} to ${periodDates.end}`,
             totalRevenue: metrics.revenue,
             totalCogs: metrics.cogs,
             totalLabor: metrics.labor,
