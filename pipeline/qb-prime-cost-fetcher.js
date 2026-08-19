@@ -43,16 +43,12 @@ class QPrimeCostFetcher {
           const report = await this.plFetcher.fetchPLReport(periodDates.start, periodDates.end);
           const metrics = this.plFetcher.extractMetrics(report, periodDates.start, periodDates.end);
 
-          // Create 4-week period
-          // Use actual period dates for both hover and label
+          // Create 4-week period using actual fetch dates
           const [startYear, startMonth, startDay] = periodDates.start.split('-').map(Number);
           const [endYear, endMonth, endDay] = periodDates.end.split('-').map(Number);
 
-          // Label: subtract 1 day from hover
-          const startLabelDate = new Date(startYear, startMonth - 1, startDay - 1);
-          const endLabelDate = new Date(endYear, endMonth - 1, endDay - 1);
-          const labelStart = `${startLabelDate.getMonth() + 1}/${startLabelDate.getDate()}`;
-          const labelEnd = `${endLabelDate.getMonth() + 1}/${endLabelDate.getDate()}`;
+          const labelStart = `${startMonth}/${startDay}`;
+          const labelEnd = `${endMonth}/${endDay}`;
 
           const primeContribution = metrics.cogs + metrics.labor;
           const primeCostPercent = metrics.revenue > 0 ? (primeContribution / metrics.revenue) * 100 : 0;
