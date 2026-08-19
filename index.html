@@ -312,7 +312,9 @@
       const [viewMode, setViewMode] = useState('dollars');
       const [weeksRange, setWeeksRange] = useState(16);
       const [periodLength, setPeriodLength] = useState(1);
-      useEffect(() => { fetchData(); }, [weeksRange]);
+      const [allWeeks, setAllWeeks] = useState([]);
+      const [offsetWeeks, setOffsetWeeks] = useState(0);
+      useEffect(() => { fetchData(); }, [weeksRange, offsetWeeks]);
       const filterIncompleteLastPeriod = (periods) => {
         if (periods.length < 2) return periods;
         const lastPeriod = periods[periods.length - 1];
@@ -335,17 +337,15 @@
 
           // Filter out incomplete weeks (where end date is today or in the future)
           const today = new Date();
-          today.setHours(0, 0, 0, 0); // Reset to midnight for date comparison
+          today.setHours(0, 0, 0, 0);
           weeks = weeks.filter(w => {
             const [y, m, d] = w.end.split('-').map(Number);
             const weekEnd = new Date(y, m - 1, d);
-            return weekEnd < today; // Only show weeks that ended before today
+            return weekEnd < today;
           });
 
-          const limitedWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
-          weeks = weeks.slice(-limitedWeeks);
-
-          const filtered = filterIncompleteLastPeriod(weeks.map(w => ({
+          // Store all weeks for navigation
+          const allWeeksProcessed = weeks.map(w => ({
             revenue: w.revenue || 0,
             cogs: w.cogs || 0,
             opex: w.operations || 0,
@@ -353,9 +353,17 @@
             label: fmtWeekLabel(w.start),
             startDate: w.start,
             endDate: w.end
-          })));
+          }));
+          setAllWeeks(allWeeksProcessed);
 
-          setData(filtered.map(w => {
+          // Calculate which weeks to show based on offset and range
+          const totalAvailable = allWeeksProcessed.length;
+          const displayWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
+          const startIdx = Math.max(0, totalAvailable - displayWeeks - offsetWeeks);
+          const endIdx = Math.max(0, totalAvailable - offsetWeeks);
+          const selected = filterIncompleteLastPeriod(allWeeksProcessed.slice(startIdx, endIdx));
+
+          setData(selected.map(w => {
             const startDate = w.startDate;
             const [y, m, d] = startDate.split('-').map(Number);
             const endDate = new Date(y, m - 1, d + 6);
@@ -368,6 +376,12 @@
           setError('Failed to load P&L data: ' + err.message);
         }
       };
+
+      // Calculate navigation boundaries
+      const totalAvailableWeeks = allWeeks.length;
+      const maxOffset = Math.max(0, totalAvailableWeeks - weeksRange);
+      const canGoPrevious = offsetWeeks < maxOffset;
+      const canGoNext = offsetWeeks > 0;
       return (
         <div className="container-expanded">
           <header>
@@ -378,20 +392,24 @@
           <div className="controls">
             <div className="view-toggle" style={{ visibility: periodLength === 13 ? 'hidden' : 'visible' }}>
               {WEEK_COUNT_OPTIONS.map(opt => (
-                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
+                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => { setWeeksRange(opt.weeks); setOffsetWeeks(0); }}>{opt.label}</button>
               ))}
             </div>
             {data.length > 0 && (
               <>
                 <div className="view-toggle">
-                  <button className={periodLength === 1 ? 'active' : ''} onClick={() => { setPeriodLength(1); setWeeksRange(16); }}>1 Week</button>
-                  <button className={periodLength === 2 ? 'active' : ''} onClick={() => { setPeriodLength(2); setWeeksRange(26); }}>2 Weeks</button>
-                  <button className={periodLength === 4 ? 'active' : ''} onClick={() => { setPeriodLength(4); setWeeksRange(26); }}>4 Weeks</button>
-                  <button className={periodLength === 13 ? 'active' : ''} onClick={() => { setPeriodLength(13); setWeeksRange(52); }}>Quarterly</button>
+                  <button className={periodLength === 1 ? 'active' : ''} onClick={() => { setPeriodLength(1); setWeeksRange(16); setOffsetWeeks(0); }}>1 Week</button>
+                  <button className={periodLength === 2 ? 'active' : ''} onClick={() => { setPeriodLength(2); setWeeksRange(26); setOffsetWeeks(0); }}>2 Weeks</button>
+                  <button className={periodLength === 4 ? 'active' : ''} onClick={() => { setPeriodLength(4); setWeeksRange(26); setOffsetWeeks(0); }}>4 Weeks</button>
+                  <button className={periodLength === 13 ? 'active' : ''} onClick={() => { setPeriodLength(13); setWeeksRange(52); setOffsetWeeks(0); }}>Quarterly</button>
                 </div>
                 <div className="view-toggle">
                   <button className={viewMode === 'dollars' ? 'active' : ''} onClick={() => setViewMode('dollars')}>Dollars</button>
                   <button className={viewMode === 'percent' ? 'active' : ''} onClick={() => setViewMode('percent')}>% of Revenue</button>
+                </div>
+                <div className="view-toggle">
+                  <button onClick={() => setOffsetWeeks(Math.min(offsetWeeks + weeksRange, maxOffset))} disabled={!canGoPrevious}>← Previous {weeksRange === 8 ? '8 Weeks' : weeksRange === 16 ? '16 Weeks' : weeksRange === 26 ? '26 Weeks' : '52 Weeks'}</button>
+                  <button onClick={() => setOffsetWeeks(Math.max(0, offsetWeeks - weeksRange))} disabled={!canGoNext}>Next {weeksRange === 8 ? '8 Weeks' : weeksRange === 16 ? '16 Weeks' : weeksRange === 26 ? '26 Weeks' : '52 Weeks'} →</button>
                 </div>
               </>
             )}
@@ -771,12 +789,14 @@
       const [error, setError] = useState('');
       const [periodSource, setPeriodSource] = useState('');
       const [weeksRange, setWeeksRange] = useState(26); // Start with 6 months
+      const [allWeeks, setAllWeeks] = useState([]);
+      const [offsetWeeks, setOffsetWeeks] = useState(0);
       const PRIME_COST_MONTH_OPTIONS = [
         { weeks: 17, label: '4 Months' },
         { weeks: 26, label: '6 Months' },
         { weeks: 52, label: '1 Year' },
       ];
-      useEffect(() => { fetchData(); }, [weeksRange]);
+      useEffect(() => { fetchData(); }, [weeksRange, offsetWeeks]);
       const fetchData = async () => {
         try {
           setStatus('loading');
@@ -794,7 +814,7 @@
           }
 
           // Convert periods to chart format
-          let grouped = data.periods
+          const grouped = data.periods
             .filter(p => p.totalRevenue > 0)
             .map(p => {
               const startDate = new Date(p.startDate);
@@ -820,20 +840,32 @@
             })
             .sort((a, b) => a.dateObj - b.dateObj);
 
-          // Filter by weeks range if needed
-          if (weeksRange < 52) {
-            const today = new Date();
-            const cutoffDate = new Date(today.getTime() - weeksRange * 7 * 24 * 60 * 60 * 1000);
-            grouped = grouped.filter(p => p.dateObj >= cutoffDate);
-          }
+          setAllWeeks(grouped);
 
-          setWeeks(grouped);
-          setStatus(grouped.length > 0 ? 'ready' : 'empty');
+          // Filter by weeks range and offset
+          const today = new Date();
+          const endDate = new Date(today.getTime() - offsetWeeks * 7 * 24 * 60 * 60 * 1000);
+          const startDate = new Date(today.getTime() - (offsetWeeks + weeksRange) * 7 * 24 * 60 * 60 * 1000);
+          const filtered = grouped.filter(p => p.dateObj >= startDate && p.dateObj < endDate);
+
+          setWeeks(filtered);
+          setStatus(filtered.length > 0 ? 'ready' : 'empty');
         } catch (err) {
           setError('Failed to load prime cost data: ' + err.message);
           setStatus('error');
         }
       };
+
+      // Calculate navigation boundaries
+      const today = new Date();
+      let maxOffset = 0;
+      if (allWeeks.length > 0) {
+        const oldestDate = allWeeks[0].dateObj;
+        const weeksDiff = Math.floor((today - oldestDate) / (7 * 24 * 60 * 60 * 1000));
+        maxOffset = Math.max(0, weeksDiff - weeksRange);
+      }
+      const canGoPrevious = offsetWeeks < maxOffset;
+      const canGoNext = offsetWeeks > 0;
       const goalMet = weeks.filter(w => w.totalPercent <= 60).length;
       const avgPrimeCost = weeks.length > 0 ? weeks.reduce((sum, w) => sum + w.totalPercent, 0) / weeks.length : 0;
       return (
@@ -845,8 +877,12 @@
           <div className="controls">
             <div className="view-toggle">
               {PRIME_COST_MONTH_OPTIONS.map(opt => (
-                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => setWeeksRange(opt.weeks)}>{opt.label}</button>
+                <button key={opt.weeks} className={weeksRange === opt.weeks ? 'active' : ''} onClick={() => { setWeeksRange(opt.weeks); setOffsetWeeks(0); }}>{opt.label}</button>
               ))}
+            </div>
+            <div className="view-toggle">
+              <button onClick={() => setOffsetWeeks(offsetWeeks + weeksRange)} disabled={!canGoPrevious}>← Previous {weeksRange === 17 ? '4 Months' : weeksRange === 26 ? '6 Months' : '1 Year'}</button>
+              <button onClick={() => setOffsetWeeks(Math.max(0, offsetWeeks - weeksRange))} disabled={!canGoNext}>Next {weeksRange === 17 ? '4 Months' : weeksRange === 26 ? '6 Months' : '1 Year'} →</button>
             </div>
           </div>
           {status === 'loading' && <div className="loading">Loading financial and labor data…</div>}
