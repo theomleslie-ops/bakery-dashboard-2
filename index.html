@@ -311,7 +311,7 @@
       const [periodSource, setPeriodSource] = useState('');
       const [viewMode, setViewMode] = useState('dollars');
       const [weeksRange, setWeeksRange] = useState(16);
-      const [periodLength, setPeriodLength] = useState(1);
+      const [periodLength, setPeriodLength] = useState(2);
       useEffect(() => { fetchData(); }, [weeksRange]);
       const filterIncompleteLastPeriod = (periods) => {
         if (periods.length < 2) return periods;
