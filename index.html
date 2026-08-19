@@ -778,7 +778,7 @@
                   <g key={`tooltip${hoveredWeek}`}>
                     <line x1={cx} y1="20" x2={cx} y2={chartHeight + 50} stroke="var(--chart-grid)" strokeWidth="1" strokeDasharray="3" />
                     <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} fill="var(--chart-surface)" stroke="var(--chart-grid)" strokeWidth="1" rx="6" />
-                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{week.fullLabel}</text>
+                    <text x={tooltipX + 10} y={tooltipY + 18} fontSize="12" fontWeight="700" fill="var(--chart-ink)">{week.dateRange || week.fullLabel}</text>
                     <text x={tooltipX + 10} y={tooltipY + 36} fontSize="11" fill="var(--chart-ink-secondary)">Food Cost: {week.foodPercent.toFixed(1)}%</text>
                     <text x={tooltipX + 10} y={tooltipY + 54} fontSize="11" fill="var(--chart-ink-secondary)">Labor: {week.laborPercent.toFixed(1)}%</text>
                     <text x={tooltipX + 10} y={tooltipY + 72} fontSize="11" fontWeight="600" fill="var(--chart-ink)">Prime Cost: {week.totalPercent.toFixed(1)}%</text>
@@ -835,15 +835,22 @@
               const endMonth = endDate.getMonth() + 1;
               const startDay = startDate.getDate();
               const endDay = endDate.getDate();
+              const startYear = startDate.getFullYear();
+              const endYear = endDate.getFullYear();
 
               const label = startMonth === endMonth
                 ? `${startMonth}/${startDay}-${endDay}`
                 : `${startMonth}/${startDay}-${endMonth}/${endDay}`;
 
+              const startStr = startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+              const endStr = endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+              const dateRange = `${startStr} – ${endStr}`;
+
               return {
                 label: label,
                 fullLabel: p.label || label,
                 dateObj: startDate,
+                dateRange: dateRange,
                 revenue: p.totalRevenue,
                 foodPercent: (p.totalCogs / p.totalRevenue) * 100,
                 laborPercent: (p.totalLabor / p.totalRevenue) * 100,
@@ -919,7 +926,16 @@
                 </div>
               </div>
               <div className="chart-container">
-                <div className="chart-title">Prime Cost, by 4-Week Period (% of Revenue)</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div className="chart-title">Prime Cost, by 4-Week Period (% of Revenue)</div>
+                  <div style={{ fontSize: '12px', color: '#8b6c57', textAlign: 'right' }}>
+                    {weeks.length > 0 && (
+                      <div>
+                        {weeks[0].dateRange.split(' – ')[0]} – {weeks[weeks.length - 1].dateRange.split(' – ')[1]}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <PrimeCostChart weeks={weeks} />
               </div>
             </>
