@@ -24,10 +24,9 @@ async function refreshPrimeCostData(qbClient) {
     const store = new PrimeCostStore();
 
     // Fetch 4-week P&L data from QB (includes labor detail)
-    // Use past 1 year (~13 API calls for 4-week periods)
+    // Fetch back to March 2022 for full historical data
     const endDate = new Date();
-    const startDate = new Date(endDate);
-    startDate.setFullYear(startDate.getFullYear() - 1);
+    const startDate = new Date(2022, 2, 1); // March 1, 2022
 
     const periods = await fetcher.fetchPrimeCostPeriodsFromQB(
       startDate.toISOString().split('T')[0],
