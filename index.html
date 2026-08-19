@@ -154,8 +154,8 @@
           const [ey, em, ed] = lastWeekStart.split('-').map(Number);
           const startDateObj = new Date(sy, sm - 1, sd);
           const endDateObj = new Date(ey, em - 1, ed + 6);
-          const endStr = endDateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-          const startStr = startDateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          const endStr = endDateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+          const startStr = startDateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
           const dateRange = `${startStr} – ${endStr}`;
           aggregated.push({ revenue, cogs, opex, pl, month: periodLabel, dateRange });
         }
@@ -367,8 +367,8 @@
             const startDate = w.startDate;
             const [y, m, d] = startDate.split('-').map(Number);
             const endDate = new Date(y, m - 1, d + 6);
-            const endStr = endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-            const startStr = new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            const endStr = endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+            const startStr = new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
             return { ...w, month: w.label, startDate: startDate, dateRange: `${startStr} – ${endStr}` };
           }));
           setPeriodSource('QuickBooks P&L (weekly)');
@@ -421,7 +421,17 @@
           )}
           {data.length > 0 && (
             <div className="chart-container">
-              <div className="chart-title">Revenue, COGS, Operating Expenses & Net Income, {periodLength === 1 ? 'weekly' : periodLength === 2 ? 'bi-weekly' : periodLength === 4 ? 'monthly' : 'quarterly'} ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <div className="chart-title">Revenue, COGS, Operating Expenses & Net Income, {periodLength === 1 ? 'weekly' : periodLength === 2 ? 'bi-weekly' : periodLength === 4 ? 'monthly' : 'quarterly'} ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
+                <div style={{ fontSize: '12px', color: '#8b6c57', textAlign: 'right' }}>
+                  {data.length > 0 && (
+                    <>
+                      <div>{weeksRange} weeks</div>
+                      <div>{data[data.length - 1].dateRange}</div>
+                    </>
+                  )}
+                </div>
+              </div>
               <StackedBarChart data={data} viewMode={viewMode} periodLength={periodLength} />
             </div>
           )}
