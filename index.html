@@ -805,16 +805,19 @@
         { weeks: 26, label: '6 Months' },
         { weeks: 52, label: '1 Year' },
       ];
-      useEffect(() => { fetchData(); }, [weeksRange, offsetWeeks]);
-      const fetchData = async () => {
+
+      // Fetch data once on mount
+      useEffect(() => { fetchInitialData(); }, []);
+
+      // Filter cached data when range or offset changes
+      useEffect(() => { filterData(); }, [weeksRange, offsetWeeks, allWeeks]);
+
+      const fetchInitialData = async () => {
         try {
           setStatus('loading');
           const baseUrl = window.location.origin;
 
-          // Refresh prime cost data first
-          await fetch(`${baseUrl}/api/prime-cost/refresh`, { method: 'POST' });
-
-          // Fetch 4-week prime cost periods
+          // Fetch cached 4-week prime cost periods (already refreshed on server startup)
           const response = await fetch(`${baseUrl}/api/prime-cost/periods`);
           const data = await response.json();
 
@@ -850,19 +853,24 @@
             .sort((a, b) => a.dateObj - b.dateObj);
 
           setAllWeeks(grouped);
-
-          // Filter by weeks range and offset
-          const today = new Date();
-          const endDate = new Date(today.getTime() - offsetWeeks * 7 * 24 * 60 * 60 * 1000);
-          const startDate = new Date(today.getTime() - (offsetWeeks + weeksRange) * 7 * 24 * 60 * 60 * 1000);
-          const filtered = grouped.filter(p => p.dateObj >= startDate && p.dateObj < endDate);
-
-          setWeeks(filtered);
-          setStatus(filtered.length > 0 ? 'ready' : 'empty');
+          setPeriodSource('Cached from server startup');
+          setStatus('ready');
         } catch (err) {
           setError('Failed to load prime cost data: ' + err.message);
           setStatus('error');
         }
+      };
+
+      const filterData = () => {
+        if (allWeeks.length === 0) return;
+
+        // Filter by weeks range and offset (instant client-side filtering)
+        const today = new Date();
+        const endDate = new Date(today.getTime() - offsetWeeks * 7 * 24 * 60 * 60 * 1000);
+        const startDate = new Date(today.getTime() - (offsetWeeks + weeksRange) * 7 * 24 * 60 * 60 * 1000);
+        const filtered = allWeeks.filter(p => p.dateObj >= startDate && p.dateObj < endDate);
+
+        setWeeks(filtered);
       };
 
       // Calculate navigation boundaries
