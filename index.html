@@ -829,14 +829,11 @@
           const grouped = data.periods
             .filter(p => p.totalRevenue > 0)
             .map(p => {
-              const startDate = new Date(p.startDate);
-              const endDate = new Date(p.endDate);
-              const startMonth = startDate.getMonth() + 1;
-              const endMonth = endDate.getMonth() + 1;
-              const startDay = startDate.getDate();
-              const endDay = endDate.getDate();
-              const startYear = startDate.getFullYear();
-              const endYear = endDate.getFullYear();
+              // Parse dates as UTC to avoid timezone shifts
+              const [startYear, startMonth, startDay] = p.startDate.split('-').map(Number);
+              const [endYear, endMonth, endDay] = p.endDate.split('-').map(Number);
+              const startDate = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+              const endDate = new Date(Date.UTC(endYear, endMonth - 1, endDay));
 
               const label = startMonth === endMonth
                 ? `${startMonth}/${startDay}-${endDay}`
