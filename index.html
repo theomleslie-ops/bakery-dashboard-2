@@ -425,10 +425,9 @@
                 <div className="chart-title">Revenue, COGS, Operating Expenses & Net Income, {periodLength === 1 ? 'weekly' : periodLength === 2 ? 'bi-weekly' : periodLength === 4 ? 'monthly' : 'quarterly'} ({viewMode === 'percent' ? '% of Revenue' : '$'})</div>
                 <div style={{ fontSize: '12px', color: '#8b6c57', textAlign: 'right' }}>
                   {data.length > 0 && (
-                    <>
-                      <div>{weeksRange} weeks</div>
-                      <div>{data[data.length - 1].dateRange}</div>
-                    </>
+                    <div>
+                      {data[0].dateRange.split(' – ')[0]} – {data[data.length - 1].dateRange.split(' – ')[1]}
+                    </div>
                   )}
                 </div>
               </div>
