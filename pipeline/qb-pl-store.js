@@ -45,17 +45,48 @@ class PLStore {
       stored.weeks.map(w => [`${w.start}|${w.end}`, w])
     );
 
-    // Upsert new weeks
-    for (const week of newWeeks) {
-      if (!week.error) {
-        const key = `${week.start}|${week.end}`;
-        storedMap.set(key, week);
+    // Remove overlapping weeks from old data before adding new ones
+    // An overlapping week is one where the date range is different but dates overlap
+    const newWeeksList = newWeeks.filter(w => !w.error);
+    const keysToRemove = [];
+
+    for (const [key, oldWeek] of storedMap) {
+      const oldStart = new Date(oldWeek.start);
+      const oldEnd = new Date(oldWeek.end);
+
+      // Check if this old week overlaps with any new week
+      for (const newWeek of newWeeksList) {
+        const newStart = new Date(newWeek.start);
+        const newEnd = new Date(newWeek.end);
+
+        // Overlaps if: old_start <= new_end AND old_end >= new_start
+        const overlaps = oldStart <= newEnd && oldEnd >= newStart;
+
+        // But keep it if it's the exact same date range (replacement)
+        const isSameDateRange = oldStart.getTime() === newStart.getTime() &&
+                                oldEnd.getTime() === newEnd.getTime();
+
+        if (overlaps && !isSameDateRange) {
+          keysToRemove.push(key);
+          break;
+        }
       }
     }
 
-    // Sort by week number and convert back to array
+    // Remove overlapping old entries
+    keysToRemove.forEach(key => storedMap.delete(key));
+
+    // Upsert new weeks
+    for (const week of newWeeksList) {
+      const key = `${week.start}|${week.end}`;
+      storedMap.set(key, week);
+    }
+
+    // Sort by start date and convert back to array
     const updated = {
-      weeks: Array.from(storedMap.values()).sort((a, b) => a.week - b.week),
+      weeks: Array.from(storedMap.values()).sort((a, b) =>
+        new Date(a.start).getTime() - new Date(b.start).getTime()
+      ),
       lastUpdated: new Date().toISOString(),
       count: Array.from(storedMap.values()).filter(w => !w.error).length
     };
