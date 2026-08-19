@@ -270,7 +270,17 @@ class QBPLFetcher {
     };
 
     if (this.rowMap.revenue !== null && rows[this.rowMap.revenue]) {
-      metrics.revenue = extractRowValue(rows[this.rowMap.revenue]);
+      const revenueRow = rows[this.rowMap.revenue];
+      metrics.revenue = extractRowValue(revenueRow);
+      // Debug revenue extraction
+      console.log(`  DEBUG Revenue extraction:`);
+      if (revenueRow.Summary?.ColData) {
+        console.log(`    Summary.ColData values:`, revenueRow.Summary.ColData.map((c, i) => `[${i}]=${c.value}`).join(', '));
+      }
+      if (revenueRow.Header?.ColData) {
+        console.log(`    Header.ColData values:`, revenueRow.Header.ColData.map((c, i) => `[${i}]=${c.value}`).join(', '));
+      }
+      console.log(`    Extracted revenue: ${metrics.revenue}`);
     }
     if (this.rowMap.cogs !== null && rows[this.rowMap.cogs]) {
       metrics.cogs = extractRowValue(rows[this.rowMap.cogs]);
