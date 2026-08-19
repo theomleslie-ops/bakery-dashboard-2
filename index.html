@@ -839,8 +839,10 @@
                 ? `${startMonth}/${startDay}-${endDay}`
                 : `${startMonth}/${startDay}-${endMonth}/${endDay}`;
 
-              const startStr = startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-              const endStr = endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+              // Format dates using original UTC components to match exact fetch dates
+              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+              const startStr = `${monthNames[startMonth - 1]} ${startDay}, ${startYear}`;
+              const endStr = `${monthNames[endMonth - 1]} ${endDay}, ${endYear}`;
               const dateRange = `${startStr} – ${endStr}`;
 
               return {
