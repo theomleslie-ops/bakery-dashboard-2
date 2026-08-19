@@ -40,9 +40,8 @@ class QPrimeCostFetcher {
       for (let i = 0; i < fourWeekPeriods.length; i++) {
         const periodDates = fourWeekPeriods[i];
         try {
-          console.log(`  [${i + 1}/${fourWeekPeriods.length}] Fetching ${periodDates.start} to ${periodDates.end}...`);
           const report = await this.plFetcher.fetchPLReport(periodDates.start, periodDates.end);
-          const metrics = this.plFetcher.extractMetrics(report);
+          const metrics = this.plFetcher.extractMetrics(report, periodDates.start, periodDates.end);
 
           // Create 4-week period
           // Use actual period dates for both hover and label
@@ -73,19 +72,10 @@ class QPrimeCostFetcher {
           };
 
           periods.push(period);
-          console.log(`    ✓ labor=${metrics.labor.toFixed(0)}, prime cost=${primeCostPercent.toFixed(1)}%`);
         } catch (err) {
-          console.error(`    ✗ Error: ${err.message}`);
+          console.error(`Error fetching ${periodDates.start} to ${periodDates.end}: ${err.message}`);
           failedPeriods.push({ index: i + 1, dates: periodDates, error: err.message });
         }
-      }
-
-      console.log(`  ✅ Fetched ${periods.length}/${fourWeekPeriods.length} periods`);
-      if (failedPeriods.length > 0) {
-        console.warn(`  ⚠️  ${failedPeriods.length} periods failed:`);
-        failedPeriods.forEach(f => {
-          console.warn(`      [${f.index}] ${f.dates.start} to ${f.dates.end}: ${f.error}`);
-        });
       }
       return periods;
     } catch (err) {
