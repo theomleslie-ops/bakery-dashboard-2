@@ -329,7 +329,7 @@
       const fetchData = async () => {
         try {
           const baseUrl = window.location.origin;
-          const response = await fetch(`${baseUrl}/api/pl/weekly/range?start_date=2023-01-01&end_date=2026-08-12`);
+          const response = await fetch(`${baseUrl}/api/pl/weekly/range?start_date=2023-01-02&end_date=2026-08-12`);
           const result = await response.json();
 
           // Convert QB weekly data to dashboard format
