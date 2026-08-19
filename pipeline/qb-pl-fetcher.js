@@ -348,15 +348,17 @@ class QBPLFetcher {
 
   /**
    * Generate week ranges (Monday-Sunday)
-   * Only includes COMPLETE weeks; partial weeks at the end are excluded until complete
+   * Only includes COMPLETE weeks with natural Monday-Sunday boundaries
+   * Partial weeks (at start or end) are excluded
    */
   generateWeekRanges(startDate, endDate) {
     let current = new Date(startDate);
     const dayOfWeek = current.getDay();
 
-    // Adjust to Monday
+    // Adjust to next Monday (don't include partial week at start)
     if (dayOfWeek !== 1) {
-      current.setDate(current.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+      const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+      current.setDate(current.getDate() + daysUntilMonday);
     }
 
     const weeks = [];
@@ -365,14 +367,12 @@ class QBPLFetcher {
       const weekEnd = new Date(current);
       weekEnd.setDate(weekEnd.getDate() + 6); // Sunday
 
-      // Only include COMPLETE weeks (where both start and end fall within the period)
-      // Skip partial weeks at the end
-      if (weekEnd <= endDate) {
-        // Week is complete, include it
-        const fetchStart = weekStart < startDate ? startDate : weekStart;
+      // Only include if the entire week (Mon-Sun) is within the period
+      // This avoids partial weeks and overlaps
+      if (weekStart >= startDate && weekEnd <= endDate) {
         weeks.push({
           weekNum: weeks.length + 1,
-          start: fetchStart.toISOString().split('T')[0],
+          start: weekStart.toISOString().split('T')[0],
           end: weekEnd.toISOString().split('T')[0]
         });
       }
