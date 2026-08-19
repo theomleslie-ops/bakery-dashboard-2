@@ -311,7 +311,7 @@
       const [periodSource, setPeriodSource] = useState('');
       const [viewMode, setViewMode] = useState('dollars');
       const [weeksRange, setWeeksRange] = useState(16);
-      const [periodLength, setPeriodLength] = useState(2);
+      const [periodLength, setPeriodLength] = useState(1);
       useEffect(() => { fetchData(); }, [weeksRange]);
       const filterIncompleteLastPeriod = (periods) => {
         if (periods.length < 2) return periods;
@@ -384,6 +384,7 @@
             {data.length > 0 && (
               <>
                 <div className="view-toggle">
+                  <button className={periodLength === 1 ? 'active' : ''} onClick={() => { setPeriodLength(1); setWeeksRange(16); }}>1 Week</button>
                   <button className={periodLength === 2 ? 'active' : ''} onClick={() => { setPeriodLength(2); setWeeksRange(26); }}>2 Weeks</button>
                   <button className={periodLength === 4 ? 'active' : ''} onClick={() => { setPeriodLength(4); setWeeksRange(26); }}>4 Weeks</button>
                   <button className={periodLength === 13 ? 'active' : ''} onClick={() => { setPeriodLength(13); setWeeksRange(52); }}>Quarterly</button>
