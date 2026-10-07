@@ -110,9 +110,11 @@ class QBPLFetcher {
         }
 
         if (subRowsArray) {
+          console.log(`  📋 Expenses sub-rows (${subRowsArray.length} total):`);
           for (let j = 0; j < subRowsArray.length; j++) {
             const subRow = subRowsArray[j];
             const subName = subRow.Header?.ColData?.[0]?.value || '';
+            console.log(`      [${j}] "${subName}"`);
             // Match broader set of labor account names
             const isLaborAccount = subName.includes('LABOR') ||
                                    subName.includes('PAYROLL') ||
@@ -126,6 +128,9 @@ class QBPLFetcher {
               break;
             }
           }
+          if (!this.rowMap.labor) {
+            console.log(`  ⚠️  No labor account found in Expenses sub-rows`);
+          }
         }
       } else if (accountName === 'Net Income') {
         this.rowMap.netIncome = i;
@@ -135,6 +140,7 @@ class QBPLFetcher {
 
     // If labor not found in Expenses, search all top-level rows as fallback
     if (this.rowMap.labor === null) {
+      console.log(`  📋 Searching top-level rows for labor account...`);
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const accountName = row.Header?.ColData?.[0]?.value || '';
@@ -149,6 +155,10 @@ class QBPLFetcher {
           console.log(`  ✓ Labor found at top level: index ${i} (${accountName})`);
           break;
         }
+      }
+      if (this.rowMap.labor === null) {
+        console.log(`  ⚠️  No labor account found at top level either`);
+        console.log(`  📋 All top-level accounts: ${rows.map((r, i) => `[${i}] ${r.Header?.ColData?.[0]?.value || '(no name)'}`).join(', ')}`);
       }
     }
 
@@ -238,6 +248,7 @@ class QBPLFetcher {
     if (this.rowMap.labor !== null) {
       if (typeof this.rowMap.labor === 'number') {
         metrics.labor = extractRowValue(rows[this.rowMap.labor]);
+        console.log(`  Labor (top-level): ${metrics.labor}`);
       } else if (typeof this.rowMap.labor === 'object') {
         const expensesRow = rows[this.rowMap.labor.parentIdx];
         if (expensesRow) {
@@ -263,12 +274,18 @@ class QBPLFetcher {
                                      subName.includes('Compensation');
               if (isLaborAccount) {
                 metrics.labor = extractRowValue(subRow);
+                console.log(`  Labor (sub-row): ${metrics.labor} from "${subName}"`);
                 break;
               }
+            }
+            if (metrics.labor === 0) {
+              console.log(`  ⚠️  Labor not found in sub-rows, checked ${subRowsArray.length} accounts`);
             }
           }
         }
       }
+    } else {
+      console.log(`  ⚠️  Labor rowMap is null - not found during identifyRowIds()`);
     }
     if (this.rowMap.operations !== null && rows[this.rowMap.operations]) {
       metrics.operations = extractRowValue(rows[this.rowMap.operations]);
