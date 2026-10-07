@@ -1033,8 +1033,9 @@ app.get('/api/overtime', async (req, res) => {
 
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentWeekStart = getWeekStart(todayStr, startDow);
-    const defaultLastCompletedWeekStart = addDays(currentWeekStart, -7);
-    const lastWeekStart = req.query.end || defaultLastCompletedWeekStart;
+    // Show current week by default, not just completed weeks
+    const defaultLastWeekStart = currentWeekStart;
+    const lastWeekStart = req.query.end || defaultLastWeekStart;
 
     let rangeStart = addDays(lastWeekStart, -7 * (weekCount - 1));
     if (rangeStart < OVERTIME_HISTORY_START) rangeStart = OVERTIME_HISTORY_START;
