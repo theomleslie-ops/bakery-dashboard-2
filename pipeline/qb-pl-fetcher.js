@@ -115,10 +115,11 @@ class QBPLFetcher {
             const subRow = subRowsArray[j];
             const subName = subRow.Header?.ColData?.[0]?.value || '';
             console.log(`      [${j}] "${subName}"`);
-            // Match broader set of labor account names
+            // Match broader set of labor account names (including account code 6000)
             const isLaborAccount = subName.includes('LABOR') ||
                                    subName.includes('PAYROLL') ||
                                    subName.includes('6200') ||
+                                   subName.includes('6000') ||
                                    subName.includes('Salaries') ||
                                    subName.includes('Wages') ||
                                    subName.includes('Compensation');
@@ -147,6 +148,7 @@ class QBPLFetcher {
         const isLaborAccount = accountName.includes('LABOR') ||
                                accountName.includes('PAYROLL') ||
                                accountName.includes('6200') ||
+                               accountName.includes('6000') ||
                                accountName.includes('Salaries') ||
                                accountName.includes('Wages') ||
                                accountName.includes('Compensation');
@@ -158,7 +160,7 @@ class QBPLFetcher {
       }
       if (this.rowMap.labor === null) {
         console.log(`  ⚠️  No labor account found at top level either`);
-        console.log(`  📋 All top-level accounts: ${rows.map((r, i) => `[${i}] ${r.Header?.ColData?.[0]?.value || '(no name)'}`).join(', ')}`);
+        console.log(`  📋 All top-level accounts (for reference): ${rows.map((r, i) => `[${i}]"${r.Header?.ColData?.[0]?.value || '(no name)'}"`).join(', ')}`);
       }
     }
 
@@ -265,10 +267,11 @@ class QBPLFetcher {
             for (let i = 0; i < subRowsArray.length; i++) {
               const subRow = subRowsArray[i];
               const subName = subRow.Header?.ColData?.[0]?.value || '';
-              // Match broader set of labor account names
+              // Match broader set of labor account names (including account code 6000)
               const isLaborAccount = subName.includes('LABOR') ||
                                      subName.includes('PAYROLL') ||
                                      subName.includes('6200') ||
+                                     subName.includes('6000') ||
                                      subName.includes('Salaries') ||
                                      subName.includes('Wages') ||
                                      subName.includes('Compensation');
