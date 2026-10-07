@@ -279,7 +279,8 @@ class QBPLFetcher {
               }
             }
             if (metrics.labor === 0) {
-              console.log(`  ⚠️  Labor not found in sub-rows, checked ${subRowsArray.length} accounts`);
+              console.log(`  ⚠️  Labor not found in sub-rows (checked ${subRowsArray.length} accounts)`);
+              console.log(`     Available accounts: ${subRowsArray.map((r, i) => `[${i}]"${r.Header?.ColData?.[0]?.value || '(no name)'}"`).join(', ')}`);
             }
           }
         }
