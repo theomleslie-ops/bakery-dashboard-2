@@ -113,8 +113,16 @@ class QBPLFetcher {
           for (let j = 0; j < subRowsArray.length; j++) {
             const subRow = subRowsArray[j];
             const subName = subRow.Header?.ColData?.[0]?.value || '';
-            if (subName.includes('LABOR') || subName.includes('PAYROLL') || subName.includes('6200')) {
+            // Match broader set of labor account names
+            const isLaborAccount = subName.includes('LABOR') ||
+                                   subName.includes('PAYROLL') ||
+                                   subName.includes('6200') ||
+                                   subName.includes('Salaries') ||
+                                   subName.includes('Wages') ||
+                                   subName.includes('Compensation');
+            if (isLaborAccount) {
               this.rowMap.labor = { parentIdx: i, subIdx: j };
+              console.log(`  ✓ Labor found: index ${j} (${subName})`);
               break;
             }
           }
@@ -122,6 +130,25 @@ class QBPLFetcher {
       } else if (accountName === 'Net Income') {
         this.rowMap.netIncome = i;
         console.log(`  ✓ Net Income: index ${i} (${accountName})`);
+      }
+    }
+
+    // If labor not found in Expenses, search all top-level rows as fallback
+    if (this.rowMap.labor === null) {
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const accountName = row.Header?.ColData?.[0]?.value || '';
+        const isLaborAccount = accountName.includes('LABOR') ||
+                               accountName.includes('PAYROLL') ||
+                               accountName.includes('6200') ||
+                               accountName.includes('Salaries') ||
+                               accountName.includes('Wages') ||
+                               accountName.includes('Compensation');
+        if (isLaborAccount) {
+          this.rowMap.labor = i;
+          console.log(`  ✓ Labor found at top level: index ${i} (${accountName})`);
+          break;
+        }
       }
     }
 
@@ -227,7 +254,14 @@ class QBPLFetcher {
             for (let i = 0; i < subRowsArray.length; i++) {
               const subRow = subRowsArray[i];
               const subName = subRow.Header?.ColData?.[0]?.value || '';
-              if (subName.includes('LABOR') || subName.includes('PAYROLL') || subName.includes('6200')) {
+              // Match broader set of labor account names
+              const isLaborAccount = subName.includes('LABOR') ||
+                                     subName.includes('PAYROLL') ||
+                                     subName.includes('6200') ||
+                                     subName.includes('Salaries') ||
+                                     subName.includes('Wages') ||
+                                     subName.includes('Compensation');
+              if (isLaborAccount) {
                 metrics.labor = extractRowValue(subRow);
                 break;
               }
