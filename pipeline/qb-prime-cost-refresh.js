@@ -25,11 +25,11 @@ async function refreshPrimeCostData(qbClient) {
 
     // Fetch 4-week P&L data from QB (includes labor detail)
     // Fetch back to March 2022 for full historical data
-    // Use last Monday as end date to ensure QB has complete labor data for all periods
+    // Use last Sunday as end date to get complete labor data
     const endDate = new Date();
     const dayOfWeek = endDate.getDay();
-    // Go back to last Monday (1 = Monday, 0 = Sunday)
-    const daysToGoBack = dayOfWeek === 1 ? 7 : (dayOfWeek === 0 ? 1 : dayOfWeek - 1);
+    // Go back to last Sunday (0 = Sunday)
+    const daysToGoBack = dayOfWeek === 0 ? 7 : dayOfWeek;
     endDate.setDate(endDate.getDate() - daysToGoBack);
     const startDate = new Date(2022, 2, 1); // March 1, 2022
 
