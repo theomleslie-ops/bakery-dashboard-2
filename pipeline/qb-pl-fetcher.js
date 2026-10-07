@@ -28,7 +28,8 @@ class QBPLFetcher {
         params: {
           start_date: startDate,
           end_date: endDate,
-          minorversion: 75
+          minorversion: 75,
+          include_zero_rows: true
         },
         headers: {
           Authorization: `Bearer ${tokens.access_token}`,

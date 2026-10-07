@@ -44,20 +44,6 @@ async function refreshPrimeCostData(qbClient) {
       };
     }
 
-    // Hardcode labor for most recent period if QB didn't return it
-    // QB API doesn't return labor for periods ending after ~Aug 23, but the data exists in QB UI
-    if (periods.length > 0) {
-      const lastPeriod = periods[periods.length - 1];
-      if (lastPeriod.totalLabor === 0 && lastPeriod.endDate === '2026-10-04') {
-        // Hardcoded labor for Sept 7 - Oct 4, 2026 period from QB UI
-        lastPeriod.totalLabor = 140031.55;
-        lastPeriod.primeContribution = lastPeriod.totalCogs + lastPeriod.totalLabor;
-        lastPeriod.primeCostPercent = lastPeriod.totalRevenue > 0 ? (lastPeriod.primeContribution / lastPeriod.totalRevenue) * 100 : 0;
-        lastPeriod.meetsGoal = lastPeriod.primeCostPercent <= 60;
-        console.log(`💾 Hardcoded labor for most recent period: $${lastPeriod.totalLabor}`);
-      }
-    }
-
     // Calculate average prime cost
     const avgPrimeCost = fetcher.calculateAverage(periods);
     const goalMetCount = periods.filter(p => p.meetsGoal).length;
