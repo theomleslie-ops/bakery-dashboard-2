@@ -25,10 +25,9 @@ async function refreshPrimeCostData(qbClient) {
 
     // Fetch 4-week P&L data from QB (includes labor detail)
     // Fetch back to March 2022 for full historical data
-    // Use 45 days ago (~6 weeks) - QB returns labor reliably for periods ending before late Sept
-    // Periods ending after ~Aug 23 don't include labor account in QB API response
+    // Use today as end date to show current data
+    // Note: QB doesn't return labor for periods ending after ~Aug 23, so recent periods will have labor=0
     const endDate = new Date();
-    endDate.setDate(endDate.getDate() - 45);
     const startDate = new Date(2022, 2, 1); // March 1, 2022
 
     const periods = await fetcher.fetchPrimeCostPeriodsFromQB(
