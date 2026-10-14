@@ -14,7 +14,6 @@ const qbCache = require('./pipeline/qb-cache');
 const claudeMCP = require('./pipeline/claude-mcp');
 const ingredientSchedulerModule = require('./pipeline/ingredient-scheduler');
 const { fetchProductionData } = require('./pipeline/google-drive-production');
-const { refreshPrimeCostData } = require('./pipeline/qb-prime-cost-refresh');
 
 let ingredientScheduler = null;
 let composioConnectors = null;
@@ -1758,25 +1757,6 @@ app.get('/api/prime-cost/periods', async (req, res) => {
   }
 });
 
-// GET/POST /api/prime-cost/refresh - Refresh prime cost periods
-const primeCostRefreshHandler = async (req, res) => {
-  try {
-    const { refreshPrimeCostData } = require('./pipeline/qb-prime-cost-refresh');
-    const result = await refreshPrimeCostData(qbClient);
-
-    res.json({
-      success: true,
-      message: 'Prime cost data refreshed with labor detail',
-      ...result
-    });
-  } catch (err) {
-    console.error('Prime cost refresh error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-};
-app.get('/api/prime-cost/refresh', primeCostRefreshHandler);
-app.post('/api/prime-cost/refresh', primeCostRefreshHandler);
-
 // GET /api/pl-by-channel
 // Combined channel + market + revenue-allocation P&L, built from the three sheets uploaded via
 // /api/upload/pl-channel/*. Nothing here is computed/derived - every number is exactly what was in
@@ -2611,21 +2591,6 @@ cron.schedule('5 0 * * 0', refreshQBWeeklyData, {
   timezone: 'UTC',
 });
 console.log(`📅 QB data auto-refresh scheduled: Sundays at 00:05 UTC (weekly - P&L, accounts, expenses)`);
-
-// Auto-refresh prime cost data every morning at 1 AM UTC to ensure labor data is always current
-cron.schedule('0 1 * * *', async () => {
-  try {
-    console.log('🔄 Starting scheduled prime cost refresh...');
-    const { refreshPrimeCostData } = require('./pipeline/qb-prime-cost-refresh');
-    const result = await refreshPrimeCostData(qbClient);
-    console.log('✅ Prime cost refresh complete:', result);
-  } catch (err) {
-    console.error('❌ Scheduled prime cost refresh failed:', err.message);
-  }
-}, {
-  timezone: 'UTC',
-});
-console.log(`📅 Prime cost auto-refresh scheduled: Daily at 01:00 UTC (keeps labor data current)`);
 
 
 // ============= INTEGRATIONS STATUS (Google + QuickBooks health) =============
@@ -3914,16 +3879,6 @@ const server = app.listen(PORT, async () => {
           console.warn('⚠️  Initial P&L refresh failed (will retry on schedule):', err.message);
         }
       }, 2000);
-
-      // Do initial prime cost refresh after P&L is done
-      setTimeout(async () => {
-        try {
-          console.log('🔄 Running initial prime cost refresh...');
-          await refreshPrimeCostData(qbClient);
-        } catch (err) {
-          console.warn('⚠️  Initial prime cost refresh failed (will retry on schedule):', err.message);
-        }
-      }, 3000);
     } catch (err) {
       console.warn('⚠️  P&L Weekly fetcher failed to initialize:', err.message);
     }
