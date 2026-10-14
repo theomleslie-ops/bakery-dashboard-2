@@ -794,6 +794,7 @@
         { weeks: 17, label: '4 Months' },
         { weeks: 26, label: '6 Months' },
         { weeks: 52, label: '1 Year' },
+        { weeks: 156, label: '3 Years' },
       ];
 
       // Fetch data once on mount
@@ -894,8 +895,8 @@
               ))}
             </div>
             <div className="view-toggle">
-              <button onClick={() => setOffsetWeeks(offsetWeeks + weeksRange)} disabled={!canGoPrevious}>← Previous {weeksRange === 17 ? '4 Months' : weeksRange === 26 ? '6 Months' : '1 Year'}</button>
-              <button onClick={() => setOffsetWeeks(Math.max(0, offsetWeeks - weeksRange))} disabled={!canGoNext}>Next {weeksRange === 17 ? '4 Months' : weeksRange === 26 ? '6 Months' : '1 Year'} →</button>
+              <button onClick={() => setOffsetWeeks(offsetWeeks + weeksRange)} disabled={!canGoPrevious}>← Previous {weeksRange === 17 ? '4 Months' : weeksRange === 26 ? '6 Months' : weeksRange === 52 ? '1 Year' : '3 Years'}</button>
+              <button onClick={() => setOffsetWeeks(Math.max(0, offsetWeeks - weeksRange))} disabled={!canGoNext}>Next {weeksRange === 17 ? '4 Months' : weeksRange === 26 ? '6 Months' : weeksRange === 52 ? '1 Year' : '3 Years'} →</button>
             </div>
           </div>
           {status === 'loading' && <div className="loading">Loading financial and labor data…</div>}
