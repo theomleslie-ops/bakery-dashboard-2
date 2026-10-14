@@ -315,17 +315,6 @@
       const [allWeeks, setAllWeeks] = useState([]);
       const [offsetWeeks, setOffsetWeeks] = useState(0);
       useEffect(() => { fetchData(); }, [weeksRange, offsetWeeks]);
-      const filterIncompleteLastPeriod = (periods) => {
-        if (periods.length < 2) return periods;
-        const lastPeriod = periods[periods.length - 1];
-        const prevPeriods = periods.slice(0, -1);
-        const avgRevenue = prevPeriods.reduce((sum, p) => sum + (p.revenue || 0), 0) / prevPeriods.length;
-        const lastRevenue = lastPeriod.revenue || 0;
-        if (avgRevenue > 0 && lastRevenue < avgRevenue * 0.6) {
-          return prevPeriods;
-        }
-        return periods;
-      };
       const fetchData = async () => {
         try {
           const baseUrl = window.location.origin;
@@ -362,7 +351,7 @@
           const displayWeeks = Math.min(weeksRange, SQUARE_DATA_MAX_WEEKS);
           const startIdx = Math.max(0, totalAvailable - displayWeeks - offsetWeeks);
           const endIdx = Math.max(0, totalAvailable - offsetWeeks);
-          const selected = filterIncompleteLastPeriod(allWeeksProcessed.slice(startIdx, endIdx));
+          const selected = allWeeksProcessed.slice(startIdx, endIdx);
 
           setData(selected.map(w => {
             const startDate = w.startDate;
