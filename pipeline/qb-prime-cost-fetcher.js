@@ -42,6 +42,7 @@ class QPrimeCostFetcher {
         try {
           const report = await this.plFetcher.fetchPLReport(periodDates.start, periodDates.end);
           const metrics = this.plFetcher.extractMetrics(report, periodDates.start, periodDates.end);
+          metrics.labor = this.extractLabor(report);
 
           const primeContribution = metrics.cogs + metrics.labor;
           const primeCostPercent = metrics.revenue > 0 ? (primeContribution / metrics.revenue) * 100 : 0;
@@ -71,6 +72,44 @@ class QPrimeCostFetcher {
       console.error('Prime cost QB fetch error:', err.message);
       throw err;
     }
+  }
+
+  /**
+   * Find labor in an Expenses subtree. Leaf accounts carry their name and amount
+   * directly in ColData; section accounts carry them under Header and Summary.
+   */
+  extractLabor(report) {
+    const childrenOf = (row) => {
+      if (!row) return [];
+      if (Array.isArray(row.Rows?.Row)) return row.Rows.Row;
+      if (Array.isArray(row.Rows?.Rows)) return row.Rows.Rows;
+      if (Array.isArray(row.Rows)) return row.Rows;
+      return [];
+    };
+    const nameOf = (row) => row.Header?.ColData?.[0]?.value || row.ColData?.[0]?.value || '';
+    const valueOf = (row) => {
+      const candidates = [row.Summary?.ColData?.[1]?.value, row.Header?.ColData?.[1]?.value, row.ColData?.[1]?.value];
+      for (const v of candidates) {
+        const n = parseFloat(v);
+        if (!isNaN(n)) return n;
+      }
+      return 0;
+    };
+    const findLabor = (rows) => {
+      for (const row of rows) {
+        const name = nameOf(row);
+        if (/LABOR|PAYROLL|^6000/i.test(name)) return row;
+        const found = findLabor(childrenOf(row));
+        if (found) return found;
+      }
+      return null;
+    };
+
+    const topRows = childrenOf({ Rows: report?.Rows });
+    const expenses = topRows.find(r => nameOf(r) === 'Expenses');
+    if (!expenses) return 0;
+    const laborRow = findLabor(childrenOf(expenses));
+    return laborRow ? valueOf(laborRow) : 0;
   }
 
   /**
